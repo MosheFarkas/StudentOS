@@ -1,0 +1,22 @@
+# Local Postgres for development.
+#
+# Uses the pgvector image rather than plain postgres so that enabling semantic
+# memory recall later is a migration, not an infrastructure change. The extension
+# is available but NOT enabled -- see packages/db/src/schema/memory.ts.
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: studentos-postgres
+    environment:
+      POSTGRES_USER: studentos
+      POSTGRES_PASSWORD: studentos
+      POSTGRES_DB: studentos
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./.pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U studentos']
+      interval: 5s
+      timeout: 5s
+      retries: 10

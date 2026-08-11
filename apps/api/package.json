@@ -1,0 +1,27 @@
+{
+  "name": "@studentos/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./types": "./src/routes/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "@studentos/agent": "workspace:*",
+    "@studentos/db": "workspace:*",
+    "@studentos/llm": "workspace:*",
+    "@studentos/shared": "workspace:*",
+    "better-auth": "^1.6.26",
+    "hono": "^4.13.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.12"
+  }
+}

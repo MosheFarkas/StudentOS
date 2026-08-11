@@ -1,0 +1,146 @@
+import type { ChatMessage, LlmRegistry } from '@studentos/llm';
+import type { MemoryStore } from './memory/types.js';
+import type { SkillRegistry } from './skills/types.js';
+import type { ToolContext } from './tools/types.js';
+import type { ToolRegistry } from './tools/registry.js';
+
+/**
+ * One turn of an agent.
+ *
+ * STRUCTURE ONLY -- the loop below is a shape, not a working implementation.
+ *
+ * The sequence is: gather context (memory + skills), call the model, run any
+ * tools it asked for, feed results back, repeat until it stops calling tools.
+ * Then write what happened back to memory so the next turn has it.
+ */
+
+export interface AgentRunDeps {
+  llm: LlmRegistry;
+  memory: MemoryStore;
+  skills: SkillRegistry;
+  tools: ToolRegistry;
+}
+
+export interface AgentRunInput {
+  userId: string;
+  agentId: string;
+  /** The agent's student-authored purpose. Anchors the system prompt. */
+  purpose: string;
+  message: string;
+  signal?: AbortSignal;
+}
+
+export interface AgentRunResult {
+  reply: string;
+  toolsUsed: string[];
+}
+
+/** Bounds the tool loop. A model that never stops calling tools must still terminate. */
+const MAX_ITERATIONS = 8;
+
+export async function runAgentTurn(
+  deps: AgentRunDeps,
+  input: AgentRunInput,
+): Promise<AgentRunResult> {
+  const { llm, memory, skills, tools } = deps;
+
+  const [recalled, availableSkills] = await Promise.all([
+    memory.recall(input.agentId),
+    skills.list(input.agentId),
+  ]);
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: buildSystemPrompt(input.purpose, recalled, availableSkills) },
+    { role: 'user', content: input.message },
+  ];
+
+  const toolContext: ToolContext = {
+    userId: input.userId,
+    agentId: input.agentId,
+    signal: input.signal,
+    // TODO(oauth): supply a GoogleTokenProvider so Calendar/Classroom tools work.
+  };
+
+  const toolsUsed: string[] = [];
+  let reply = '';
+
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
+    const response = await llm.chat(
+      { messages, tools: tools.toDefinitions() },
+      { userId: input.userId, agentId: input.agentId, signal: input.signal },
+    );
+
+    if (response.toolCalls.length === 0) {
+      reply = response.content;
+      break;
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    for (const call of response.toolCalls) {
+      toolsUsed.push(call.name);
+      const result = await tools.execute(call.name, call.arguments, toolContext);
+      messages.push({
+        role: 'tool',
+        toolCallId: call.id,
+        content: JSON.stringify(result),
+      });
+    }
+  }
+
+  // TODO(memory): record the turn so the next one can recall it. Recording the
+  // raw exchange verbatim is the obvious move and probably the wrong one --
+  // most turns are not worth remembering, and an episodic log that captures
+  // everything makes recall worse, not better. Decide what earns a row.
+  await memory.record({
+    agentId: input.agentId,
+    kind: 'conversation',
+    content: `Student: ${input.message}\nAgent: ${reply}`,
+    source: 'agent_run',
+  });
+
+  return { reply, toolsUsed };
+}
+
+/**
+ * Assemble the system prompt.
+ *
+ * Ordering here is deliberate and worth preserving: stable content first
+ * (purpose, then skills), volatile content last (memory). Providers cache on a
+ * prefix match, so anything that changes per turn invalidates everything after
+ * it. Putting recalled memory above the skill list would silently destroy the
+ * cache hit rate -- and the cached-token discount is the main thing keeping the
+ * platform tier affordable.
+ */
+function buildSystemPrompt(
+  purpose: string,
+  recalled: Awaited<ReturnType<MemoryStore['recall']>>,
+  skills: Awaited<ReturnType<SkillRegistry['list']>>,
+): string {
+  const sections = [
+    'You are a personal agent built by a student, for themselves.',
+    `Your purpose, in their words: ${purpose}`,
+  ];
+
+  if (skills.length > 0) {
+    sections.push(
+      'Skills you have learned:\n' +
+        skills.map((s) => `- ${s.name}: ${s.description}\n  ${s.instructions}`).join('\n'),
+    );
+  }
+
+  if (recalled.summaries.length > 0) {
+    sections.push(
+      'What you remember from earlier:\n' +
+        recalled.summaries.map((s) => `- ${s.summary}`).join('\n'),
+    );
+  }
+
+  if (recalled.recent.length > 0) {
+    sections.push(
+      'Recently:\n' + recalled.recent.map((m) => `- [${m.kind}] ${m.content}`).join('\n'),
+    );
+  }
+
+  return sections.join('\n\n');
+}

@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `-w` is required: pnpm 11 treats a bare `pnpm <script>` at the workspace
+      # root as recursive, which fails on packages that don't define the script.
+      #
+      # Ordered cheapest-first so a formatting slip fails in seconds rather than
+      # after a full build.
+      - name: Format
+        run: pnpm -w run format:check
+
+      - name: Lint
+        run: pnpm -w run lint
+
+      - name: Typecheck
+        run: pnpm -w run typecheck
+
+      - name: Build
+        run: pnpm -w run build

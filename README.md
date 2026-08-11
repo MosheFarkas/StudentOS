@@ -1,0 +1,129 @@
+# Student OS
+
+Students build their own personal AI agents — not agents a school builds for them to consume. The
+GUI is non-technical: you describe what you want your agent to do, connect your calendar and
+coursework, and it accumulates memory and skills over time rather than starting cold every session.
+The design is loosely inspired by Nous Research's Hermes Agent (persistent memory, self-improvement,
+skill-building) without the terminal.
+
+Students can bring their own OpenAI or Anthropic API key. Those who don't get a free tier we fund on
+a cheap model, with a per-student token allowance.
+
+> **Working title.** The package scope is `@studentos/*`; renaming is one find-and-replace.
+
+## Status
+
+Scaffolding. The structure, storage, auth, and the BYO-key layer are real and typecheck. The agent
+loop, the skill learning loop, and the Google API calls are deliberately stubs — every one carries a
+`TODO` explaining what still has to be decided.
+
+## Stack
+
+|                        |                 | Why                                                                                       |
+| ---------------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| **pnpm**               | package manager | Workspaces, plus strict `node_modules` that catches phantom dependencies                  |
+| **Vite + React**       | `apps/web`      | A plain SPA — not Next.js — so the same bundle can be wrapped in a desktop shell later    |
+| **Hono**               | `apps/api`      | Small, TS-first; `hono/client` gives the web app a typed API client with no codegen       |
+| **Postgres + Drizzle** | `packages/db`   | SQL-first, no engine binary, and `pgvector` is available if memory ever needs it          |
+| **Better Auth**        | auth            | Self-hosted into our own Postgres, and issues bearer tokens (which the Mac app will need) |
+
+## Layout
+
+```
+apps/
+  web       Vite + React SPA
+  api       Hono server, Better Auth, route definitions
+  worker    background jobs (memory summarisation)
+packages/
+  shared    zod schemas + types shared with the browser
+  db        Drizzle schema and migrations
+  llm       BYO keys, encryption, provider resolution, quota
+  agent     memory, skills, tool calling
+```
+
+## Running locally
+
+Requires Node 22+, pnpm, and Docker (for Postgres).
+
+```bash
+corepack enable pnpm
+pnpm install
+
+cp .env.example .env
+openssl rand -base64 32   # -> AUTH_SECRET
+openssl rand -base64 32   # -> MASTER_ENCRYPTION_KEY
+# then add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (see .env.example)
+
+pnpm db:up                # start Postgres
+pnpm db:generate          # generate the initial migration
+pnpm db:migrate           # apply it
+
+pnpm dev                  # api on :3000, web on :5173
+```
+
+`pnpm typecheck`, `pnpm lint`, `pnpm format` — CI runs all of these on push.
+
+## Two things that will bite you
+
+**Google Classroom is gated by school admins, and so is sign-in.** Any Google Workspace for Education
+user designated as **under 18** is blocked from _any_ third-party app their admin hasn't configured —
+not just from Classroom data, but from Sign in with Google entirely. They see a "request access"
+prompt and get `access_not_configured` or `admin_policy_enforced`. This does not reproduce when you
+test with a personal Gmail account.
+
+Consequences: for high-school students on school accounts, a school agreement is a **prerequisite**,
+not a growth channel. University students on personal accounts are generally fine, which is why v1
+targets university first. The full write-up is in
+`packages/agent/src/tools/google/scopes.ts` — read it before building the Classroom integration.
+
+**Losing `MASTER_ENCRYPTION_KEY` is unrecoverable.** Every stored student API key becomes permanently
+undecryptable. Back it up somewhere other than the droplet.
+
+## BYO-LLM layer
+
+`packages/llm` is isolated so that who pays for inference is one decision in one place.
+
+- Providers implement a single `LlmProvider` interface. Call sites only ever touch `LlmRegistry`.
+  Adding a hosted, school-funded, or self-hosted tier is a new class plus a registry rule — no call
+  site changes.
+- Student keys are encrypted with AES-256-GCM before storage. The master key comes from a
+  `MasterKeyProvider`; today that reads an env var, and swapping in a KMS means one new
+  implementation. `key_version` on each row makes rotation incremental. The upgrade path to envelope
+  encryption is documented in `packages/llm/src/crypto/master-key.ts`.
+- Plaintext keys are returned by exactly one function and never reach a response body or a log.
+- The platform tier is metered and quota-gated; BYOK is metered but never gated, since the student is
+  paying the provider directly.
+
+The platform model is one constant: `PLATFORM_MODEL` in `packages/llm/src/config.ts`. It's currently
+GPT-5.6 Luna ($0.20 / $1.20 per million tokens, 1.05M context). Cached-prefix tokens are metered
+separately because prompt caching, not model choice, is the main lever on what the free tier costs.
+
+## Agent core
+
+- **Memory** — an append-only episodic table plus periodic summaries. No vector store: recency plus
+  summaries is genuinely sufficient at this scale, and if it stops being, `pgvector` is a migration
+  in the database we already run, behind the existing `MemoryStore` interface.
+- **Skills** — versioned, named, editable procedures with `origin: 'builtin' | 'learned'`. Storage is
+  ready; the learning loop is not built. The open questions (what earns promotion, how a stale skill
+  gets revised, how skills are forgotten) are in `packages/agent/src/skills/registry.ts`.
+- **Tools** — Zod-schema'd, converted to JSON Schema at the provider boundary. Calendar and Classroom
+  are stubs behind a `GoogleTokenProvider` seam.
+
+## Roadmap
+
+- **Agent builder UI** — the non-technical GUI. The product lives or dies here, not on the plumbing.
+- **Google OAuth flow** — incremental authorisation; Calendar and Classroom as separate optional grants.
+- **Skill learning loop** — the Hermes-style bet, and its own design problem.
+- **`packages/transcription`** — lecture capture: voice-to-transcript with speaker diarisation,
+  contextualised against the student's calendar and coursework rather than standalone. Needs a
+  deliberate vendor decision (self-hosted Whisper vs. a paid diarisation API) that hasn't been made.
+- **`apps/desktop`** — Mac app. The SPA build and bearer-token auth already accommodate it; it needs
+  an Electron shell, an OAuth deep-link handler, and an Apple Developer account for notarisation.
+
+## Deployment
+
+Target is a DigitalOcean droplet: Postgres, the API, and the worker as systemd units, with the web
+build served statically. A stable public HTTPS origin is required — Google OAuth redirect URIs and
+(later) Calendar push notifications both need one, which is why this doesn't run from a home Mac Mini.
+
+The Mac Mini is reserved for self-hosted Whisper when transcription lands.

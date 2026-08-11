@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.pgdata/
+pnpm-lock.yaml
+
+# Drizzle-generated. Reformatting the journal risks confusing drizzle-kit's
+# migration bookkeeping, and the SQL is not ours to style.
+packages/db/migrations/
