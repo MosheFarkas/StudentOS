@@ -19,8 +19,9 @@ export { PostgresSkillRegistry } from './skills/registry.js';
 
 export * from './tools/types.js';
 export { ToolRegistry } from './tools/registry.js';
-export { listCalendarEvents } from './tools/google/calendar.js';
-export { listCoursework } from './tools/google/classroom.js';
+export { buildToolRegistry } from './tools/builtin.js';
+export { listCalendarEvents, type CalendarEvent } from './tools/google/calendar.js';
+export { listCoursework, type Assignment } from './tools/google/classroom.js';
 export * from './tools/google/scopes.js';
 
 export { runAgentTurn, type AgentRunDeps, type AgentRunInput, type AgentRunResult } from './run.js';

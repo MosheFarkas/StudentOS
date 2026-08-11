@@ -5,6 +5,7 @@ import { currentWindowEnd, currentWindowStart } from '@studentos/llm';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { createAgentRoutes } from './agents.js';
+import { createGoogleRoutes } from './google.js';
 
 /**
  * Application routes.
@@ -20,6 +21,7 @@ export function createRoutes(ctx: AppContext) {
       .get('/health', (c) => c.json({ ok: true }))
 
       .route('/agents', createAgentRoutes(ctx))
+      .route('/google', createGoogleRoutes(ctx))
 
       /** Which BYOK keys this student has stored. Never includes key material. */
       .get('/credentials', auth, async (c) => {

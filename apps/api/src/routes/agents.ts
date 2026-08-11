@@ -4,8 +4,9 @@ import { and, asc, desc, eq } from 'drizzle-orm';
 import { agentMessages, agents } from '@studentos/db';
 import { createAgentSchema, sendMessageSchema, StudentOsError } from '@studentos/shared';
 import type { Agent, Message } from '@studentos/shared';
-import { runAgentTurn, ToolRegistry } from '@studentos/agent';
+import { buildToolRegistry, runAgentTurn } from '@studentos/agent';
 import type { AppContext } from '../context.js';
+import { BetterAuthGoogleTokenProvider, getGrantedGroups } from '../google/connections.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 export function createAgentRoutes(ctx: AppContext) {
@@ -99,21 +100,24 @@ export function createAgentRoutes(ctx: AppContext) {
           .values({ agentId: agent.id, role: 'user', content })
           .returning();
 
+        // Tools are assembled per turn from what this student has actually
+        // connected -- a student with no Google link gets an empty set and
+        // pays no context for tools they cannot use.
+        const granted = await getGrantedGroups(ctx.db, userId);
+
         const result = await runAgentTurn(
           {
             llm: ctx.llm,
             memory: ctx.memory,
             skills: ctx.skills,
-            // Empty until OAuth lands: a student with no Google connection has
-            // no tools, and registering ones that can only answer "not
-            // connected" wastes context and invites dead-end tool calls.
-            tools: new ToolRegistry(),
+            tools: buildToolRegistry(granted),
           },
           {
             userId,
             agentId: agent.id,
             purpose: agent.purpose,
             message: content,
+            google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, granted),
             signal: c.req.raw.signal,
           },
         );

@@ -50,21 +50,21 @@ export function createAuth(db: Database, env: Env) {
 export type Auth = ReturnType<typeof createAuth>;
 
 /*
- * TODO(oauth): incremental authorisation for Calendar and Classroom.
+ * Incremental authorisation, as built:
  *
- * Flow, once implemented:
- *   1. Student clicks "Connect Google Calendar" in the web app.
- *   2. Client calls Better Auth's linkSocial with the calendar scope group
- *      (see scopesFor(['calendar']) in @studentos/agent).
- *   3. Google returns an updated `scope` on the account row.
- *   4. grantedScopeGroups(account.scope) then reports 'calendar', and the
- *      agent's tool registry includes the calendar tools for that student.
+ *   1. Student clicks Connect in Settings (web: screens/GoogleConnections).
+ *   2. Client asks GET /api/google/connect-scopes/:group for the scope list --
+ *      the server returns the UNION of what is already granted plus the new
+ *      group, which prevents the new token from dropping the old scopes.
+ *   3. Client calls linkSocial with that list; Google redirects back and
+ *      Better Auth updates `scope` and the tokens on the account row.
+ *   4. getGrantedGroups (google/connections.ts) reads that scope string, and
+ *      buildToolRegistry registers only the matching tools for that student.
  *
- * Classroom is the same flow with a different group, and must stay independent
- * -- a student who cannot get Classroom approved should still be able to use
- * Calendar and everything else.
+ * Token refresh is Better Auth's: auth.api.getAccessToken refreshes from the
+ * stored refresh token, which is why accessType/prompt are set above.
  *
- * DESKTOP: the Mac shell cannot host the redirect itself. Open the system
- * browser to the normal web flow, then hand the session back via a deep link
- * (studentos://auth?token=...). That is why the bearer plugin is on.
+ * TODO(desktop): the Mac shell cannot host the redirect itself. Open the
+ * system browser to the normal web flow, then hand the session back via a deep
+ * link (studentos://auth?token=...). That is why the bearer plugin is on.
  */

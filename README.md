@@ -13,9 +13,14 @@ a cheap model, with a per-student token allowance.
 
 ## Status
 
-Scaffolding. The structure, storage, auth, and the BYO-key layer are real and typecheck. The agent
-loop, the skill learning loop, and the Google API calls are deliberately stubs — every one carries a
-`TODO` explaining what still has to be decided.
+Working, but unverified against a live database or a real model — everything typechecks and builds,
+nothing has run end to end yet.
+
+Built: auth with Google sign-in, agent creation and chat with persistent memory, the BYO-key layer,
+and incremental Google authorisation with working Calendar and Classroom tools.
+
+Not built: the skill learning loop, streamed responses, lecture transcription, the Mac shell. Each
+carries a `TODO` explaining what still has to be decided.
 
 ## Stack
 
@@ -111,8 +116,8 @@ separately because prompt caching, not model choice, is the main lever on what t
 
 ## Roadmap
 
-- **Agent builder UI** — the non-technical GUI. The product lives or dies here, not on the plumbing.
-- **Google OAuth flow** — incremental authorisation; Calendar and Classroom as separate optional grants.
+- **Streamed responses** — a turn is currently a spinner until it completes. Needs the OpenAI adapter
+  to reassemble fragmented tool-call deltas; it is a provider-layer fix, not a route-layer one.
 - **Skill learning loop** — the Hermes-style bet, and its own design problem.
 - **`packages/transcription`** — lecture capture: voice-to-transcript with speaker diarisation,
   contextualised against the student's calendar and coursework rather than standalone. Needs a

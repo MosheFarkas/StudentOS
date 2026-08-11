@@ -1,7 +1,7 @@
 import type { ChatMessage, LlmRegistry } from '@studentos/llm';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
-import type { ToolContext } from './tools/types.js';
+import type { GoogleTokenProvider, ToolContext } from './tools/types.js';
 import type { ToolRegistry } from './tools/registry.js';
 
 /**
@@ -25,6 +25,8 @@ export interface AgentRunInput {
   /** The agent's student-authored purpose. Anchors the system prompt. */
   purpose: string;
   message: string;
+  /** Supplied when the student has connected Google. Omitted otherwise. */
+  google?: GoogleTokenProvider;
   signal?: AbortSignal;
 }
 
@@ -62,7 +64,7 @@ export async function runAgentTurn(
     userId: input.userId,
     agentId: input.agentId,
     signal: input.signal,
-    // TODO(oauth): supply a GoogleTokenProvider so Calendar/Classroom tools work.
+    ...(input.google ? { google: input.google } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,

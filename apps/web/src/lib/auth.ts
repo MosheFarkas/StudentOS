@@ -18,12 +18,29 @@ export const authClient = createAuthClient({
   },
 });
 
-export const { useSession, signIn, signOut } = authClient;
+export const { useSession, signIn, signOut, linkSocial } = authClient;
 
 /** Sign in with Google, requesting identity scopes only. */
 export function signInWithGoogle() {
   return signIn.social({
     provider: 'google',
+    callbackURL: window.location.origin,
+  });
+}
+
+/**
+ * Grant an additional Google scope group.
+ *
+ * `scopes` must be the UNION of everything already granted plus the new group,
+ * which is why it comes from the server (GET /google/connect-scopes/:group)
+ * rather than being hardcoded here. Requesting only the new group's scopes
+ * returns a token that no longer covers the old ones -- see the comment on
+ * that route.
+ */
+export function connectGoogleScopes(scopes: string[]) {
+  return linkSocial({
+    provider: 'google',
+    scopes,
     callbackURL: window.location.origin,
   });
 }
