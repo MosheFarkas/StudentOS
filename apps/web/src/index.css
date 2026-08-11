@@ -6,6 +6,8 @@
     sans-serif;
   line-height: 1.5;
   color-scheme: light dark;
+  --line: color-mix(in srgb, currentColor 18%, transparent);
+  --soft: color-mix(in srgb, currentColor 7%, transparent);
 }
 
 * {
@@ -16,40 +18,179 @@ body {
   margin: 0;
   min-height: 100dvh;
   display: grid;
-  place-items: center;
-  padding: 2rem;
+  place-items: start center;
+  padding: 2rem 1rem;
 }
 
 main {
   width: 100%;
-  max-width: 34rem;
+  max-width: 42rem;
+  display: flex;
+  flex-direction: column;
 }
 
 h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+h2 {
   margin: 0 0 0.25rem;
-  font-size: 1.5rem;
+  font-size: 1rem;
 }
 
 .muted {
-  opacity: 0.65;
+  opacity: 0.6;
   font-size: 0.9rem;
 }
 
 button {
   font: inherit;
-  padding: 0.55rem 1rem;
+  padding: 0.5rem 0.9rem;
   border-radius: 0.5rem;
-  border: 1px solid currentColor;
+  border: 1px solid var(--line);
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
+button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+label > input,
+label > textarea,
+label > select {
+  margin-top: 0.3rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .panel {
-  margin-top: 1.5rem;
+  margin-bottom: 1rem;
   padding: 1rem;
-  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border: 1px solid var(--line);
   border-radius: 0.75rem;
+}
+
+.panel > p:first-child {
+  margin-top: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Agent list entries are buttons so they are keyboard-reachable. */
+.row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+}
+
+.row.static {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.row.static:hover {
+  background: transparent;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 12rem;
+  margin-bottom: 1rem;
+}
+
+.message {
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.85rem;
+  max-width: 85%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message.user {
+  align-self: flex-end;
+  background: var(--soft);
+}
+
+.message.assistant {
+  align-self: flex-start;
+  border: 1px solid var(--line);
+}
+
+.message .tools {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+  position: sticky;
+  bottom: 0;
+  padding-bottom: 0.5rem;
 }
 
 dl {
@@ -60,7 +201,7 @@ dl {
 }
 
 dt {
-  opacity: 0.65;
+  opacity: 0.6;
 }
 
 dd {

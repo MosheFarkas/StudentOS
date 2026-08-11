@@ -20,6 +20,28 @@ export const createAgentSchema = z.object({
 });
 export type CreateAgentInput = z.infer<typeof createAgentSchema>;
 
+export const updateAgentSchema = createAgentSchema.partial();
+export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
+
+/** Only roles a student sees. Tool traffic stays inside the turn. */
+export const messageRoleSchema = z.enum(['user', 'assistant']);
+export type MessageRole = z.infer<typeof messageRoleSchema>;
+
+export const messageSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  role: messageRoleSchema,
+  content: z.string(),
+  toolsUsed: z.array(z.string()),
+  createdAt: z.iso.datetime(),
+});
+export type Message = z.infer<typeof messageSchema>;
+
+export const sendMessageSchema = z.object({
+  content: z.string().min(1).max(10_000),
+});
+export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+
 /**
  * How a skill entered the agent's repertoire.
  *

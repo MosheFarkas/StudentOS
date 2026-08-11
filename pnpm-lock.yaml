@@ -38,6 +38,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.0
         version: 2.1.0(hono@4.13.1)
+      '@hono/zod-validator':
+        specifier: ^0.9.0
+        version: 0.9.0(hono@4.13.1)(zod@4.4.3)
       '@studentos/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -53,6 +56,9 @@ importers:
       better-auth:
         specifier: ^1.6.26
         version: 1.6.26(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(kysely@0.29.5)(postgres@3.4.9))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(kysely@0.29.5)(postgres@3.4.9)
       hono:
         specifier: ^4.13.1
         version: 4.13.1
@@ -768,6 +774,12 @@ packages:
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
+
+  '@hono/zod-validator@0.9.0':
+    resolution: {integrity: sha512-n0ZSXmCiHVIp4Y5wlOOyZCeTd/rsawA/qW1cipB8QOYKZ9N8Tk0nZUZCXho9cu374AN4JpDNKioNKBJ/W+LBug==}
+    peerDependencies:
+      hono: '>=4.11.2'
+      zod: ^3.25.0 || ^4.0.0
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2037,6 +2049,11 @@ snapshots:
   '@hono/node-server@2.1.0(hono@4.13.1)':
     dependencies:
       hono: 4.13.1
+
+  '@hono/zod-validator@0.9.0(hono@4.13.1)(zod@4.4.3)':
+    dependencies:
+      hono: 4.13.1
+      zod: 4.4.3
 
   '@humanfs/core@0.19.2':
     dependencies:

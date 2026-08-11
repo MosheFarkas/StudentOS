@@ -1,17 +1,16 @@
 import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
 import { addCredentialSchema, type UsageStatus } from '@studentos/shared';
 import { currentWindowEnd, currentWindowStart } from '@studentos/llm';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
+import { createAgentRoutes } from './agents.js';
 
 /**
  * Application routes.
  *
  * The return type is exported so the web app can build a fully typed client
  * with hono/client -- no hand-maintained API types, no codegen step.
- *
- * Agent conversation endpoints are deliberately absent: runAgentTurn is a
- * skeleton, and a route that calls it would be a half-built feature.
  */
 export function createRoutes(ctx: AppContext) {
   const auth = requireAuth(ctx);
@@ -20,15 +19,19 @@ export function createRoutes(ctx: AppContext) {
     new Hono<{ Variables: AuthVariables }>()
       .get('/health', (c) => c.json({ ok: true }))
 
+      .route('/agents', createAgentRoutes(ctx))
+
       /** Which BYOK keys this student has stored. Never includes key material. */
       .get('/credentials', auth, async (c) => {
         const credentials = await ctx.vault.list(c.get('userId'));
         return c.json({ credentials });
       })
 
-      .post('/credentials', auth, async (c) => {
-        const body = addCredentialSchema.parse(await c.req.json());
-        const credential = await ctx.vault.add({ userId: c.get('userId'), ...body });
+      .post('/credentials', auth, zValidator('json', addCredentialSchema), async (c) => {
+        const credential = await ctx.vault.add({
+          userId: c.get('userId'),
+          ...c.req.valid('json'),
+        });
         return c.json({ credential }, 201);
       })
 
