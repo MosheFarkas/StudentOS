@@ -1,4 +1,5 @@
 import { createAuthClient } from 'better-auth/react';
+import { API_BASE_URL } from './env.js';
 
 /**
  * Auth client.
@@ -12,7 +13,7 @@ import { createAuthClient } from 'better-auth/react';
  * header here. The API already accepts both (see apps/api/src/auth.ts).
  */
 export const authClient = createAuthClient({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: API_BASE_URL,
   fetchOptions: {
     credentials: 'include',
   },
