@@ -1,5 +1,5 @@
 {
-  "name": "@studentos/web",
+  "name": "@contexto/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,14 +10,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@studentos/shared": "workspace:*",
+    "@contexto/shared": "workspace:*",
     "better-auth": "^1.6.26",
     "hono": "^4.13.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@studentos/api": "workspace:*",
+    "@contexto/api": "workspace:*",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",

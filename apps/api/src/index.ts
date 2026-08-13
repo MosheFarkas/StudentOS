@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ZodError } from 'zod';
-import { StudentOsError, type ApiError } from '@studentos/shared';
+import { ContextoError, type ApiError } from '@contexto/shared';
 import { createContext } from './context.js';
 import { loadEnv } from './env.js';
 import { createRoutes } from './routes/index.js';
@@ -34,7 +34,7 @@ app.on(['GET', 'POST'], '/api/auth/*', (c) => ctx.auth.handler(c.req.raw));
 app.route('/api', createRoutes(ctx));
 
 app.onError((error, c) => {
-  if (error instanceof StudentOsError) {
+  if (error instanceof ContextoError) {
     const body: ApiError = { code: error.code, message: error.message };
     return c.json(body, statusFor(error.code));
   }

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { SCOPE_GROUPS, scopesFor, type ScopeGroup } from '@studentos/agent';
+import { SCOPE_GROUPS, scopesFor, type ScopeGroup } from '@contexto/agent';
 import type { AppContext } from '../context.js';
 import { getGrantedGroups } from '../google/connections.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';

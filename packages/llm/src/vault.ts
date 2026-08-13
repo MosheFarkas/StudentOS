@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '@studentos/db';
-import { llmCredentials } from '@studentos/db';
-import type { ByokProvider, CredentialSummary } from '@studentos/shared';
-import { StudentOsError } from '@studentos/shared';
+import type { Database } from '@contexto/db';
+import { llmCredentials } from '@contexto/db';
+import type { ByokProvider, CredentialSummary } from '@contexto/shared';
+import { ContextoError } from '@contexto/shared';
 import { decryptSecret, encryptSecret, last4 } from './crypto/encryption.js';
 import type { MasterKeyProvider } from './crypto/master-key.js';
 
@@ -43,7 +43,7 @@ export class CredentialVault {
       .returning();
 
     if (!row) {
-      throw new StudentOsError('internal_error', 'Failed to store credential');
+      throw new ContextoError('internal_error', 'Failed to store credential');
     }
     return toSummary(row);
   }

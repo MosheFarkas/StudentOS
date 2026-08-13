@@ -27,7 +27,7 @@ export const agentSkills = pgTable(
     instructions: text('instructions').notNull(),
     /** Tool ids this skill is permitted to call. */
     toolIds: jsonb('tool_ids').$type<string[]>().notNull().default([]),
-    /** 'builtin' | 'learned' -- see @studentos/shared skillOriginSchema. */
+    /** 'builtin' | 'learned' -- see @contexto/shared skillOriginSchema. */
     origin: text('origin').notNull().default('builtin'),
     /** Bumped on every revision so a regression can be traced. */
     version: integer('version').notNull().default(1),

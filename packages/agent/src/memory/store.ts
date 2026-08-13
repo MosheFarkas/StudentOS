@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, lt, notInArray, sql } from 'drizzle-orm';
-import type { Database } from '@studentos/db';
-import { agentMemories, agentMemorySummaries } from '@studentos/db';
+import type { Database } from '@contexto/db';
+import { agentMemories, agentMemorySummaries } from '@contexto/db';
 import type {
   EpisodicMemory,
   MemoryStore,

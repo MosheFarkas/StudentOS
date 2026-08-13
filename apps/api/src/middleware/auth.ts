@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { StudentOsError } from '@studentos/shared';
+import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 
 export interface AuthVariables {
@@ -18,7 +18,7 @@ export function requireAuth(ctx: AppContext) {
     const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers });
 
     if (!session?.user) {
-      throw new StudentOsError('unauthorized', 'Sign in to continue.');
+      throw new ContextoError('unauthorized', 'Sign in to continue.');
     }
 
     c.set('userId', session.user.id);

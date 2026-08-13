@@ -1,7 +1,7 @@
-import { createDatabase, type Database } from '@studentos/db';
-import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from '@studentos/llm';
-import { PostgresMemoryStore, PostgresSkillRegistry } from '@studentos/agent';
-import { TelegramChannel } from '@studentos/channels';
+import { createDatabase, type Database } from '@contexto/db';
+import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from '@contexto/llm';
+import { PostgresMemoryStore, PostgresSkillRegistry } from '@contexto/agent';
+import { TelegramChannel } from '@contexto/channels';
 import { createAuth, type Auth } from './auth.js';
 import type { Env } from './env.js';
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Agent } from '@studentos/shared';
+import type { Agent } from '@contexto/shared';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
@@ -29,7 +29,7 @@ export function App() {
   if (!session?.user) {
     return (
       <main>
-        <h1>Student OS</h1>
+        <h1>Contexto</h1>
         <p className="muted">Build your own AI agent.</p>
         <div className="panel">
           <p>Sign in with your school or personal Google account to get started.</p>
@@ -42,7 +42,7 @@ export function App() {
   return (
     <main>
       <header className="app-header">
-        <h1>Student OS</h1>
+        <h1>Contexto</h1>
         <nav>
           {view.name !== 'settings' && (
             <button onClick={() => setView({ name: 'settings' })}>Settings</button>

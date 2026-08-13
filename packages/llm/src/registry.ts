@@ -1,4 +1,4 @@
-import { StudentOsError } from '@studentos/shared';
+import { ContextoError } from '@contexto/shared';
 import { PLATFORM_MODEL } from './config.js';
 import { AnthropicProvider } from './providers/anthropic.js';
 import { OpenAiProvider } from './providers/openai.js';
@@ -64,7 +64,7 @@ export class LlmRegistry {
     }
 
     if (!this.#platformApiKey) {
-      throw new StudentOsError(
+      throw new ContextoError(
         'no_provider_configured',
         'Add your own API key to start using your agent.',
       );

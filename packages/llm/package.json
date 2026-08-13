@@ -1,5 +1,5 @@
 {
-  "name": "@studentos/llm",
+  "name": "@contexto/llm",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
-    "@studentos/db": "workspace:*",
-    "@studentos/shared": "workspace:*",
+    "@contexto/db": "workspace:*",
+    "@contexto/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "openai": "^7.4.0",
     "zod": "^4.4.3"

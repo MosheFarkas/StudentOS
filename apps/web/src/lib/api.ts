@@ -1,5 +1,5 @@
 import { hc } from 'hono/client';
-import type { AppRoutes } from '@studentos/api/types';
+import type { AppRoutes } from '@contexto/api/types';
 import { API_BASE_URL } from './env.js';
 
 /**

@@ -1,5 +1,5 @@
 {
-  "name": "@studentos/agent",
+  "name": "@contexto/agent",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@studentos/db": "workspace:*",
-    "@studentos/llm": "workspace:*",
-    "@studentos/shared": "workspace:*",
+    "@contexto/db": "workspace:*",
+    "@contexto/llm": "workspace:*",
+    "@contexto/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "zod": "^4.4.3"
   }

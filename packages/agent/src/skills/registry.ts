@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '@studentos/db';
-import { agentSkills } from '@studentos/db';
-import type { SkillOrigin } from '@studentos/shared';
+import type { Database } from '@contexto/db';
+import { agentSkills } from '@contexto/db';
+import type { SkillOrigin } from '@contexto/shared';
 import type { Skill, SkillRegistry, UpsertSkillInput } from './types.js';
 
 /** Postgres-backed skill storage. */

@@ -18,7 +18,7 @@ export const llmCredentials = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    /** 'openai' | 'anthropic' -- see @studentos/shared byokProviderSchema. */
+    /** 'openai' | 'anthropic' -- see @contexto/shared byokProviderSchema. */
     provider: text('provider').notNull(),
     /** Student-chosen, so they can tell two keys apart. */
     label: text('label').notNull(),

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from '@studentos/llm';
+import type { ToolDefinition } from '@contexto/llm';
 import type { Tool, ToolContext } from './types.js';
 
 /**

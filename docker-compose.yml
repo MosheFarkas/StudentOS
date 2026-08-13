@@ -6,7 +6,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    container_name: studentos-postgres
+    container_name: contexto-postgres
     environment:
       POSTGRES_USER: studentos
       POSTGRES_PASSWORD: studentos

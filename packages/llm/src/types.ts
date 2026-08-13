@@ -1,4 +1,4 @@
-import type { ProviderId } from '@studentos/shared';
+import type { ProviderId } from '@contexto/shared';
 
 /**
  * The seam between the agent core and whoever is actually paying for inference.

@@ -1,8 +1,8 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
-import type { Database } from '@studentos/db';
-import { llmUsage } from '@studentos/db';
-import type { ProviderId } from '@studentos/shared';
-import { StudentOsError } from '@studentos/shared';
+import type { Database } from '@contexto/db';
+import { llmUsage } from '@contexto/db';
+import type { ProviderId } from '@contexto/shared';
+import { ContextoError } from '@contexto/shared';
 import { DEFAULT_MONTHLY_TOKEN_QUOTA, PLATFORM_PRICING } from './config.js';
 import type { TokenUsage } from './types.js';
 
@@ -30,7 +30,7 @@ export class QuotaService {
   async assertWithinQuota(userId: string): Promise<void> {
     const used = await this.tokensUsedThisWindow(userId);
     if (used >= this.monthlyTokenQuota) {
-      throw new StudentOsError(
+      throw new ContextoError(
         'quota_exceeded',
         'You have used your monthly allowance. Add your own API key for unlimited use, ' +
           'or wait for the allowance to reset.',

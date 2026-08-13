@@ -1,5 +1,5 @@
 {
-  "name": "@studentos/worker",
+  "name": "@contexto/worker",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@studentos/agent": "workspace:*",
-    "@studentos/db": "workspace:*",
-    "@studentos/llm": "workspace:*"
+    "@contexto/agent": "workspace:*",
+    "@contexto/db": "workspace:*",
+    "@contexto/llm": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.12"

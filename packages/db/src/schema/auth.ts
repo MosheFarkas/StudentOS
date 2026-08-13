@@ -8,7 +8,7 @@ import { boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
  * them alone.
  *
  * Regenerate after a Better Auth upgrade with:
- *   pnpm --filter @studentos/api exec better-auth generate
+ *   pnpm --filter @contexto/api exec better-auth generate
  * and diff the output against this file before applying.
  */
 

@@ -41,19 +41,19 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.9.0
         version: 0.9.0(hono@4.13.1)(zod@4.4.3)
-      '@studentos/agent':
+      '@contexto/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@studentos/channels':
+      '@contexto/channels':
         specifier: workspace:*
         version: link:../../packages/channels
-      '@studentos/db':
+      '@contexto/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@studentos/llm':
+      '@contexto/llm':
         specifier: workspace:*
         version: link:../../packages/llm
-      '@studentos/shared':
+      '@contexto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       better-auth:
@@ -75,7 +75,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@studentos/shared':
+      '@contexto/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       better-auth:
@@ -91,7 +91,7 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
-      '@studentos/api':
+      '@contexto/api':
         specifier: workspace:*
         version: link:../api
       '@types/react':
@@ -109,13 +109,13 @@ importers:
 
   apps/worker:
     dependencies:
-      '@studentos/agent':
+      '@contexto/agent':
         specifier: workspace:*
         version: link:../../packages/agent
-      '@studentos/db':
+      '@contexto/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@studentos/llm':
+      '@contexto/llm':
         specifier: workspace:*
         version: link:../../packages/llm
     devDependencies:
@@ -125,13 +125,13 @@ importers:
 
   packages/agent:
     dependencies:
-      '@studentos/db':
+      '@contexto/db':
         specifier: workspace:*
         version: link:../db
-      '@studentos/llm':
+      '@contexto/llm':
         specifier: workspace:*
         version: link:../llm
-      '@studentos/shared':
+      '@contexto/shared':
         specifier: workspace:*
         version: link:../shared
       drizzle-orm:
@@ -153,7 +153,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@studentos/shared':
+      '@contexto/shared':
         specifier: workspace:*
         version: link:../shared
       drizzle-orm:
@@ -172,10 +172,10 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.116.0
         version: 0.116.0(zod@4.4.3)
-      '@studentos/db':
+      '@contexto/db':
         specifier: workspace:*
         version: link:../db
-      '@studentos/shared':
+      '@contexto/shared':
         specifier: workspace:*
         version: link:../shared
       drizzle-orm:

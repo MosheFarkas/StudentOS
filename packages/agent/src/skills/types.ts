@@ -1,4 +1,4 @@
-import type { SkillOrigin } from '@studentos/shared';
+import type { SkillOrigin } from '@contexto/shared';
 
 /**
  * A procedure an agent knows how to carry out.

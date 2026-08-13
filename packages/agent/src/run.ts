@@ -1,4 +1,4 @@
-import type { ChatMessage, LlmRegistry } from '@studentos/llm';
+import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext } from './tools/types.js';

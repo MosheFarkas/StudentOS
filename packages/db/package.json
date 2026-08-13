@@ -1,5 +1,5 @@
 {
-  "name": "@studentos/db",
+  "name": "@contexto/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@studentos/shared": "workspace:*",
+    "@contexto/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },

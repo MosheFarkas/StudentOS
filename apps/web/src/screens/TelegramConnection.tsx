@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Agent } from '@studentos/shared';
+import type { Agent } from '@contexto/shared';
 import { api } from '../lib/api.js';
 
 type Link = { channel: string; agentId: string };

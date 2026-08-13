@@ -59,7 +59,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
       // under-18 account this is not something the student can fix, and a bare
       // "not connected" sends them round a loop trying to connect it.
       return unavailable(
-        'Google Classroom is not connected, or your school has not approved Student OS. ' +
+        'Google Classroom is not connected, or your school has not approved Contexto. ' +
           'You can still use everything else.',
       );
     }

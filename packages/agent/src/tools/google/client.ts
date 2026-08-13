@@ -37,14 +37,14 @@ export async function googleFetch<T>(
     case 'accessNotConfigured':
     case 'access_not_configured':
       return unavailable(
-        'Your school has not approved Student OS yet, so this cannot be used. ' +
+        'Your school has not approved Contexto yet, so this cannot be used. ' +
           'An administrator needs to allow the app before it will work.',
       );
 
     case 'adminPolicyEnforced':
     case 'admin_policy_enforced':
       return unavailable(
-        'Your school has blocked Student OS from accessing this. ' +
+        'Your school has blocked Contexto from accessing this. ' +
           'An administrator would need to change that.',
       );
 
@@ -56,7 +56,7 @@ export async function googleFetch<T>(
     case 'insufficientPermissions':
     case 'PERMISSION_DENIED':
       return unavailable(
-        'Student OS does not have permission for this. Reconnect Google in Settings ' +
+        'Contexto does not have permission for this. Reconnect Google in Settings ' +
           'to grant it.',
       );
 

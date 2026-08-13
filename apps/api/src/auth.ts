@@ -1,9 +1,9 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { bearer } from 'better-auth/plugins/bearer';
-import type { Database } from '@studentos/db';
-import * as schema from '@studentos/db/schema';
-import { IDENTITY_SCOPES } from '@studentos/agent';
+import type { Database } from '@contexto/db';
+import * as schema from '@contexto/db/schema';
+import { IDENTITY_SCOPES } from '@contexto/agent';
 import type { Env } from './env.js';
 
 /**
@@ -66,5 +66,5 @@ export type Auth = ReturnType<typeof createAuth>;
  *
  * TODO(desktop): the Mac shell cannot host the redirect itself. Open the
  * system browser to the normal web flow, then hand the session back via a deep
- * link (studentos://auth?token=...). That is why the bearer plugin is on.
+ * link (contexto://auth?token=...). That is why the bearer plugin is on.
  */

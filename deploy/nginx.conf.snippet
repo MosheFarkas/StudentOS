@@ -1,0 +1,41 @@
+# Use this INSTEAD of the Caddyfile if the droplet already runs nginx.
+# Running both is not an option -- they would fight over ports 80 and 443.
+#
+# TLS via certbot:
+#   sudo certbot --nginx -d contextoagent.ai -d www.contextoagent.ai
+# Run certbot after this file is in place; it rewrites the server block to add
+# the certificate lines.
+
+server {
+    listen 80;
+    server_name contextoagent.ai www.contextoagent.ai;
+
+    root /srv/contexto/apps/web/dist;
+    index index.html;
+
+    # API first. Order matters: if the SPA location matched first, /api/*
+    # would be served index.html instead of proxied.
+    location /api/ {
+        proxy_pass http://127.0.0.1:3210;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # An agent turn takes 2-10s and can exceed that with tool calls. The
+        # nginx default of 60s would cut off long turns mid-answer.
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    # SPA fallback so a hard refresh on a client route does not 404.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+}

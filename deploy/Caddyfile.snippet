@@ -1,0 +1,35 @@
+# Append to your existing Caddyfile. Caddy obtains and renews certificates
+# automatically; nothing else to configure for TLS.
+#
+# Same origin for the SPA and the API is deliberate: it means no CORS, and
+# session cookies work without SameSite workarounds. Splitting them across two
+# hostnames is where cross-origin auth usually breaks in production.
+
+contextoagent.ai, www.contextoagent.ai {
+	encode zstd gzip
+
+	# API first -- this must precede the SPA fallback or /api/* would be
+	# swallowed by try_files and returned as index.html.
+	handle /api/* {
+		reverse_proxy localhost:3210
+	}
+
+	handle {
+		root * /srv/contexto/apps/web/dist
+		# SPA fallback: unknown paths return index.html so client routing works
+		# on a hard refresh rather than 404ing.
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	log {
+		output file /var/log/caddy/contexto.log
+	}
+}

@@ -1,5 +1,5 @@
 {
-  "name": "studentos",
+  "name": "contexto",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.21.0",
@@ -8,13 +8,13 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
-    "build": "pnpm --filter @studentos/web build",
+    "build": "pnpm --filter @contexto/web build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:generate": "pnpm --filter @studentos/db generate",
-    "db:migrate": "pnpm --filter @studentos/db migrate",
+    "db:generate": "pnpm --filter @contexto/db generate",
+    "db:migrate": "pnpm --filter @contexto/db migrate",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down"
   },

@@ -1,0 +1,39 @@
+[Unit]
+Description=Contexto background worker
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=contexto
+Group=contexto
+WorkingDirectory=/srv/contexto
+EnvironmentFile=/srv/contexto/.env
+ExecStart=/usr/local/bin/pnpm --filter @contexto/worker start
+Restart=always
+RestartSec=15
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=/srv/contexto
+
+# Lower than the API: the worker does batch summarisation, and if it starts
+# growing without bound it should die before it disturbs anything else here.
+MemoryMax=512M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=contexto-worker
+
+[Install]
+WantedBy=multi-user.target

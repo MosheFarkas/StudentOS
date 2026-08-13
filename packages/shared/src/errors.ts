@@ -21,12 +21,12 @@ export const apiErrorSchema = z.object({
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
-export class StudentOsError extends Error {
+export class ContextoError extends Error {
   constructor(
     readonly code: ApiErrorCode,
     message: string,
   ) {
     super(message);
-    this.name = 'StudentOsError';
+    this.name = 'ContextoError';
   }
 }

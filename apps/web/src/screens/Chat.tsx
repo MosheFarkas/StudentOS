@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Agent, Message } from '@studentos/shared';
+import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
 
 interface Props {

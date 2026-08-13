@@ -2,9 +2,9 @@ import { randomInt } from 'node:crypto';
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { and, eq, gt, isNull } from 'drizzle-orm';
-import { agents, channelLinkCodes, channelLinks } from '@studentos/db';
-import { parseCommand } from '@studentos/channels';
-import { StudentOsError } from '@studentos/shared';
+import { agents, channelLinkCodes, channelLinks } from '@contexto/db';
+import { parseCommand } from '@contexto/channels';
+import { ContextoError } from '@contexto/shared';
 import { z } from 'zod';
 import type { AppContext } from '../context.js';
 import { runTurnForAgent } from '../agent-turn.js';
@@ -55,7 +55,7 @@ export function createChannelRoutes(ctx: AppContext) {
         zValidator('json', z.object({ agentId: z.uuid() })),
         async (c) => {
           if (!ctx.telegram) {
-            throw new StudentOsError('not_found', 'The Telegram gateway is not configured.');
+            throw new ContextoError('not_found', 'The Telegram gateway is not configured.');
           }
 
           const userId = c.get('userId');
@@ -68,7 +68,7 @@ export function createChannelRoutes(ctx: AppContext) {
             .where(and(eq(agents.id, agentId), eq(agents.userId, userId)))
             .limit(1);
 
-          if (!agent) throw new StudentOsError('not_found', 'Agent not found.');
+          if (!agent) throw new ContextoError('not_found', 'Agent not found.');
 
           const code = generateCode();
           const expiresAt = new Date(Date.now() + CODE_TTL_MS);
@@ -160,8 +160,8 @@ async function handleMessage(
     if (command === 'start') {
       await telegram.send(
         message.channelUserId,
-        'Hi! Link this chat to your Student OS agent:\n\n' +
-          '1. Open Student OS in your browser\n' +
+        'Hi! Link this chat to your Contexto agent:\n\n' +
+          '1. Open Contexto in your browser\n' +
           '2. Settings -> Connect Telegram\n' +
           '3. Send me: /link YOURCODE',
       );
@@ -189,7 +189,7 @@ async function handleMessage(
   if (!agent) {
     await telegram.send(
       message.channelUserId,
-      'That agent no longer exists. Re-link from Settings in Student OS.',
+      'That agent no longer exists. Re-link from Settings in Contexto.',
     );
     return;
   }
@@ -208,10 +208,10 @@ async function handleMessage(
     // those through. Everything else stays generic -- upstream provider errors
     // can carry key material.
     const text =
-      error instanceof StudentOsError
+      error instanceof ContextoError
         ? error.message
         : 'Something went wrong handling that. Try again in a moment.';
-    if (!(error instanceof StudentOsError)) {
+    if (!(error instanceof ContextoError)) {
       console.error('[telegram] turn failed', error);
     }
     await telegram.send(message.channelUserId, text);

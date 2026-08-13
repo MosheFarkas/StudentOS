@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ByokProvider, CredentialSummary, UsageStatus } from '@studentos/shared';
+import type { ByokProvider, CredentialSummary, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { addCredentialSchema, type UsageStatus } from '@studentos/shared';
-import { currentWindowEnd, currentWindowStart } from '@studentos/llm';
+import { addCredentialSchema, type UsageStatus } from '@contexto/shared';
+import { currentWindowEnd, currentWindowStart } from '@contexto/llm';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { createAgentRoutes } from './agents.js';

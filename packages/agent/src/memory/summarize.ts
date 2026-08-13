@@ -1,4 +1,4 @@
-import type { LlmRegistry } from '@studentos/llm';
+import type { LlmRegistry } from '@contexto/llm';
 import type { MemoryStore } from './types.js';
 
 /**

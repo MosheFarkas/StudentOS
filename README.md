@@ -1,4 +1,4 @@
-# Student OS
+# Contexto
 
 Students build their own personal AI agents — not agents a school builds for them to consume. The
 GUI is non-technical: you describe what you want your agent to do, connect your calendar and
@@ -9,7 +9,7 @@ skill-building) without the terminal.
 Students can bring their own OpenAI or Anthropic API key. Those who don't get a free tier we fund on
 a cheap model, with a per-student token allowance.
 
-> **Working title.** The package scope is `@studentos/*`; renaming is one find-and-replace.
+> Runs at **contextoagent.ai**.
 
 ## Status
 

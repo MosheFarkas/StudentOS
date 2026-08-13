@@ -26,7 +26,7 @@ const jobs: Job[] = [
     intervalMs: 60 * MINUTE,
     async run() {
       // TODO(memory): for each agent with unsummarised entries older than the
-      // retention window, call summarizeAgentMemory from @studentos/agent.
+      // retention window, call summarizeAgentMemory from @contexto/agent.
       //
       // Two things to get right when implementing:
       //   - Bill each summarisation to the agent's OWNER, not a shared key.

@@ -1,0 +1,43 @@
+[Unit]
+Description=Contexto API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=contexto
+Group=contexto
+WorkingDirectory=/srv/contexto
+EnvironmentFile=/srv/contexto/.env
+ExecStart=/usr/local/bin/pnpm --filter @contexto/api start
+Restart=always
+RestartSec=5
+
+# --- Sandboxing --------------------------------------------------------------
+# This box runs other projects. These directives limit what a compromise of THIS
+# service can reach; they do not protect this service from a root compromise
+# elsewhere on the host. Nothing on-box does.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+ReadWritePaths=/srv/contexto
+
+# Caps the blast radius of a runaway agent loop on the other sites sharing this
+# droplet -- without it, one bad turn can OOM the whole box.
+MemoryMax=768M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=contexto-api
+
+[Install]
+WantedBy=multi-user.target

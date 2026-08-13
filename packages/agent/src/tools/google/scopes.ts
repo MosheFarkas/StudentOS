@@ -100,7 +100,7 @@ export function scopesFor(groups: ScopeGroup[]): string[] {
  *   2. University students on personal or unmanaged accounts are generally
  *      unaffected, which is why v1 targets university first.
  *   3. Surface access_not_configured / admin_policy_enforced in the UI as
- *      "your school needs to approve Student OS", with something the student
+ *      "your school needs to approve Contexto", with something the student
  *      can forward to their admin. Do not show a generic auth error -- the
  *      student cannot fix it themselves and will assume the product is broken.
  *   4. Publish the full scope list for admin review. Workspace Marketplace

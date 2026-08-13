@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '@studentos/db';
-import { account } from '@studentos/db';
-import { grantedScopeGroups, type GoogleTokenProvider, type ScopeGroup } from '@studentos/agent';
+import type { Database } from '@contexto/db';
+import { account } from '@contexto/db';
+import { grantedScopeGroups, type GoogleTokenProvider, type ScopeGroup } from '@contexto/agent';
 import type { Auth } from '../auth.js';
 
 const GOOGLE_PROVIDER_ID = 'google';

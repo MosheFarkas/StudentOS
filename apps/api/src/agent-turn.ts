@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { agentMessages, agents } from '@studentos/db';
-import type { Message } from '@studentos/shared';
-import { StudentOsError } from '@studentos/shared';
-import { buildToolRegistry, runAgentTurn } from '@studentos/agent';
+import { agentMessages, agents } from '@contexto/db';
+import type { Message } from '@contexto/shared';
+import { ContextoError } from '@contexto/shared';
+import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGrantedGroups } from './google/connections.js';
 
@@ -64,7 +64,7 @@ export async function runTurnForAgent(
   await ctx.db.update(agents).set({ updatedAt: new Date() }).where(eq(agents.id, agent.id));
 
   if (!userMessage || !assistantMessage) {
-    throw new StudentOsError('internal_error', 'Failed to save messages.');
+    throw new ContextoError('internal_error', 'Failed to save messages.');
   }
 
   return { userMessage: toMessage(userMessage), assistantMessage: toMessage(assistantMessage) };

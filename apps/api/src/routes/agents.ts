@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { and, asc, desc, eq } from 'drizzle-orm';
-import { agentMessages, agents } from '@studentos/db';
-import { createAgentSchema, sendMessageSchema, StudentOsError } from '@studentos/shared';
-import type { Agent } from '@studentos/shared';
+import { agentMessages, agents } from '@contexto/db';
+import { createAgentSchema, sendMessageSchema, ContextoError } from '@contexto/shared';
+import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -26,7 +26,7 @@ export function createAgentRoutes(ctx: AppContext) {
       .limit(1);
 
     if (!row) {
-      throw new StudentOsError('not_found', 'Agent not found.');
+      throw new ContextoError('not_found', 'Agent not found.');
     }
     return row;
   }
@@ -53,7 +53,7 @@ export function createAgentRoutes(ctx: AppContext) {
           .values({ userId: c.get('userId'), ...body })
           .returning();
 
-        if (!row) throw new StudentOsError('internal_error', 'Failed to create agent.');
+        if (!row) throw new ContextoError('internal_error', 'Failed to create agent.');
         return c.json({ agent: toAgent(row) }, 201);
       })
 
