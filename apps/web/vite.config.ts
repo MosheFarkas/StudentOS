@@ -13,6 +13,16 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    /*
+     * Fail rather than drift to the next free port.
+     *
+     * The port is baked into three places that must agree: WEB_BASE_URL (which
+     * drives the API's CORS allowlist), Better Auth's trustedOrigins, and the
+     * authorised JavaScript origin registered with Google. A silent hop to
+     * 5174 breaks sign-in and every API call with errors that point nowhere
+     * near the actual cause -- much better to refuse to start.
+     */
+    strictPort: true,
   },
   build: {
     outDir: 'dist',

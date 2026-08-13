@@ -14,9 +14,8 @@
  * schedules a migration for no benefit -- and because the 1.05M window gives
  * accumulated agent memory room before summarisation has to get aggressive.
  *
- * TODO(verify): this id is inferred from the docs URL slug
- * (developers.openai.com/api/docs/models/gpt-5.6-luna). Confirm it on the first
- * real call -- a wrong model id is a 404 at request time, not a startup error.
+ * Verified against GET /v1/models: `gpt-5.6-luna`, alongside `gpt-5.6-terra`
+ * and `gpt-5.6-sol`.
  */
 export const PLATFORM_MODEL = 'gpt-5.6-luna';
 
