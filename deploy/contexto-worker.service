@@ -29,7 +29,7 @@ ReadWritePaths=/srv/contexto
 
 # Lower than the API: the worker does batch summarisation, and if it starts
 # growing without bound it should die before it disturbs anything else here.
-MemoryMax=512M
+MemoryMax=256M
 
 StandardOutput=journal
 StandardError=journal

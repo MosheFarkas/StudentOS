@@ -31,9 +31,10 @@ RestrictRealtime=true
 LockPersonality=true
 ReadWritePaths=/srv/contexto
 
-# Caps the blast radius of a runaway agent loop on the other sites sharing this
-# droplet -- without it, one bad turn can OOM the whole box.
-MemoryMax=768M
+# Sized for THIS box: 2GB total, already running premove.win and about to run
+# Postgres. A runaway agent loop must die before it reaches the OOM killer,
+# because the killer may well pick someone else's process instead of ours.
+MemoryMax=512M
 
 StandardOutput=journal
 StandardError=journal
