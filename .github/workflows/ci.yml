@@ -12,6 +12,29 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+
+    services:
+      # Integration tests run against a real Postgres. Everything worth testing
+      # in them IS database behaviour -- foreign keys, unique constraints, and
+      # queries scoped by user id -- so a mock would happily pass a cross-user
+      # access test that the real database would too.
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: contexto
+          POSTGRES_PASSWORD: contexto
+          POSTGRES_DB: contexto_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://contexto:contexto@localhost:5432/contexto_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +60,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm -w run typecheck
+
+      - name: Test
+        run: pnpm -w run test
 
       - name: Build
         run: pnpm -w run build

@@ -66,7 +66,24 @@ pnpm db:migrate           # apply it
 pnpm dev                  # api on :3000, web on :5173
 ```
 
-`pnpm typecheck`, `pnpm lint`, `pnpm format` — CI runs all of these on push.
+`pnpm -w run typecheck`, `lint`, `format`, `test` — CI runs all of these on push.
+
+### Tests
+
+```bash
+createdb contexto_test          # or: docker exec contexto-postgres createdb -U studentos contexto_test
+pnpm -w run test
+```
+
+Integration tests run against a real Postgres, not a mock. Everything worth testing in them _is_
+database behaviour — foreign keys, unique constraints, and queries scoped by user id — and a mocked
+query builder would happily pass a cross-user access test that the real database would too.
+
+The suite is weighted toward the places a silent bug would be expensive rather than toward coverage:
+AES-GCM round-tripping and IV uniqueness, quota cost arithmetic, partial-scope detection, Telegram
+group-chat rejection, and cross-user isolation on every agent route. That last group is verified by
+mutation — deleting the `userId` scoping from the ownership query fails exactly those four tests and
+nothing else.
 
 ## Two things that will bite you
 
