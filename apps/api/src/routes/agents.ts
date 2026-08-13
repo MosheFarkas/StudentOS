@@ -3,10 +3,9 @@ import { zValidator } from '@hono/zod-validator';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { agentMessages, agents } from '@studentos/db';
 import { createAgentSchema, sendMessageSchema, StudentOsError } from '@studentos/shared';
-import type { Agent, Message } from '@studentos/shared';
-import { buildToolRegistry, runAgentTurn } from '@studentos/agent';
+import type { Agent } from '@studentos/shared';
 import type { AppContext } from '../context.js';
-import { BetterAuthGoogleTokenProvider, getGrantedGroups } from '../google/connections.js';
+import { runTurnForAgent, toMessage } from '../agent-turn.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 export function createAgentRoutes(ctx: AppContext) {
@@ -93,56 +92,16 @@ export function createAgentRoutes(ctx: AppContext) {
       .post('/:id/messages', auth, zValidator('json', sendMessageSchema), async (c) => {
         const userId = c.get('userId');
         const agent = await ownedAgent(userId, c.req.param('id'));
-        const { content } = c.req.valid('json');
 
-        const [userMessage] = await ctx.db
-          .insert(agentMessages)
-          .values({ agentId: agent.id, role: 'user', content })
-          .returning();
-
-        // Tools are assembled per turn from what this student has actually
-        // connected -- a student with no Google link gets an empty set and
-        // pays no context for tools they cannot use.
-        const granted = await getGrantedGroups(ctx.db, userId);
-
-        const result = await runAgentTurn(
-          {
-            llm: ctx.llm,
-            memory: ctx.memory,
-            skills: ctx.skills,
-            tools: buildToolRegistry(granted),
-          },
-          {
-            userId,
-            agentId: agent.id,
-            purpose: agent.purpose,
-            message: content,
-            google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, granted),
-            signal: c.req.raw.signal,
-          },
-        );
-
-        const [assistantMessage] = await ctx.db
-          .insert(agentMessages)
-          .values({
-            agentId: agent.id,
-            role: 'assistant',
-            content: result.reply,
-            toolsUsed: result.toolsUsed,
-          })
-          .returning();
-
-        // Surfaces the agent in the "recently used" ordering on the list screen.
-        await ctx.db.update(agents).set({ updatedAt: new Date() }).where(eq(agents.id, agent.id));
-
-        if (!userMessage || !assistantMessage) {
-          throw new StudentOsError('internal_error', 'Failed to save messages.');
-        }
-
-        return c.json({
-          userMessage: toMessage(userMessage),
-          assistantMessage: toMessage(assistantMessage),
+        // Shared with the messaging gateway -- see src/agent-turn.ts.
+        const result = await runTurnForAgent(ctx, {
+          userId,
+          agent,
+          content: c.req.valid('json').content,
+          signal: c.req.raw.signal,
         });
+
+        return c.json(result);
       })
   );
 }
@@ -154,16 +113,5 @@ function toAgent(row: typeof agents.$inferSelect): Agent {
     purpose: row.purpose,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-function toMessage(row: typeof agentMessages.$inferSelect): Message {
-  return {
-    id: row.id,
-    agentId: row.agentId,
-    role: row.role as Message['role'],
-    content: row.content,
-    toolsUsed: row.toolsUsed,
-    createdAt: row.createdAt.toISOString(),
   };
 }

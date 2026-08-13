@@ -1,6 +1,7 @@
 import { createDatabase, type Database } from '@studentos/db';
 import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from '@studentos/llm';
 import { PostgresMemoryStore, PostgresSkillRegistry } from '@studentos/agent';
+import { TelegramChannel } from '@studentos/channels';
 import { createAuth, type Auth } from './auth.js';
 import type { Env } from './env.js';
 
@@ -20,6 +21,8 @@ export interface AppContext {
   quota: QuotaService;
   memory: PostgresMemoryStore;
   skills: PostgresSkillRegistry;
+  /** Undefined when the Telegram gateway is not configured. */
+  telegram: TelegramChannel | undefined;
 }
 
 export function createContext(env: Env): AppContext {
@@ -42,5 +45,14 @@ export function createContext(env: Env): AppContext {
     }),
     memory: new PostgresMemoryStore(db),
     skills: new PostgresSkillRegistry(db),
+
+    // env.ts guarantees the secret is present whenever the token is.
+    telegram:
+      env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_WEBHOOK_SECRET
+        ? new TelegramChannel({
+            botToken: env.TELEGRAM_BOT_TOKEN,
+            webhookSecret: env.TELEGRAM_WEBHOOK_SECRET,
+          })
+        : undefined,
   };
 }

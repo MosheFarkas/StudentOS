@@ -4,3 +4,4 @@ export * from './messages.js';
 export * from './memory.js';
 export * from './skills.js';
 export * from './llm.js';
+export * from './channels.js';

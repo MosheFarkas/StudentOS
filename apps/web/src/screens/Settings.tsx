@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ByokProvider, CredentialSummary, UsageStatus } from '@studentos/shared';
 import { api } from '../lib/api.js';
 import { GoogleConnections } from './GoogleConnections.js';
+import { TelegramConnection } from './TelegramConnection.js';
 
 /**
  * Bring-your-own-key settings.
@@ -61,6 +62,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       )}
 
       <GoogleConnections />
+
+      <TelegramConnection />
 
       <div className="panel">
         <h2>Your API keys</h2>

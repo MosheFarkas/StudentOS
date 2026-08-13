@@ -83,6 +83,14 @@ const envSchema = z.object({
   PLATFORM_OPENAI_API_KEY: optional(z.string().min(1)),
   /** Per-student monthly token allowance on the platform tier. */
   PLATFORM_MONTHLY_TOKEN_QUOTA: optional(z.coerce.number().int().positive()),
+
+  /**
+   * Telegram gateway. Both optional -- unset disables the gateway entirely,
+   * and the product must work without it.
+   */
+  TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
+  /** Shared secret echoed back by Telegram on every webhook request. */
+  TELEGRAM_WEBHOOK_SECRET: optional(z.string().min(16)),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -96,7 +104,16 @@ export function loadEnv(source?: NodeJS.ProcessEnv): Env {
     source = process.env;
   }
 
-  const parsed = envSchema.safeParse(source);
+  const parsed = envSchema
+    // A bot token without a webhook secret means an unauthenticated public
+    // endpoint that runs agent turns. Refuse to start rather than expose it.
+    .refine((env) => !env.TELEGRAM_BOT_TOKEN || Boolean(env.TELEGRAM_WEBHOOK_SECRET), {
+      path: ['TELEGRAM_WEBHOOK_SECRET'],
+      message:
+        'Required when TELEGRAM_BOT_TOKEN is set -- without it, anyone who finds the ' +
+        'webhook URL can forge messages. Generate one with: openssl rand -hex 32',
+    })
+    .safeParse(source);
 
   if (!parsed.success) {
     const issues = parsed.error.issues

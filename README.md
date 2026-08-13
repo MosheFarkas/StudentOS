@@ -84,6 +84,52 @@ targets university first. The full write-up is in
 **Losing `MASTER_ENCRYPTION_KEY` is unrecoverable.** Every stored student API key becomes permanently
 undecryptable. Back it up somewhere other than the droplet.
 
+## Messaging gateway
+
+Students can message their agent from Telegram and get an answer whether or not the web app is
+open. A Telegram turn is the same `runAgentTurn` as a browser turn — same tools, same quota, same
+transcript — so a conversation started on a phone continues on a laptop.
+
+`packages/channels` owns a `Channel` interface; Discord, SMS, and WhatsApp become adapters without
+the agent layer learning a message arrived from somewhere new.
+
+Reactive only. The agent never messages first — see the design note in
+`docs/specs/2026-08-13-telegram-gateway.md` for why proactive polling costs roughly 7× reactive to
+mostly conclude there is nothing to do, and why the eventual answer is event-driven.
+
+### Setting it up
+
+Optional. Leave both variables unset and the gateway disables itself — the route 404s and the
+Settings panel hides.
+
+Add to `.env`:
+
+```
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEBHOOK_SECRET=
+```
+
+1. Message `@BotFather` → `/newbot` → copy the token.
+2. `openssl rand -hex 32` for the webhook secret. It's required whenever the token is set — the API
+   refuses to boot otherwise, because a webhook without it is a public unauthenticated endpoint that
+   runs agent turns.
+3. Register the webhook. Needs a **public HTTPS URL**, so either deploy first or use a tunnel:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://YOUR_DOMAIN/api/channels/telegram/webhook",
+       "secret_token":"YOUR_WEBHOOK_SECRET",
+       "allowed_updates":["message"]}'
+```
+
+Then Settings → Telegram → pick an agent → send the bot `/link CODE`.
+
+Linking is code-based on purpose. The webhook is public and anyone can message the bot, so identity
+is proven by a short-lived code visible only inside an authenticated session — never inferred from a
+username or phone number. Unlinked senders get instructions for `/start` and `/link` and are ignored
+otherwise, so no agent and no inference spend is reachable without proving account ownership.
+
 ## BYO-LLM layer
 
 `packages/llm` is isolated so that who pays for inference is one decision in one place.

@@ -44,6 +44,9 @@ importers:
       '@studentos/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@studentos/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@studentos/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -137,6 +140,16 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/channels:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.2.0
+        version: 26.2.0
 
   packages/db:
     dependencies:
