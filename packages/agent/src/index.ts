@@ -27,7 +27,16 @@ export {
   deleteCalendarEvent,
   type CalendarEvent,
 } from './tools/google/calendar.js';
-export { listCoursework, listCourses, type Assignment } from './tools/google/classroom.js';
+export {
+  listCoursework,
+  listCourses,
+  listCourseMaterials,
+  listAnnouncements,
+  type Assignment,
+  type Attachment,
+  type CourseMaterial,
+  type Announcement,
+} from './tools/google/classroom.js';
 export * from './tools/google/scopes.js';
 
 export {

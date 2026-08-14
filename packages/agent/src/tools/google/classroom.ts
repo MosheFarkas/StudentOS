@@ -2,7 +2,12 @@ import { z } from 'zod';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, isUnavailable } from './client.js';
-import { CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_SCOPE } from './scopes.js';
+import {
+  CLASSROOM_ANNOUNCEMENTS_SCOPE,
+  CLASSROOM_COURSES_SCOPE,
+  CLASSROOM_COURSEWORK_SCOPE,
+  CLASSROOM_MATERIALS_SCOPE,
+} from './scopes.js';
 
 const COURSES_URL = 'https://classroom.googleapis.com/v1/courses';
 
@@ -148,6 +153,196 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     return { assignments, count: assignments.length };
   },
 };
+
+/** Attachments Classroom hangs off materials, announcements, and coursework. */
+interface ClassroomMaterial {
+  driveFile?: { driveFile?: { title?: string; alternateLink?: string } };
+  youtubeVideo?: { title?: string; alternateLink?: string };
+  link?: { title?: string; url?: string };
+  form?: { title?: string; formUrl?: string };
+}
+
+export interface Attachment {
+  kind: 'file' | 'video' | 'link' | 'form';
+  title: string;
+  url?: string;
+}
+
+function toAttachments(materials: ClassroomMaterial[] | undefined): Attachment[] {
+  return (materials ?? []).flatMap((m): Attachment[] => {
+    if (m.driveFile?.driveFile) {
+      const f = m.driveFile.driveFile;
+      return [
+        {
+          kind: 'file',
+          title: f.title ?? 'Untitled file',
+          ...(f.alternateLink ? { url: f.alternateLink } : {}),
+        },
+      ];
+    }
+    if (m.youtubeVideo) {
+      return [
+        {
+          kind: 'video',
+          title: m.youtubeVideo.title ?? 'Video',
+          ...(m.youtubeVideo.alternateLink ? { url: m.youtubeVideo.alternateLink } : {}),
+        },
+      ];
+    }
+    if (m.link) {
+      return [
+        {
+          kind: 'link',
+          title: m.link.title ?? m.link.url ?? 'Link',
+          ...(m.link.url ? { url: m.link.url } : {}),
+        },
+      ];
+    }
+    if (m.form) {
+      return [
+        {
+          kind: 'form',
+          title: m.form.title ?? 'Form',
+          ...(m.form.formUrl ? { url: m.form.formUrl } : {}),
+        },
+      ];
+    }
+    return [];
+  });
+}
+
+/**
+ * Fetch across every active course, sequentially.
+ *
+ * Not parallel: a student with eight courses firing eight simultaneous
+ * requests is the shape that trips Classroom's per-user rate limit, and the
+ * latency saved is not worth the failure mode. One inaccessible course is
+ * skipped rather than failing the whole answer.
+ */
+async function forEachCourse<T>(
+  token: string,
+  signal: AbortSignal | undefined,
+  path: (courseId: string) => string,
+  extract: (payload: never, courseName: string) => T[],
+): Promise<T[] | ReturnType<typeof unavailable>> {
+  const courses = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
+    `${COURSES_URL}?courseStates=ACTIVE`,
+    token,
+    { ...(signal ? { signal } : {}) },
+  );
+  if (isUnavailable(courses)) return courses;
+
+  const out: T[] = [];
+  for (const course of courses.courses ?? []) {
+    const payload = await googleFetch(path(course.id), token, { ...(signal ? { signal } : {}) });
+    if (isUnavailable(payload)) continue;
+    out.push(...extract(payload as never, course.name ?? 'Unknown course'));
+  }
+  return out;
+}
+
+export interface CourseMaterial {
+  course: string;
+  title: string;
+  description?: string;
+  attachments: Attachment[];
+  link?: string;
+}
+
+export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
+  id: 'google_classroom_list_materials',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_MATERIALS_SCOPE],
+  description:
+    "List the files, slides, videos, and links teachers have posted to the student's " +
+    'courses. Call this when they ask about class materials, readings, notes, or "the files" ' +
+    'for a course. Returns titles and links -- you cannot read file contents.',
+  inputSchema: z.object({}),
+
+  async execute(_input, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable(
+        'Google Classroom is not connected, or your school has not approved Contexto.',
+      );
+    }
+
+    const materials = await forEachCourse<CourseMaterial>(
+      token,
+      ctx.signal,
+      (id) => `${COURSES_URL}/${id}/courseWorkMaterials`,
+      (payload: { courseWorkMaterial?: RawMaterial[] }, courseName) =>
+        (payload.courseWorkMaterial ?? []).map((item) => ({
+          course: courseName,
+          title: item.title ?? 'Untitled',
+          ...(item.description ? { description: item.description } : {}),
+          attachments: toAttachments(item.materials),
+          ...(item.alternateLink ? { link: item.alternateLink } : {}),
+        })),
+    );
+    if (isUnavailable(materials)) return materials;
+
+    return { materials, count: materials.length };
+  },
+};
+
+interface RawMaterial {
+  title?: string;
+  description?: string;
+  alternateLink?: string;
+  materials?: ClassroomMaterial[];
+}
+
+export interface Announcement {
+  course: string;
+  text: string;
+  postedAt?: string;
+  attachments: Attachment[];
+  link?: string;
+}
+
+export const listAnnouncements: Tool<Record<string, never>, unknown> = {
+  id: 'google_classroom_list_announcements',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_ANNOUNCEMENTS_SCOPE],
+  description:
+    "List recent announcements teachers have posted to the student's courses. Call this " +
+    'when they ask what their teacher said, what they missed, or what is new in a class.',
+  inputSchema: z.object({}),
+
+  async execute(_input, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable(
+        'Google Classroom is not connected, or your school has not approved Contexto.',
+      );
+    }
+
+    const announcements = await forEachCourse<Announcement>(
+      token,
+      ctx.signal,
+      (id) => `${COURSES_URL}/${id}/announcements?pageSize=20`,
+      (payload: { announcements?: RawAnnouncement[] }, courseName) =>
+        (payload.announcements ?? []).map((item) => ({
+          course: courseName,
+          text: item.text ?? '',
+          ...(item.creationTime ? { postedAt: item.creationTime } : {}),
+          attachments: toAttachments(item.materials),
+          ...(item.alternateLink ? { link: item.alternateLink } : {}),
+        })),
+    );
+    if (isUnavailable(announcements)) return announcements;
+
+    // Newest first -- "what did I miss" is almost always about recent posts.
+    announcements.sort((a, b) => (b.postedAt ?? '').localeCompare(a.postedAt ?? ''));
+    return { announcements, count: announcements.length };
+  },
+};
+
+interface RawAnnouncement {
+  text?: string;
+  creationTime?: string;
+  alternateLink?: string;
+  materials?: ClassroomMaterial[];
+}
 
 /**
  * Classroom splits due date and time into separate objects, and omits `dueTime`

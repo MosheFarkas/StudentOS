@@ -7,7 +7,12 @@ import {
   listCalendarEvents,
   updateCalendarEvent,
 } from './google/calendar.js';
-import { listCourses, listCoursework } from './google/classroom.js';
+import {
+  listAnnouncements,
+  listCourseMaterials,
+  listCourses,
+  listCoursework,
+} from './google/classroom.js';
 
 const ALL_TOOLS: Tool<never, unknown>[] = [
   listCalendarEvents,
@@ -16,6 +21,8 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   deleteCalendarEvent,
   listCourses,
   listCoursework,
+  listCourseMaterials,
+  listAnnouncements,
 ] as unknown as Tool<never, unknown>[];
 
 /**
