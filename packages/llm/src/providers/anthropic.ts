@@ -141,6 +141,26 @@ function splitSystem(messages: ChatMessage[]): {
           content: [{ type: 'tool_result', tool_use_id: m.toolCallId ?? '', content: m.content }],
         };
       }
+
+      // An assistant turn that called tools must replay those tool_use blocks,
+      // or the tool_result that follows references a call Anthropic never sees
+      // and the request is rejected.
+      if (m.role === 'assistant' && m.toolCalls?.length) {
+        const blocks: Anthropic.ContentBlockParam[] = [];
+        if (m.content) blocks.push({ type: 'text', text: m.content });
+        for (const call of m.toolCalls) {
+          blocks.push({
+            type: 'tool_use',
+            id: call.id,
+            name: call.name,
+            // Anthropic wants the parsed object; the neutral shape carries the
+            // raw JSON string every provider emits.
+            input: JSON.parse(call.arguments) as Record<string, unknown>,
+          });
+        }
+        return { role: 'assistant', content: blocks };
+      }
+
       return { role: m.role, content: m.content };
     });
 

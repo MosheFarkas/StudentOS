@@ -85,7 +85,13 @@ export async function runAgentTurn(
       break;
     }
 
-    messages.push({ role: 'assistant', content: response.content });
+    // Carry the tool calls, not just the text: providers require the original
+    // call to be replayed before its result.
+    messages.push({
+      role: 'assistant',
+      content: response.content,
+      toolCalls: response.toolCalls,
+    });
 
     for (const call of response.toolCalls) {
       toolsUsed.push(call.name);

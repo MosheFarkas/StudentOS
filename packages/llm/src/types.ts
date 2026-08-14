@@ -31,6 +31,16 @@ export interface ChatMessage {
   content: string;
   /** Set on `role: 'tool'` messages to pair a result with its call. */
   toolCallId?: string;
+  /**
+   * Set on `role: 'assistant'` messages that requested tools.
+   *
+   * Both OpenAI and Anthropic require the original tool call to be replayed in
+   * the conversation before its result -- otherwise the result refers to
+   * nothing and the request is rejected. Dropping these is the classic
+   * multi-turn tool-calling bug, and it only shows up once a tool is actually
+   * registered, which is exactly when it is hardest to notice.
+   */
+  toolCalls?: ToolCall[];
 }
 
 /**
