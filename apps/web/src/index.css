@@ -228,6 +228,143 @@ label > select {
   padding-bottom: 0.5rem;
 }
 
+/*
+ * File preview.
+ *
+ * The chat column keeps its comfortable reading width; the page itself widens
+ * only while a file is open, so opening one does not reflow the conversation
+ * the student is reading. minmax(0, …) on both tracks stops a wide document
+ * from forcing the grid past the viewport.
+ */
+main:has(.preview-pane) {
+  max-width: 78rem;
+}
+
+.workspace {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+main:has(.preview-pane) .workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+
+.chat-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Links the agent produces. */
+.message a {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Previewable attachments read as objects rather than as prose links -- a
+ * student scanning eight courses of materials should be able to see where the
+ * openable things are without reading every line.
+ */
+.message a.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  text-decoration: none;
+  background: var(--soft);
+}
+
+.message a.chip::before {
+  content: '◧';
+  opacity: 0.55;
+  font-size: 0.85em;
+}
+
+.message a.chip:hover {
+  border-color: currentColor;
+}
+
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Follows the conversation instead of scrolling away from it. */
+  position: sticky;
+  top: 1rem;
+  height: min(78dvh, 46rem);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.preview-header strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+  /* Course material titles run long; the frame below shows the real thing. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: none;
+  font-size: 0.85rem;
+}
+
+.preview-actions button {
+  padding: 0.2rem 0.45rem;
+  line-height: 1;
+}
+
+.preview-pane iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  /* Google's viewers assume white; dark mode otherwise flashes black. */
+  background: #fff;
+}
+
+/*
+ * Narrow screens have no room for two columns, so the preview covers the
+ * conversation instead of being squeezed beside it. Phones are where students
+ * actually read this.
+ */
+@media (max-width: 60rem) {
+  main:has(.preview-pane) {
+    max-width: 42rem;
+  }
+
+  main:has(.preview-pane) .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-pane {
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    z-index: 10;
+    background: Canvas;
+  }
+}
+
 dl {
   display: grid;
   grid-template-columns: auto 1fr;

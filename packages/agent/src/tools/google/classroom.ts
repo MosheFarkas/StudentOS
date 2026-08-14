@@ -255,7 +255,9 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
   description:
     "List the files, slides, videos, and links teachers have posted to the student's " +
     'courses. Call this when they ask about class materials, readings, notes, or "the files" ' +
-    'for a course. Returns titles and links -- you cannot read file contents.',
+    'for a course. You cannot read file contents, only titles and links. Always include each ' +
+    "item's link as a markdown link -- the student can open and read the file in Contexto by " +
+    'clicking it, so a title without its link is not useful to them.',
   inputSchema: z.object({}),
 
   async execute(_input, ctx) {

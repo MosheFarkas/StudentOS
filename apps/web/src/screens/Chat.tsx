@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import type { PreviewTarget } from '../lib/preview.js';
+import { FilePreview } from './FilePreview.js';
+import { MessageText } from './MessageText.js';
 
 interface Props {
   agent: Agent;
@@ -12,6 +15,7 @@ export function Chat({ agent, onBack }: Props) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,35 +84,49 @@ export function Chat({ agent, onBack }: Props) {
         <strong>{agent.name}</strong>
       </div>
 
-      <div className="messages">
-        {messages.length === 0 && <p className="muted">Say something to get started.</p>}
+      <div className="workspace">
+        <div className="chat-column">
+          <div className="messages">
+            {messages.length === 0 && <p className="muted">Say something to get started.</p>}
 
-        {messages.map((message) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            {message.content}
-            {message.toolsUsed.length > 0 && (
-              <span className="muted tools">used {message.toolsUsed.join(', ')}</span>
-            )}
+            {messages.map((message) => (
+              <div key={message.id} className={`message ${message.role}`}>
+                {/*
+                 * Only assistant text is parsed for links. What a student types
+                 * is shown exactly as they typed it.
+                 */}
+                {message.role === 'assistant' ? (
+                  <MessageText text={message.content} onPreview={setPreview} />
+                ) : (
+                  message.content
+                )}
+                {message.toolsUsed.length > 0 && (
+                  <span className="muted tools">used {message.toolsUsed.join(', ')}</span>
+                )}
+              </div>
+            ))}
+
+            {sending && <p className="muted">Thinking…</p>}
+            <div ref={bottom} />
           </div>
-        ))}
 
-        {sending && <p className="muted">Thinking…</p>}
-        <div ref={bottom} />
+          {error && <p className="muted">{error}</p>}
+
+          <form className="composer" onSubmit={send}>
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={`Message ${agent.name}`}
+              disabled={sending}
+            />
+            <button type="submit" disabled={sending || !draft.trim()}>
+              Send
+            </button>
+          </form>
+        </div>
+
+        {preview && <FilePreview target={preview} onClose={() => setPreview(null)} />}
       </div>
-
-      {error && <p className="muted">{error}</p>}
-
-      <form className="composer" onSubmit={send}>
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Message ${agent.name}`}
-          disabled={sending}
-        />
-        <button type="submit" disabled={sending || !draft.trim()}>
-          Send
-        </button>
-      </form>
     </>
   );
 }
