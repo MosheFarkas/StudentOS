@@ -4,7 +4,7 @@ import type { Message } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
 import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
-import { BetterAuthGoogleTokenProvider, getGrantedGroups } from './google/connections.js';
+import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 
 /**
  * Run one agent turn and persist both sides of it.
@@ -31,8 +31,8 @@ export async function runTurnForAgent(
     .returning();
 
   // Assembled per turn from what this student has actually connected.
-  const [granted, [profile]] = await Promise.all([
-    getGrantedGroups(ctx.db, userId),
+  const [grant, [profile]] = await Promise.all([
+    getGoogleGrant(ctx.db, userId),
     ctx.db.select({ timezone: user.timezone }).from(user).where(eq(user.id, userId)).limit(1),
   ]);
 
@@ -41,7 +41,7 @@ export async function runTurnForAgent(
       llm: ctx.llm,
       memory: ctx.memory,
       skills: ctx.skills,
-      tools: buildToolRegistry(granted),
+      tools: buildToolRegistry(grant.scope),
     },
     {
       userId,
@@ -49,7 +49,7 @@ export async function runTurnForAgent(
       purpose: agent.purpose,
       message: content,
       ...(profile?.timezone ? { timezone: profile.timezone } : {}),
-      google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, granted),
+      google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups),
       ...(signal ? { signal } : {}),
     },
   );

@@ -13,6 +13,15 @@ export interface Tool<TInput = unknown, TOutput = unknown> {
   id: string;
   /** Shown to the model. Say WHEN to call it, not just what it does. */
   description: string;
+  /**
+   * OAuth scopes this tool's API calls actually need.
+   *
+   * Registration is gated on these, so a student whose school granted only
+   * some scopes loses exactly the tools that would have 403'd -- and keeps
+   * the rest. Without this, a partial grant either breaks the whole
+   * integration or leaves tools that fail every time they are called.
+   */
+  requiredScopes?: readonly string[];
   inputSchema: z.ZodType<TInput>;
   execute(input: TInput, ctx: ToolContext): Promise<TOutput>;
 }

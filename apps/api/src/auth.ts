@@ -3,7 +3,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { bearer } from 'better-auth/plugins/bearer';
 import type { Database } from '@contexto/db';
 import * as schema from '@contexto/db/schema';
-import { IDENTITY_SCOPES } from '@contexto/agent';
+import { SCOPE_GROUPS } from '@contexto/agent';
 import type { Env } from './env.js';
 
 /**
@@ -34,7 +34,7 @@ export function createAuth(db: Database, env: Env) {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
         clientSecret: env.GOOGLE_CLIENT_SECRET,
-        scope: [...IDENTITY_SCOPES],
+        scope: [...SCOPE_GROUPS.identity.required],
         // Required to receive a refresh token. Without both of these, the
         // access token expires in an hour and background jobs (calendar sync,
         // memory summarisation) stop working with no obvious cause.

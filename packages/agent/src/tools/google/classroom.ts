@@ -2,6 +2,44 @@ import { z } from 'zod';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, isUnavailable } from './client.js';
+import { CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_SCOPE } from './scopes.js';
+
+const COURSES_URL = 'https://classroom.googleapis.com/v1/courses';
+
+/**
+ * List active courses.
+ *
+ * Needs only the course scope, which is the one required for the Classroom
+ * group at all -- so a student whose school approved a subset always has at
+ * least this working, rather than a connection that is green and does nothing.
+ */
+export const listCourses: Tool<Record<string, never>, unknown> = {
+  id: 'google_classroom_list_courses',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE],
+  description:
+    'List the courses the student is enrolled in. Call this when they ask what classes ' +
+    'they are taking, or when you need a course name or id for another lookup.',
+  inputSchema: z.object({}),
+
+  async execute(_input, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable(
+        'Google Classroom is not connected, or your school has not approved Contexto.',
+      );
+    }
+
+    const result = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
+      `${COURSES_URL}?courseStates=ACTIVE`,
+      token,
+      { ...(ctx.signal ? { signal: ctx.signal } : {}) },
+    );
+    if (isUnavailable(result)) return result;
+
+    const courses = (result.courses ?? []).map((c) => ({ id: c.id, name: c.name ?? 'Untitled' }));
+    return { courses, count: courses.length };
+  },
+};
 
 /**
  * Google Classroom tools.
@@ -47,6 +85,10 @@ export interface Assignment {
 
 export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> = {
   id: 'google_classroom_list_coursework',
+  // courseWork.list genuinely requires the coursework scope -- listing courses
+  // is not enough. Schools that withhold it get the course tool and not this
+  // one, rather than a tool that 403s on every call.
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_SCOPE],
   description:
     "List the student's assignments and their due dates. Call this when the question " +
     'involves upcoming work, deadlines, or what a course requires.',

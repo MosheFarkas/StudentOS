@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { ToolRegistry } from './registry.js';
 import { buildToolRegistry } from './builtin.js';
+import { SCOPE_GROUPS } from './google/scopes.js';
+
+/** Everything a fully-approved student would hold. */
+const ALL_GRANTED = (['calendar', 'classroom'] as const)
+  .flatMap((g) => [...SCOPE_GROUPS[g].required, ...SCOPE_GROUPS[g].optional])
+  .join(',');
 import type { Tool } from './types.js';
 
 const tool = (id: string): Tool<Record<string, never>, string> => ({
@@ -25,7 +31,7 @@ describe('tool name constraints', () => {
     // The regression: ids used dots (google_calendar.list_events), which every
     // provider rejects. It stayed invisible because the registry was empty
     // until a student actually connected Google.
-    const registry = buildToolRegistry(['calendar', 'classroom']);
+    const registry = buildToolRegistry(ALL_GRANTED);
     const ids = registry.ids();
 
     expect(ids.length).toBeGreaterThan(0);
@@ -90,7 +96,7 @@ describe('execute', () => {
 
 describe('toDefinitions', () => {
   it('emits provider-safe names and a JSON Schema', () => {
-    const definitions = buildToolRegistry(['calendar']).toDefinitions();
+    const definitions = buildToolRegistry(ALL_GRANTED).toDefinitions();
     expect(definitions.length).toBeGreaterThan(0);
 
     for (const def of definitions) {

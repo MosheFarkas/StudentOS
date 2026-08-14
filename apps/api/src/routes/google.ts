@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { SCOPE_GROUPS, scopesFor, type ScopeGroup } from '@contexto/agent';
+import { SCOPE_GROUPS, missingOptionalScopes, scopesFor, type ScopeGroup } from '@contexto/agent';
 import type { AppContext } from '../context.js';
-import { getGrantedGroups } from '../google/connections.js';
+import { getGoogleGrant } from '../google/connections.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 /**
@@ -18,11 +18,19 @@ export function createGoogleRoutes(ctx: AppContext) {
   return (
     new Hono<{ Variables: AuthVariables }>()
       .get('/status', auth, async (c) => {
-        const granted = await getGrantedGroups(ctx.db, c.get('userId'));
+        const grant = await getGoogleGrant(ctx.db, c.get('userId'));
 
+        // Missing optional scopes are surfaced, not swallowed. A school that
+        // approves a subset produces a connection that works partially, and
+        // the student deserves to know which pieces their admin withheld
+        // rather than meeting a tool that silently never fires.
         return c.json({
-          calendar: granted.includes('calendar'),
-          classroom: granted.includes('classroom'),
+          calendar: grant.groups.includes('calendar'),
+          classroom: grant.groups.includes('classroom'),
+          missing: {
+            calendar: missingOptionalScopes('calendar', grant.scope),
+            classroom: missingOptionalScopes('classroom', grant.scope),
+          },
         });
       })
 
@@ -47,8 +55,8 @@ export function createGoogleRoutes(ctx: AppContext) {
           return c.json({ error: 'Unknown scope group' }, 400);
         }
 
-        const granted = await getGrantedGroups(ctx.db, c.get('userId'));
-        const groups = [...new Set<ScopeGroup>([...granted, group])];
+        const grant = await getGoogleGrant(ctx.db, c.get('userId'));
+        const groups = [...new Set<ScopeGroup>([...grant.groups, group])];
 
         return c.json({ scopes: scopesFor(groups) });
       })

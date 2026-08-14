@@ -14,14 +14,29 @@ const GOOGLE_PROVIDER_ID = 'google';
  * register, and it should not cost a network call when the answer is usually
  * "none".
  */
-export async function getGrantedGroups(db: Database, userId: string): Promise<ScopeGroup[]> {
+export interface GoogleGrant {
+  /** Raw scope string as stored, for per-tool gating. */
+  scope: string | null;
+  /** Groups whose required scopes are all present. */
+  groups: ScopeGroup[];
+}
+
+/**
+ * What this student has granted Google-side.
+ *
+ * Returns the raw scope string as well as the groups, because tool
+ * registration is per-scope rather than per-group -- schools grant subsets,
+ * and a tool should be withheld only if the scope IT needs is missing.
+ */
+export async function getGoogleGrant(db: Database, userId: string): Promise<GoogleGrant> {
   const [row] = await db
     .select({ scope: account.scope })
     .from(account)
     .where(and(eq(account.userId, userId), eq(account.providerId, GOOGLE_PROVIDER_ID)))
     .limit(1);
 
-  return grantedScopeGroups(row?.scope);
+  const scope = row?.scope ?? null;
+  return { scope, groups: grantedScopeGroups(scope) };
 }
 
 /**

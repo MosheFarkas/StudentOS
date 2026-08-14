@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, isUnavailable } from './client.js';
+import { CALENDAR_SCOPE } from './scopes.js';
 
 /**
  * Google Calendar tools.
@@ -59,6 +60,7 @@ const listEventsInput = z.object({
 
 export const listCalendarEvents: Tool<z.infer<typeof listEventsInput>, unknown> = {
   id: 'google_calendar_list_events',
+  requiredScopes: [CALENDAR_SCOPE],
   description:
     "List the student's calendar events in a time range. Call this whenever the answer " +
     'depends on their schedule -- deadlines, availability, or planning around classes. ' +
@@ -101,6 +103,7 @@ const createEventInput = z.object({
 
 export const createCalendarEvent: Tool<z.infer<typeof createEventInput>, unknown> = {
   id: 'google_calendar_create_event',
+  requiredScopes: [CALENDAR_SCOPE],
   description:
     "Create an event on the student's calendar. Use this when they ask to schedule, block " +
     'out, or add something. Confirm the time with them first if it is at all ambiguous -- ' +
@@ -143,6 +146,7 @@ const updateEventInput = z.object({
 
 export const updateCalendarEvent: Tool<z.infer<typeof updateEventInput>, unknown> = {
   id: 'google_calendar_update_event',
+  requiredScopes: [CALENDAR_SCOPE],
   description:
     'Change an existing calendar event -- move it, rename it, or edit its details. ' +
     'Look the event up with google_calendar_list_events first to get its id. Only the ' +
@@ -184,6 +188,7 @@ const deleteEventInput = z.object({
 
 export const deleteCalendarEvent: Tool<z.infer<typeof deleteEventInput>, unknown> = {
   id: 'google_calendar_delete_event',
+  requiredScopes: [CALENDAR_SCOPE],
   description:
     "Delete an event from the student's calendar. This cannot be undone, so only do it " +
     'when they have clearly asked for that specific event to be removed. Look it up with ' +

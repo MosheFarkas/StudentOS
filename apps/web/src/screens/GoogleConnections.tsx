@@ -2,8 +2,25 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { connectGoogleScopes } from '../lib/auth.js';
 
-type Status = { calendar: boolean; classroom: boolean };
+type Status = {
+  calendar: boolean;
+  classroom: boolean;
+  missing: { calendar: string[]; classroom: string[] };
+};
 type Group = 'calendar' | 'classroom';
+
+/** Turn a scope URL into something a student can act on. */
+const SCOPE_LABELS: Record<string, string> = {
+  'https://www.googleapis.com/auth/classroom.coursework.me.readonly': 'assignments and due dates',
+  'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly': 'your submissions',
+  'https://www.googleapis.com/auth/classroom.announcements.readonly': 'class announcements',
+  'https://www.googleapis.com/auth/classroom.topics.readonly': 'class topics',
+  'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly': 'class materials',
+};
+
+function describeMissing(scopes: string[]): string {
+  return scopes.map((scope) => SCOPE_LABELS[scope] ?? scope).join(', ');
+}
 
 /**
  * Google connections.
@@ -86,6 +103,19 @@ export function GoogleConnections() {
           </button>
         )}
       </div>
+
+      {/*
+       * Connected but partial. School admins approve scope subsets routinely,
+       * so this is a normal state -- and naming what is missing is the
+       * difference between "the product is broken" and "my school didn't
+       * approve that bit".
+       */}
+      {status.classroom && status.missing.classroom.length > 0 && (
+        <p className="muted">
+          Your school hasn&apos;t approved everything: your agent can&apos;t see{' '}
+          {describeMissing(status.missing.classroom)}. Courses still work.
+        </p>
+      )}
 
       {!status.classroom && (
         /*

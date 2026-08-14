@@ -1,42 +1,48 @@
 import { ToolRegistry } from './registry.js';
-import type { ScopeGroup } from './google/scopes.js';
+import { hasScope, parseGrantedScopes } from './google/scopes.js';
+import type { Tool } from './types.js';
 import {
   createCalendarEvent,
   deleteCalendarEvent,
   listCalendarEvents,
   updateCalendarEvent,
 } from './google/calendar.js';
-import { listCoursework } from './google/classroom.js';
+import { listCourses, listCoursework } from './google/classroom.js';
+
+const ALL_TOOLS: Tool<never, unknown>[] = [
+  listCalendarEvents,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+  listCourses,
+  listCoursework,
+] as unknown as Tool<never, unknown>[];
 
 /**
- * Build the tool set for one student, based on what they have actually
- * connected.
+ * Build the tool set for one student, from the scopes they actually granted.
  *
- * Registration is gated on granted scopes rather than registering everything
- * and letting tools report "not connected" at call time. Two reasons:
+ * Per-tool rather than per-group, because school admins grant scope subsets
+ * routinely. A student whose admin approved course listing but not coursework
+ * should get the course tool and simply not have the other -- not a dead
+ * integration, and not a tool that 403s every time the model reaches for it.
  *
- *   - every tool definition costs context on every single turn, and a student
- *     with no Google connection should not pay for two they cannot use;
- *   - a model handed a calendar tool will try to use it when asked about
- *     scheduling, burn a turn discovering it is unavailable, and then apologise
- *     -- which reads as the product being broken rather than not set up.
+ * Two reasons this gating matters beyond correctness: every tool definition
+ * costs context on every single turn, and a model handed a tool it cannot use
+ * will call it, waste a turn discovering that, and apologise -- which reads as
+ * the product being broken rather than not fully approved.
  *
- * The tools still check availability defensively; a scope can be revoked
- * between the registry being built and the tool being called.
+ * Tools still check availability defensively; a scope can be revoked between
+ * the registry being built and the tool being called.
  */
-export function buildToolRegistry(grantedGroups: ScopeGroup[]): ToolRegistry {
+export function buildToolRegistry(grantedScope: string | null | undefined): ToolRegistry {
+  const granted = parseGrantedScopes(grantedScope);
   const registry = new ToolRegistry();
-  const granted = new Set(grantedGroups);
 
-  if (granted.has('calendar')) {
-    registry.register(listCalendarEvents);
-    registry.register(createCalendarEvent);
-    registry.register(updateCalendarEvent);
-    registry.register(deleteCalendarEvent);
-  }
-
-  if (granted.has('classroom')) {
-    registry.register(listCoursework);
+  for (const tool of ALL_TOOLS) {
+    const required = tool.requiredScopes ?? [];
+    if (required.length > 0 && required.every((scope) => hasScope(scope, granted))) {
+      registry.register(tool);
+    }
   }
 
   return registry;

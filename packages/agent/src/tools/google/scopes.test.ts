@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CALENDAR_SCOPES,
-  CLASSROOM_SCOPES,
-  IDENTITY_SCOPES,
+  CALENDAR_SCOPE,
+  CLASSROOM_COURSES_SCOPE,
+  CLASSROOM_COURSEWORK_SCOPE,
+  SCOPE_GROUPS,
   grantedScopeGroups,
+  missingOptionalScopes,
   scopesFor,
 } from './scopes.js';
+
+const IDENTITY_SCOPES = SCOPE_GROUPS.identity.required;
+const CALENDAR_SCOPES = SCOPE_GROUPS.calendar.required;
+const CLASSROOM_SCOPES = [...SCOPE_GROUPS.classroom.required, ...SCOPE_GROUPS.classroom.optional];
 
 const all = (...groups: readonly (readonly string[])[]) => groups.flat().join(' ');
 
@@ -27,11 +33,27 @@ describe('grantedScopeGroups', () => {
    * 403 -- and the student would see a broken feature rather than an
    * unconnected one.
    */
-  it('does not count a partially granted group', () => {
-    expect(grantedScopeGroups(CLASSROOM_SCOPES[0])).toEqual([]);
-
+  it('does not count a group missing a REQUIRED scope', () => {
     const missingProfile = [IDENTITY_SCOPES[0], IDENTITY_SCOPES[1]].join(' ');
     expect(grantedScopeGroups(missingProfile)).toEqual([]);
+  });
+
+  /**
+   * Regression: a school account granted 5 of 6 Classroom scopes and the whole
+   * integration reported disconnected. Optional scopes must not gate the
+   * group -- admins granting subsets is routine, not exceptional.
+   */
+  it('counts a group whose required scope is present but optional ones are not', () => {
+    expect(grantedScopeGroups(CLASSROOM_COURSES_SCOPE)).toEqual(['classroom']);
+  });
+
+  it('reports which optional scopes are missing', () => {
+    const missing = missingOptionalScopes('classroom', CLASSROOM_COURSES_SCOPE);
+    expect(missing).toContain(CLASSROOM_COURSEWORK_SCOPE);
+  });
+
+  it('reports nothing missing when everything was granted', () => {
+    expect(missingOptionalScopes('classroom', CLASSROOM_SCOPES.join(','))).toEqual([]);
   });
 
   it('recognises several groups at once', () => {
@@ -103,7 +125,7 @@ describe('grantedScopeGroups', () => {
 
 describe('scopesFor', () => {
   it('expands groups into their scopes', () => {
-    expect(scopesFor(['calendar'])).toEqual([...CALENDAR_SCOPES]);
+    expect(scopesFor(['calendar'])).toEqual([CALENDAR_SCOPE]);
   });
 
   it('deduplicates across overlapping groups', () => {
