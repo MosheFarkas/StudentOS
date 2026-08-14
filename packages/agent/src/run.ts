@@ -25,6 +25,13 @@ export interface AgentRunInput {
   /** The agent's student-authored purpose. Anchors the system prompt. */
   purpose: string;
   message: string;
+  /**
+   * IANA timezone. Defaults to UTC.
+   *
+   * Without this the agent cannot resolve "tomorrow at 3pm" into a timestamp
+   * and will either interrogate the student or silently guess.
+   */
+  timezone?: string;
   /** Supplied when the student has connected Google. Omitted otherwise. */
   google?: GoogleTokenProvider;
   signal?: AbortSignal;
@@ -56,7 +63,10 @@ export async function runAgentTurn(
   ]);
 
   const messages: ChatMessage[] = [
-    { role: 'system', content: buildSystemPrompt(input.purpose, recalled, availableSkills) },
+    {
+      role: 'system',
+      content: buildSystemPrompt(input.purpose, recalled, availableSkills, input.timezone),
+    },
     { role: 'user', content: input.message },
   ];
 
@@ -152,11 +162,21 @@ function buildSystemPrompt(
   purpose: string,
   recalled: Awaited<ReturnType<MemoryStore['recall']>>,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
+  timezone: string | undefined,
 ): string {
   const sections = [
     'You are a personal agent built by a student, for themselves. You belong to ' +
       'them, not to their school. Be direct and useful; skip preamble.',
     `Your purpose, in their words: ${purpose}`,
+    /*
+     * Temporal grounding.
+     *
+     * A model has no clock and no location. Without this it cannot resolve
+     * "tomorrow", "this week", or "3pm" into the ISO timestamps the calendar
+     * tools require -- so it asks the student what timezone they are in, every
+     * time, which reads as the agent being broken.
+     */
+    currentTimeSection(timezone),
   ];
 
   if (skills.length > 0) {
@@ -180,4 +200,40 @@ function buildSystemPrompt(
   }
 
   return sections.join('\n\n');
+}
+
+/**
+ * Tell the agent when and where it is.
+ *
+ * Exported for tests -- an off-by-one here silently schedules everything on
+ * the wrong day.
+ */
+export function currentTimeSection(timezone: string | undefined, now = new Date()): string {
+  const zone = timezone || 'UTC';
+
+  let local: string;
+  let offset: string;
+  try {
+    local = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone,
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(now);
+    // The model needs the numeric offset to build a valid ISO string; a zone
+    // name alone is not enough, and the offset changes with daylight saving.
+    offset =
+      new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'longOffset' })
+        .formatToParts(now)
+        .find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+  } catch {
+    // An invalid timezone string must not take down the turn.
+    return `The current time is ${now.toISOString()} (UTC). Assume UTC unless the student says otherwise.`;
+  }
+
+  return (
+    `Right now it is ${local} for the student. Their timezone is ${zone} (${offset}).\n` +
+    'Use this to resolve relative times like "tomorrow" or "next Tuesday", and always ' +
+    'include the offset when passing timestamps to tools. Do not ask the student what ' +
+    'timezone they are in -- you already know.'
+  );
 }

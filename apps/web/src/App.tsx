@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Agent } from '@contexto/shared';
+import { api } from './lib/api.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
@@ -17,6 +18,20 @@ type View = { name: 'agents' } | { name: 'chat'; agent: Agent } | { name: 'setti
 export function App() {
   const { data: session, isPending } = useSession();
   const [view, setView] = useState<View>({ name: 'agents' });
+
+  /*
+   * Report the browser's timezone once signed in.
+   *
+   * The server cannot infer this reliably, and without it the agent asks what
+   * timezone you are in every time you mention "tomorrow". Fire-and-forget:
+   * a failure here should never block the app.
+   */
+  useEffect(() => {
+    if (!session?.user) return;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!timezone) return;
+    void api.me.timezone.$put({ json: { timezone } }).catch(() => {});
+  }, [session?.user]);
 
   if (isPending) {
     return (

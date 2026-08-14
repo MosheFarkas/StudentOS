@@ -30,4 +30,10 @@ export {
 export { listCoursework, type Assignment } from './tools/google/classroom.js';
 export * from './tools/google/scopes.js';
 
-export { runAgentTurn, type AgentRunDeps, type AgentRunInput, type AgentRunResult } from './run.js';
+export {
+  runAgentTurn,
+  currentTimeSection,
+  type AgentRunDeps,
+  type AgentRunInput,
+  type AgentRunResult,
+} from './run.js';

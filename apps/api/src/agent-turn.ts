@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { agentMessages, agents } from '@contexto/db';
+import { agentMessages, agents, user } from '@contexto/db';
 import type { Message } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
 import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
@@ -31,7 +31,10 @@ export async function runTurnForAgent(
     .returning();
 
   // Assembled per turn from what this student has actually connected.
-  const granted = await getGrantedGroups(ctx.db, userId);
+  const [granted, [profile]] = await Promise.all([
+    getGrantedGroups(ctx.db, userId),
+    ctx.db.select({ timezone: user.timezone }).from(user).where(eq(user.id, userId)).limit(1),
+  ]);
 
   const result = await runAgentTurn(
     {
@@ -45,6 +48,7 @@ export async function runTurnForAgent(
       agentId: agent.id,
       purpose: agent.purpose,
       message: content,
+      ...(profile?.timezone ? { timezone: profile.timezone } : {}),
       google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, granted),
       ...(signal ? { signal } : {}),
     },

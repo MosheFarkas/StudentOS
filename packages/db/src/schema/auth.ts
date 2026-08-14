@@ -20,6 +20,15 @@ export const user = pgTable('user', {
     .$defaultFn(() => false)
     .notNull(),
   image: text('image'),
+  /**
+   * IANA timezone, captured from the browser.
+   *
+   * Not a Better Auth field -- ours. Without it the agent cannot turn
+   * "tomorrow at 3pm" into a timestamp, so it either asks a clarifying
+   * question every time or guesses wrong. Nullable because a Telegram-only
+   * student may never load the web app; UTC is the fallback.
+   */
+  timezone: text('timezone'),
   createdAt: timestamp('created_at')
     .$defaultFn(() => new Date())
     .notNull(),

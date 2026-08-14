@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { addCredentialSchema, type UsageStatus } from '@contexto/shared';
+import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import { user } from '@contexto/db';
+import { addCredentialSchema, ContextoError, type UsageStatus } from '@contexto/shared';
 import { currentWindowEnd, currentWindowStart } from '@contexto/llm';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -20,6 +23,36 @@ export function createRoutes(ctx: AppContext) {
   return (
     new Hono<{ Variables: AuthVariables }>()
       .get('/health', (c) => c.json({ ok: true }))
+
+      /**
+       * Record the student's timezone.
+       *
+       * Sent by the browser, which is the only thing that reliably knows it.
+       * Validated against the runtime's own timezone database rather than a
+       * regex -- a bogus zone would otherwise be stored and then throw on
+       * every turn when the prompt tries to format a time in it.
+       */
+      .put(
+        '/me/timezone',
+        auth,
+        zValidator('json', z.object({ timezone: z.string().min(1).max(64) })),
+        async (c) => {
+          const { timezone } = c.req.valid('json');
+
+          try {
+            new Intl.DateTimeFormat('en-GB', { timeZone: timezone });
+          } catch {
+            throw new ContextoError('validation_failed', 'Unknown timezone.');
+          }
+
+          await ctx.db
+            .update(user)
+            .set({ timezone })
+            .where(eq(user.id, c.get('userId')));
+
+          return c.body(null, 204);
+        },
+      )
 
       .route('/agents', createAgentRoutes(ctx))
       .route('/google', createGoogleRoutes(ctx))
