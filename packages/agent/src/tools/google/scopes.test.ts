@@ -49,6 +49,37 @@ describe('grantedScopeGroups', () => {
   it('handles arbitrary whitespace between scopes', () => {
     expect(grantedScopeGroups(IDENTITY_SCOPES.join('   \n '))).toEqual(['identity']);
   });
+
+  /**
+   * Regression: Better Auth stores the granted scopes COMMA-separated, not
+   * space-separated as Google returns them.
+   *
+   * This string is copied verbatim from the account row after a real Google
+   * grant in production. The original tests all used space-separated input --
+   * they asserted the assumption rather than reality, so they passed while
+   * every connection silently reported disconnected.
+   */
+  it('parses the comma-separated form Better Auth actually stores', () => {
+    const fromProduction =
+      'https://www.googleapis.com/auth/userinfo.email,' +
+      'https://www.googleapis.com/auth/userinfo.profile,' +
+      'https://www.googleapis.com/auth/calendar.events,' +
+      'openid';
+
+    expect(grantedScopeGroups(fromProduction).sort()).toEqual(['calendar', 'identity']);
+  });
+
+  it('parses comma-separated Classroom scopes', () => {
+    const withClassroom = [...IDENTITY_SCOPES, ...CLASSROOM_SCOPES].join(',');
+    expect(grantedScopeGroups(withClassroom).sort()).toEqual(['classroom', 'identity']);
+  });
+
+  it('handles either separator, and both mixed', () => {
+    // Neither format is guaranteed: Google speaks spaces, Better Auth writes
+    // commas, and a future adapter change could produce either.
+    const mixed = `${IDENTITY_SCOPES.join(',')} ${CALENDAR_SCOPES.join(',')}`;
+    expect(grantedScopeGroups(mixed).sort()).toEqual(['calendar', 'identity']);
+  });
 });
 
 describe('scopesFor', () => {

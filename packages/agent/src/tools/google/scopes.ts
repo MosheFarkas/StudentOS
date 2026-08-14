@@ -49,7 +49,19 @@ export const SCOPE_GROUPS: Record<ScopeGroup, readonly string[]> = {
  */
 export function grantedScopeGroups(grantedScope: string | null | undefined): ScopeGroup[] {
   if (!grantedScope) return [];
-  const granted = new Set(grantedScope.split(/\s+/).filter(Boolean));
+
+  /*
+   * Split on commas AND whitespace.
+   *
+   * Google returns granted scopes space-separated, but Better Auth normalises
+   * them to a comma-separated string before storing. Splitting on whitespace
+   * alone turns the whole value into one token, so nothing matches and every
+   * integration silently reports disconnected -- with the grant itself, and the
+   * refresh token, perfectly intact in the same row.
+   *
+   * Accepting both means an adapter change in either direction cannot break it.
+   */
+  const granted = new Set(grantedScope.split(/[\s,]+/).filter(Boolean));
 
   return (Object.keys(SCOPE_GROUPS) as ScopeGroup[]).filter((group) =>
     SCOPE_GROUPS[group].every((scope) => granted.has(scope)),
