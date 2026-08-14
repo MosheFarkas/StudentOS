@@ -64,7 +64,7 @@ export function GoogleConnections() {
           <span className="muted">Lets your agent plan around your actual schedule.</span>
         </span>
         {status.calendar ? (
-          <span className="muted">Connected</span>
+          <span className="status">Connected</span>
         ) : (
           <button disabled={busy !== null} onClick={() => void connect('calendar')}>
             {busy === 'calendar' ? 'Opening…' : 'Connect'}
@@ -79,7 +79,7 @@ export function GoogleConnections() {
           <span className="muted">Assignments and due dates, if your school allows it.</span>
         </span>
         {status.classroom ? (
-          <span className="muted">Connected</span>
+          <span className="status">Connected</span>
         ) : (
           <button disabled={busy !== null} onClick={() => void connect('classroom')}>
             {busy === 'classroom' ? 'Opening…' : 'Connect'}
@@ -95,8 +95,8 @@ export function GoogleConnections() {
          * product is broken.
          */
         <p className="muted">
-          If you use a school Google account, Classroom may need an administrator to approve Student
-          OS first. Everything else works either way.
+          If you use a school Google account, Classroom may need an administrator to approve
+          Contexto first. Everything else works either way.
         </p>
       )}
 

@@ -8,6 +8,15 @@
   color-scheme: light dark;
   --line: color-mix(in srgb, currentColor 18%, transparent);
   --soft: color-mix(in srgb, currentColor 7%, transparent);
+  /* green-700: dark enough to stay readable on a light background */
+  --ok: #15803d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* green-400: the 700 above fails contrast on dark */
+    --ok: #4ade80;
+  }
 }
 
 * {
@@ -144,6 +153,32 @@ label > select {
 
 .row.static:hover {
   background: transparent;
+}
+
+/*
+ * Connected indicator.
+ *
+ * The dot is decoration; the word "Connected" carries the meaning. Colour alone
+ * would exclude anyone who cannot distinguish it, and this is the one place in
+ * the app where a student needs to know at a glance whether something is live.
+ */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ok);
+  white-space: nowrap;
+}
+
+.status::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 
 .chat-header {

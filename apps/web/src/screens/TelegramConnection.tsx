@@ -74,7 +74,7 @@ export function TelegramConnection() {
 
       {linked ? (
         <div className="row static">
-          <span className="muted">
+          <span className="status">
             Connected to {agents.find((a) => a.id === linked.agentId)?.name ?? 'an agent'}
           </span>
           <button onClick={() => void unlink()}>Disconnect</button>
