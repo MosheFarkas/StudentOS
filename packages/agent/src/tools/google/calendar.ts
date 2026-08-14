@@ -41,7 +41,7 @@ export interface CalendarEvent {
 }
 
 export const listCalendarEvents: Tool<z.infer<typeof listEventsInput>, unknown> = {
-  id: 'google_calendar.list_events',
+  id: 'google_calendar_list_events',
   description:
     "List the student's calendar events in a time range. Call this whenever the answer " +
     'depends on their schedule -- deadlines, availability, or planning around classes.',

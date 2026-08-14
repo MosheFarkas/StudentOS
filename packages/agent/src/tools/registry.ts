@@ -11,10 +11,28 @@ import type { Tool, ToolContext } from './types.js';
  * Calendar just wastes context and invites the model to call something that
  * cannot work.
  */
+/**
+ * What every provider accepts as a function name.
+ *
+ * OpenAI enforces ^[a-zA-Z0-9_-]+$ and rejects the ENTIRE request if one name
+ * fails -- so a single bad id breaks every turn for that student, not just the
+ * tool it belongs to. Anthropic's rules are similar. Checking at registration
+ * turns that runtime 400 into a loud failure the moment a tool is added.
+ */
+const PROVIDER_SAFE_ID = /^[a-zA-Z0-9_-]{1,64}$/;
+
 export class ToolRegistry {
   readonly #tools = new Map<string, Tool<never, unknown>>();
 
   register<TInput, TOutput>(tool: Tool<TInput, TOutput>): this {
+    if (!PROVIDER_SAFE_ID.test(tool.id)) {
+      throw new Error(
+        `Tool id "${tool.id}" is not usable as a provider function name. ` +
+          'Allowed: letters, digits, underscore, hyphen; 1-64 characters. ' +
+          'Dots and spaces are rejected by OpenAI and fail the whole request.',
+      );
+    }
+
     if (this.#tools.has(tool.id)) {
       throw new Error(`Tool "${tool.id}" is already registered`);
     }

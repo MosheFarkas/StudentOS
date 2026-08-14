@@ -46,7 +46,7 @@ export interface Assignment {
 }
 
 export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> = {
-  id: 'google_classroom.list_coursework',
+  id: 'google_classroom_list_coursework',
   description:
     "List the student's assignments and their due dates. Call this when the question " +
     'involves upcoming work, deadlines, or what a course requires.',
