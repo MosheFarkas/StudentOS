@@ -69,6 +69,25 @@ describe('grantedScopeGroups', () => {
     expect(grantedScopeGroups(fromProduction).sort()).toEqual(['calendar', 'identity']);
   });
 
+  /**
+   * Widening the requested scope must not disconnect existing students.
+   *
+   * We now ask for full calendar access, but calendar.events already covers
+   * every event tool we ship. Anyone who connected earlier holds the narrower
+   * scope and must stay connected.
+   */
+  it('accepts the narrower calendar.events as satisfying full calendar access', () => {
+    const legacy = [...IDENTITY_SCOPES, 'https://www.googleapis.com/auth/calendar.events'].join(
+      ',',
+    );
+    expect(grantedScopeGroups(legacy).sort()).toEqual(['calendar', 'identity']);
+  });
+
+  it('accepts the broad calendar scope too', () => {
+    const current = [...IDENTITY_SCOPES, ...CALENDAR_SCOPES].join(',');
+    expect(grantedScopeGroups(current).sort()).toEqual(['calendar', 'identity']);
+  });
+
   it('parses comma-separated Classroom scopes', () => {
     const withClassroom = [...IDENTITY_SCOPES, ...CLASSROOM_SCOPES].join(',');
     expect(grantedScopeGroups(withClassroom).sort()).toEqual(['classroom', 'identity']);

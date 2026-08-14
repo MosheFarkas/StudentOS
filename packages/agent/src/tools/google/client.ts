@@ -8,23 +8,38 @@ import { unavailable, type ToolUnavailable } from '../types.js';
  * wrong" when the real answer is "your school has to approve this app" sends
  * them into a retry loop they cannot win.
  */
+export interface GoogleRequest {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  signal?: AbortSignal;
+}
+
 export async function googleFetch<T>(
   url: string,
   accessToken: string,
-  signal?: AbortSignal,
+  options: GoogleRequest = {},
 ): Promise<T | ToolUnavailable> {
+  const { method = 'GET', body, signal } = options;
+
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
     signal,
   });
 
   if (response.ok) {
+    // DELETE returns 204 with an empty body -- json() would throw on it.
+    if (response.status === 204) return {} as T;
     return (await response.json()) as T;
   }
 
-  const body = (await response.json().catch(() => null)) as GoogleErrorBody | null;
-  const reason = body?.error?.errors?.[0]?.reason ?? body?.error?.status ?? '';
-  const message = body?.error?.message ?? `HTTP ${response.status}`;
+  const errorBody = (await response.json().catch(() => null)) as GoogleErrorBody | null;
+  const reason = errorBody?.error?.errors?.[0]?.reason ?? errorBody?.error?.status ?? '';
+  const message = errorBody?.error?.message ?? `HTTP ${response.status}`;
 
   switch (reason) {
     /*

@@ -23,7 +23,18 @@ export const IDENTITY_SCOPES = [
  * calendars. Narrow to `calendar.readonly` if the agent only ever reads --
  * a smaller scope is a materially easier sell to a school IT reviewer.
  */
-export const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events'] as const;
+export const CALENDAR_SCOPES = [
+  /*
+   * Full calendar access: read, create, update, and delete events, and manage
+   * calendars themselves.
+   *
+   * Still a SENSITIVE scope, same review tier as the narrower
+   * calendar.events -- so the broader grant costs nothing extra in
+   * verification. Restricted scopes are the expensive tier, and no Calendar
+   * scope is restricted.
+   */
+  'https://www.googleapis.com/auth/calendar',
+] as const;
 
 /**
  * Requested only if a student opts into Classroom. Read-only by design: the
@@ -32,7 +43,33 @@ export const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events
 export const CLASSROOM_SCOPES = [
   'https://www.googleapis.com/auth/classroom.courses.readonly',
   'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
+  'https://www.googleapis.com/auth/classroom.announcements.readonly',
+  'https://www.googleapis.com/auth/classroom.topics.readonly',
+  'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly',
+  'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly',
 ] as const;
+
+/*
+ * Classroom is read-only ON PURPOSE, and widening it is a bigger decision than
+ * it looks:
+ *
+ *   COST. Classroom write scopes (submitting coursework, modifying courses)
+ *   and roster/profile scopes are RESTRICTED, not sensitive. Restricted scopes
+ *   require a CASA security assessment that must be REDONE ANNUALLY -- an
+ *   ongoing cost and review cycle, not a one-time hurdle. Every scope above is
+ *   sensitive, the same tier as Calendar, so they add no new review burden.
+ *
+ *   ADMIN APPROVAL. School admins grant specific scope lists. A read-only
+ *   request is a far easier yes than one that can submit work, and admin
+ *   approval is a prerequisite for the entire under-18 segment.
+ *
+ *   ACADEMIC INTEGRITY. An agent that can turn in coursework can turn in the
+ *   wrong thing, at the wrong time, under a student's name. That is a
+ *   liability question, not just a product one.
+ *
+ * If we do want write access, it should be a deliberate decision with the
+ * assessment budgeted -- not something that arrives by adding a scope.
+ */
 
 export type ScopeGroup = 'identity' | 'calendar' | 'classroom';
 
@@ -47,6 +84,27 @@ export const SCOPE_GROUPS: Record<ScopeGroup, readonly string[]> = {
  * string Better Auth stores on the `account` row. A group counts as granted
  * only if every scope in it is present.
  */
+/**
+ * Narrower scopes that still satisfy a broader requirement.
+ *
+ * Google's scopes are hierarchical, and widening what we REQUEST must not
+ * disconnect students who already granted something sufficient. A student who
+ * connected before we asked for full calendar access holds calendar.events --
+ * which covers every event tool we ship, read and write. Forcing them to
+ * reconnect for a capability they already have would be a self-inflicted
+ * outage.
+ *
+ * Reconnecting still upgrades them; it is just not required.
+ */
+const ALSO_SATISFIED_BY: Record<string, readonly string[]> = {
+  'https://www.googleapis.com/auth/calendar': ['https://www.googleapis.com/auth/calendar.events'],
+};
+
+function isGranted(scope: string, granted: Set<string>): boolean {
+  if (granted.has(scope)) return true;
+  return (ALSO_SATISFIED_BY[scope] ?? []).some((alternative) => granted.has(alternative));
+}
+
 export function grantedScopeGroups(grantedScope: string | null | undefined): ScopeGroup[] {
   if (!grantedScope) return [];
 
@@ -64,7 +122,7 @@ export function grantedScopeGroups(grantedScope: string | null | undefined): Sco
   const granted = new Set(grantedScope.split(/[\s,]+/).filter(Boolean));
 
   return (Object.keys(SCOPE_GROUPS) as ScopeGroup[]).filter((group) =>
-    SCOPE_GROUPS[group].every((scope) => granted.has(scope)),
+    SCOPE_GROUPS[group].every((scope) => isGranted(scope, granted)),
   );
 }
 

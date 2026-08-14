@@ -67,7 +67,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     const courses = await googleFetch<CourseList>(
       'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE',
       token,
-      ctx.signal,
+      { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
     if (isUnavailable(courses)) return courses;
 
@@ -84,7 +84,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
       const work = await googleFetch<CourseWorkList>(
         `https://classroom.googleapis.com/v1/courses/${course.id}/courseWork`,
         token,
-        ctx.signal,
+        { ...(ctx.signal ? { signal: ctx.signal } : {}) },
       );
       // One inaccessible course should not fail the whole answer.
       if (isUnavailable(work)) continue;

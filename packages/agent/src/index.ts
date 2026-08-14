@@ -20,7 +20,13 @@ export { PostgresSkillRegistry } from './skills/registry.js';
 export * from './tools/types.js';
 export { ToolRegistry } from './tools/registry.js';
 export { buildToolRegistry } from './tools/builtin.js';
-export { listCalendarEvents, type CalendarEvent } from './tools/google/calendar.js';
+export {
+  listCalendarEvents,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+  type CalendarEvent,
+} from './tools/google/calendar.js';
 export { listCoursework, type Assignment } from './tools/google/classroom.js';
 export * from './tools/google/scopes.js';
 

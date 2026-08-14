@@ -1,6 +1,11 @@
 import { ToolRegistry } from './registry.js';
 import type { ScopeGroup } from './google/scopes.js';
-import { listCalendarEvents } from './google/calendar.js';
+import {
+  createCalendarEvent,
+  deleteCalendarEvent,
+  listCalendarEvents,
+  updateCalendarEvent,
+} from './google/calendar.js';
 import { listCoursework } from './google/classroom.js';
 
 /**
@@ -25,6 +30,9 @@ export function buildToolRegistry(grantedGroups: ScopeGroup[]): ToolRegistry {
 
   if (granted.has('calendar')) {
     registry.register(listCalendarEvents);
+    registry.register(createCalendarEvent);
+    registry.register(updateCalendarEvent);
+    registry.register(deleteCalendarEvent);
   }
 
   if (granted.has('classroom')) {
