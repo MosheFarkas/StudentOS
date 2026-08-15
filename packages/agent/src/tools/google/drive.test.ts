@@ -11,6 +11,20 @@ import type { ToolContext } from '../types.js';
 const extractTextMock = vi.hoisted(() => vi.fn());
 vi.mock('unpdf', () => ({ extractText: extractTextMock }));
 
+/*
+ * OCR is mocked so these tests cover the Drive reader's routing -- which
+ * files get sent for recognition -- rather than Tesseract. The engine itself
+ * is covered in ocr.test.ts and verified against the real binary on the
+ * droplet.
+ */
+const ocrImageMock = vi.hoisted(() => vi.fn());
+const ocrPdfMock = vi.hoisted(() => vi.fn());
+vi.mock('../ocr.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../ocr.js')>()),
+  ocrImage: ocrImageMock,
+  ocrPdf: ocrPdfMock,
+}));
+
 /** Mirrors the real one-page shape unpdf returns, so per-page detection works. */
 const pdfText = (text: string, totalPages = 1) => ({ text, totalPages });
 
@@ -33,6 +47,8 @@ function ctx(token: string | null = 'token', broadAccess = false): ToolContext {
 beforeEach(() => {
   responses = [];
   extractTextMock.mockReset();
+  ocrImageMock.mockReset();
+  ocrPdfMock.mockReset();
 
   vi.stubGlobal('fetch', async (url: string) => {
     const stub = responses.find((r) => r.match.test(url));
@@ -137,17 +153,26 @@ describe('readDriveFile', () => {
 
   /**
    * Scanned worksheets are extremely common in schools and extract to
-   * whitespace. Reporting an empty document reads as our bug; naming the
-   * cause tells the student the file needs OCR, which we do not do.
+   * whitespace. Rather than dead-ending, they now go to OCR -- which is the
+   * whole reason a student can ask about a photographed handout at all.
    */
-  it('recognises a scan with no text layer', async () => {
+  it('sends a scan with no text layer to OCR', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
     extractTextMock.mockResolvedValue(pdfText('  \n \n ', 12));
+    ocrPdfMock.mockResolvedValue({ ok: true, text: 'Question 1. Define inertia.' });
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
-    const reason = (result as { reason: string }).reason;
-    expect(reason).toContain('scan');
-    expect(reason).toContain('Exam Review');
+    expect(ocrPdfMock).toHaveBeenCalledOnce();
+    expect((result as { content: string }).content).toContain('Define inertia');
+  });
+
+  it('explains itself when OCR cannot read a scan either', async () => {
+    responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
+    extractTextMock.mockResolvedValue(pdfText('  ', 3));
+    ocrPdfMock.mockResolvedValue({ ok: false, reason: 'no-text' });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { reason: string }).reason).toContain('Exam Review');
   });
 
   it('reports an unreadable PDF instead of throwing', async () => {
@@ -184,10 +209,27 @@ describe('readDriveFile', () => {
     expect((result as { content: string }).content).toBe('Exam Friday, room 204.');
   });
 
-  it('explains that an image has no text', async () => {
-    responses = [meta('image/jpeg')];
+  /** Images were a quarter of all attachments and previously unreadable. */
+  it('reads text off an image', async () => {
+    responses = [meta('image/jpeg'), { match: /alt=media/, body: 'JPEGDATA' }];
+    ocrImageMock.mockResolvedValue({ ok: true, text: 'Devoir a remettre vendredi' });
+
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
-    expect((result as { reason: string }).reason).toContain('no text to read');
+    expect((result as { content: string }).content).toBe('Devoir a remettre vendredi');
+  });
+
+  it('says so when an image contains no words', async () => {
+    responses = [meta('image/png'), { match: /alt=media/, body: 'PNGDATA' }];
+    ocrImageMock.mockResolvedValue({ ok: false, reason: 'no-text' });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { reason: string }).reason).toContain('readable text');
+  });
+
+  it('still refuses a video, which has nothing to read', async () => {
+    responses = [meta('video/mp4')];
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { reason: string }).reason).toContain('video');
   });
 
   it('names the format it cannot read yet', async () => {

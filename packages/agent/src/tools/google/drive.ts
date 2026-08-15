@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { describeOcrFailure, ocrImage, ocrPdf } from '../ocr.js';
 import { extractPdfText } from '../pdf.js';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
@@ -85,8 +86,8 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
   id: 'google_drive_read_file',
   requiredScopes: [DRIVE_FILE_SCOPE],
   description:
-    'Read the actual text contents of a Google Doc, Slides deck, Sheet, PDF, or text file ' +
-    "from the student's Drive. Use the fileId from a Classroom material, or from " +
+    'Read the actual text contents of a Google Doc, Slides deck, Sheet, PDF, text file, or ' +
+    "IMAGE from the student's Drive. Photographed or scanned worksheets are read with OCR. Use the fileId from a Classroom material, or from " +
     'google_drive_list_files. Call this when they ask you to summarise, explain, quiz them on, ' +
     'or answer questions about a specific document -- do not guess at contents from a title.',
   inputSchema: readFileInput,
@@ -167,15 +168,20 @@ async function extract(
     if (isUnavailable(bytes)) return bytes;
 
     const extracted = await extractPdfText(new Uint8Array(bytes));
-    if (!extracted.ok) {
-      return extracted.reason === 'unreadable'
-        ? unavailable(`"${name}" is a PDF I could not read -- it may be password protected.`)
-        : unavailable(
-            `"${name}" looks like a scan or photos with no text layer, so there is nothing ` +
-              'for me to read. I can only read PDFs that contain real text.',
-          );
+    if (extracted.ok) return extracted.text;
+
+    if (extracted.reason === 'unreadable') {
+      return unavailable(`"${name}" is a PDF I could not read -- it may be password protected.`);
     }
-    return extracted.text;
+
+    /*
+     * No text layer means a scan, which is exactly what OCR is for. Worth the
+     * seconds it costs: scanned worksheets are ordinary in schools, and the
+     * alternative is telling a student their homework is unreadable.
+     */
+    const read = await ocrPdf(new Uint8Array(bytes));
+    if (!read.ok) return unavailable(describeOcrFailure(read.reason, name));
+    return read.text;
   }
 
   if (PLAIN_TEXT.test(mimeType)) {
@@ -191,8 +197,17 @@ async function extract(
     );
   }
 
-  if (mimeType.startsWith('image/') || mimeType.startsWith('video/')) {
-    return unavailable(`"${name}" is a ${mimeType.split('/')[0]}, so there is no text to read.`);
+  if (mimeType.startsWith('image/')) {
+    const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
+    if (isUnavailable(bytes)) return bytes;
+
+    const read = await ocrImage(new Uint8Array(bytes));
+    if (!read.ok) return unavailable(describeOcrFailure(read.reason, name));
+    return read.text;
+  }
+
+  if (mimeType.startsWith('video/')) {
+    return unavailable(`"${name}" is a video, and I cannot listen to it.`);
   }
 
   /*

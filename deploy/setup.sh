@@ -29,6 +29,17 @@ if ! command -v pnpm >/dev/null; then
   echo "==> Installing pnpm"
   npm install -g pnpm
 fi
+
+# OCR. Images are about a quarter of what teachers post to Classroom, and
+# without these the agent reports every photographed worksheet as unreadable.
+# fra as well as eng because school materials are routinely bilingual, and
+# poppler-utils to rasterise scanned PDFs, which tesseract cannot open itself.
+if ! command -v tesseract >/dev/null || ! command -v pdftoppm >/dev/null; then
+  echo "==> Installing OCR (tesseract + poppler)"
+  DEBIAN_FRONTEND=noninteractive apt-get update -qq
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra poppler-utils
+fi
 # The systemd units hardcode this path. Symlink if pnpm landed elsewhere.
 [[ -x /usr/local/bin/pnpm ]] || ln -sf "$(command -v pnpm)" /usr/local/bin/pnpm
 
