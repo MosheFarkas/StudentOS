@@ -95,6 +95,43 @@ async function resolvePublicAddress(
   return answers[0] as { address: string; family: number };
 }
 
+/**
+ * A DNS lookup that always answers with one pre-validated address.
+ *
+ * This is what makes the check meaningful: Node connects to the address we
+ * already inspected rather than resolving the hostname a second time, closing
+ * the window a hostile nameserver would use to answer differently.
+ *
+ * BOTH callback shapes are required. Node's socket layer calls this with
+ * `{all: true}` and then expects an ARRAY; answering with the bare
+ * (address, family) form throws ERR_INVALID_IP_ADDRESS and every single fetch
+ * fails. Supporting only one shape is a silent, total outage of this tool --
+ * which is how it first shipped, because the tests only ever exercised
+ * addresses that were rejected before reaching this code.
+ *
+ * Exported for that test.
+ */
+export function pinnedLookup(pinned: { address: string; family: number }) {
+  return (_hostname: string, options: unknown, callback: (...args: never[]) => void): void => {
+    const done = callback as unknown as (
+      error: null,
+      address: string | { address: string; family: number }[],
+      family?: number,
+    ) => void;
+
+    const wantsAll =
+      typeof options === 'object' &&
+      options !== null &&
+      (options as { all?: boolean }).all === true;
+
+    if (wantsAll) {
+      done(null, [{ address: pinned.address, family: pinned.family }]);
+    } else {
+      done(null, pinned.address, pinned.family);
+    }
+  };
+}
+
 function requestOnce(
   target: URL,
   pinned: { address: string; family: number },
@@ -116,15 +153,7 @@ function requestOnce(
           Accept: 'text/html,text/plain;q=0.9,*/*;q=0.1',
           'Accept-Language': 'en',
         },
-        // The pin. Node connects to the address we already validated instead
-        // of resolving the hostname again.
-        lookup: (_hostname, _options, callback) => {
-          (callback as (e: null, a: string, f: number) => void)(
-            null,
-            pinned.address,
-            pinned.family,
-          );
-        },
+        lookup: pinnedLookup(pinned),
         timeout: TIMEOUT_MS,
       },
       resolve,

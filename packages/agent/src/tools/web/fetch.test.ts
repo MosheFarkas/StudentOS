@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { FetchRejected, fetchPage, htmlToText } from './fetch.js';
+import { FetchRejected, fetchPage, htmlToText, pinnedLookup } from './fetch.js';
 
 /**
  * SSRF is the reason this module exists, so it is the bulk of what is tested.
@@ -133,5 +133,45 @@ describe('htmlToText', () => {
 
   it('leaves an unknown entity alone instead of mangling it', () => {
     expect(htmlToText('<p>&madeup;</p>')).toBe('&madeup;');
+  });
+});
+
+describe('pinnedLookup', () => {
+  const pinned = { address: '208.80.154.224', family: 4 };
+
+  /**
+   * The regression that shipped a total outage.
+   *
+   * Node's socket layer calls the lookup hook with {hints, all: true} and
+   * then expects an array. Answering with the bare (address, family) form
+   * throws ERR_INVALID_IP_ADDRESS, so EVERY fetch failed while every existing
+   * test still passed -- because they only used addresses rejected before
+   * this code ran. Verified against Node 22 in production.
+   */
+  it('answers with an array when Node asks for all', () => {
+    let received: unknown;
+    pinnedLookup(pinned)('example.com', { hints: 32, all: true }, ((_e: null, value: unknown) => {
+      received = value;
+    }) as never);
+
+    expect(received).toEqual([{ address: '208.80.154.224', family: 4 }]);
+  });
+
+  it('answers with address and family when Node does not', () => {
+    const args: unknown[] = [];
+    pinnedLookup(pinned)('example.com', { hints: 32 }, ((...received: unknown[]) => {
+      args.push(...received);
+    }) as never);
+
+    expect(args).toEqual([null, '208.80.154.224', 4]);
+  });
+
+  it('treats a missing options object as the non-array form', () => {
+    const args: unknown[] = [];
+    pinnedLookup(pinned)('example.com', undefined, ((...received: unknown[]) => {
+      args.push(...received);
+    }) as never);
+
+    expect(args[1]).toBe('208.80.154.224');
   });
 });
