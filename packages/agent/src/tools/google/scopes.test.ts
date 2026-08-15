@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALENDAR_SCOPE,
+  DRIVE_FILE_SCOPE,
+  DRIVE_READONLY_SCOPE,
   CLASSROOM_COURSES_SCOPE,
   CLASSROOM_COURSEWORK_SCOPE,
   SCOPE_GROUPS,
@@ -142,5 +144,44 @@ describe('scopesFor', () => {
       'classroom',
       'identity',
     ]);
+  });
+});
+
+describe('elective scopes', () => {
+  /**
+   * Elective scopes are NOT requested by default. drive.readonly is a real
+   * decision with a real cost, and putting it on a consent screen a student
+   * did not ask for takes that decision for them -- on a school account it
+   * can also get the whole app refused.
+   */
+  it('are absent unless asked for', () => {
+    expect(scopesFor(['drive'])).toEqual([DRIVE_FILE_SCOPE]);
+  });
+
+  it('are included when asked for', () => {
+    expect(scopesFor(['drive'], [DRIVE_READONLY_SCOPE])).toContain(DRIVE_READONLY_SCOPE);
+  });
+
+  /**
+   * The silent-downgrade trap. Google issues a token carrying exactly what was
+   * requested, so connecting Calendar without re-requesting a held elective
+   * scope would revoke full Drive access -- with no error, and no sign to the
+   * student beyond their agent quietly losing the ability to read files.
+   */
+  it('survive connecting an unrelated group', () => {
+    const scopes = scopesFor(['calendar', 'drive'], [DRIVE_READONLY_SCOPE]);
+    expect(scopes).toContain(DRIVE_READONLY_SCOPE);
+    expect(scopes).toContain(CALENDAR_SCOPE);
+  });
+
+  /** Never let an arbitrary caller-supplied string reach a consent screen. */
+  it('ignore scopes that are not declared elective anywhere', () => {
+    const scopes = scopesFor(['drive'], ['https://www.googleapis.com/auth/gmail.readonly']);
+    expect(scopes).not.toContain('https://www.googleapis.com/auth/gmail.readonly');
+  });
+
+  /** Full read covers per-file read, so it must not read as disconnected. */
+  it('treat drive.readonly as satisfying the drive group', () => {
+    expect(grantedScopeGroups(DRIVE_READONLY_SCOPE)).toContain('drive');
   });
 });

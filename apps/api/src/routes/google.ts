@@ -1,8 +1,13 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
+import { zValidator } from '@hono/zod-validator';
 import {
+  DRIVE_READONLY_SCOPE,
+  ELECTIVE_SCOPES,
   SCOPE_GROUPS,
   listAccessibleFiles,
   missingOptionalScopes,
+  parseGrantedScopes,
   scopesFor,
   type ScopeGroup,
 } from '@contexto/agent';
@@ -58,17 +63,40 @@ export function createGoogleRoutes(ctx: AppContext) {
        * Asking for the union every time makes that impossible regardless of
        * whether include_granted_scopes is set on the authorisation URL.
        */
-      .get('/connect-scopes/:group', auth, async (c) => {
-        const group = c.req.param('group');
-        if (!isConnectableGroup(group)) {
-          return c.json({ error: 'Unknown scope group' }, 400);
-        }
+      /*
+       * Validated rather than read off c.req.query, so the flag appears in the
+       * typed RPC client. Without it the web app cannot pass `elective` at all
+       * and the broader grant is unreachable from the UI.
+       */
+      .get(
+        '/connect-scopes/:group',
+        auth,
+        zValidator('query', z.object({ elective: z.enum(['true', 'false']).optional() })),
+        async (c) => {
+          const group = c.req.param('group');
+          if (!isConnectableGroup(group)) {
+            return c.json({ error: 'Unknown scope group' }, 400);
+          }
 
-        const grant = await getGoogleGrant(ctx.db, c.get('userId'));
-        const groups = [...new Set<ScopeGroup>([...grant.groups, group])];
+          const grant = await getGoogleGrant(ctx.db, c.get('userId'));
+          const groups = [...new Set<ScopeGroup>([...grant.groups, group])];
 
-        return c.json({ scopes: scopesFor(groups) });
-      })
+          /*
+           * Elective scopes follow the same union rule as groups, for the same
+           * reason. A student who granted full Drive access and then connects
+           * Calendar must not have that quietly downgraded to per-file, so
+           * everything already held is re-requested alongside anything new.
+           */
+          const held = parseGrantedScopes(grant.scope);
+          const alreadyElective = ELECTIVE_SCOPES.filter((scope) => held.has(scope));
+          const requested =
+            c.req.valid('query').elective === 'true' ? (SCOPE_GROUPS[group].elective ?? []) : [];
+
+          return c.json({
+            scopes: scopesFor(groups, [...new Set([...alreadyElective, ...requested])]),
+          });
+        },
+      )
 
       /**
        * The files the student has handed over.
@@ -86,17 +114,34 @@ export function createGoogleRoutes(ctx: AppContext) {
           return c.json({ files: [], connected: false });
         }
 
-        const provider = new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups);
+        const provider = new BetterAuthGoogleTokenProvider(
+          ctx.auth,
+          userId,
+          grant.groups,
+          grant.scope,
+        );
         const token = await provider.getAccessToken('drive');
         if (!token) {
-          return c.json({ files: [], connected: true, error: 'Reconnect Google in Settings.' });
+          return c.json({
+            files: [],
+            connected: true,
+            broadAccess: false,
+            error: 'Reconnect Google in Settings.',
+          });
         }
 
-        const files = await listAccessibleFiles(token);
+        const broadAccess = provider.hasScope(DRIVE_READONLY_SCOPE);
+        const files = await listAccessibleFiles(token, { broadAccess });
         if ('unavailable' in files) {
-          return c.json({ files: [], connected: true, error: files.reason });
+          return c.json({ files: [], connected: true, broadAccess, error: files.reason });
         }
-        return c.json({ files, connected: true });
+
+        /*
+         * With full access this is the student's whole Drive, so it is a
+         * preview rather than a list to manage -- Settings should not try to
+         * render a thousand rows.
+         */
+        return c.json({ files: files.slice(0, 50), connected: true, broadAccess });
       })
   );
 }

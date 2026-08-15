@@ -18,8 +18,13 @@ const NOT_FOUND = {
 
 let responses: Array<{ match: RegExp; status?: number; json?: unknown; body?: string }>;
 
-function ctx(token: string | null = 'token'): ToolContext {
-  return { google: { getAccessToken: async () => token } } as unknown as ToolContext;
+function ctx(token: string | null = 'token', broadAccess = false): ToolContext {
+  return {
+    google: {
+      getAccessToken: async () => token,
+      hasScope: (scope: string) => broadAccess && scope.endsWith('drive.readonly'),
+    },
+  } as unknown as ToolContext;
 }
 
 beforeEach(() => {
@@ -208,7 +213,7 @@ describe('picked folders', () => {
   it('lists what is inside a picked folder', async () => {
     responses = [
       {
-        match: /files\?pageSize=100/,
+        match: /files\?q=trashed/,
         json: { files: [{ id: 'dir', name: 'Math 10', mimeType: FOLDER }] },
       },
       {
@@ -238,10 +243,14 @@ describe('picked folders', () => {
   it('degrades quietly when Drive will not expand the folder', async () => {
     responses = [
       {
-        match: /files\?pageSize=100/,
+        match: /files\?q=trashed/,
         json: { files: [{ id: 'dir', name: 'Math 10', mimeType: FOLDER }] },
       },
-      { match: /files\?q=/, status: 403, json: { error: { message: 'Insufficient permission' } } },
+      {
+        match: /in%20parents/,
+        status: 403,
+        json: { error: { message: 'Insufficient permission' } },
+      },
     ];
 
     const result = (await listDriveFiles.execute({}, ctx())) as {
@@ -255,11 +264,11 @@ describe('picked folders', () => {
   it('does not loop forever on a folder that contains itself', async () => {
     responses = [
       {
-        match: /files\?pageSize=100/,
+        match: /files\?q=trashed/,
         json: { files: [{ id: 'dir', name: 'Loop', mimeType: FOLDER }] },
       },
       // Drive should never return this, but a cycle here would hang Settings.
-      { match: /files\?q=/, json: { files: [{ id: 'dir', name: 'Loop', mimeType: FOLDER }] } },
+      { match: /in%20parents/, json: { files: [{ id: 'dir', name: 'Loop', mimeType: FOLDER }] } },
     ];
 
     const result = (await listDriveFiles.execute({}, ctx())) as { count: number };
@@ -277,7 +286,7 @@ describe('listDriveFiles', () => {
   it('labels file kinds readably', async () => {
     responses = [
       {
-        match: /drive\/v3\/files\?/,
+        match: /drive\/v3\/files\?q=/,
         json: {
           files: [
             { id: 'a', name: 'Slides', mimeType: 'application/vnd.google-apps.presentation' },
@@ -303,7 +312,7 @@ describe('listDriveFiles', () => {
    * where to send the student instead of it concluding Drive is broken.
    */
   it('tells the agent where to send the student when empty', async () => {
-    responses = [{ match: /drive\/v3\/files\?/, json: { files: [] } }];
+    responses = [{ match: /drive\/v3\/files\?q=/, json: { files: [] } }];
 
     const result = (await listDriveFiles.execute({}, ctx())) as { count: number; note: string };
     expect(result.count).toBe(0);

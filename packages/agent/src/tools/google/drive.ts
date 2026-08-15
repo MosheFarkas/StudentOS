@@ -3,22 +3,27 @@ import { extractText } from 'unpdf';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, googleFetchRaw, isUnavailable } from './client.js';
-import { DRIVE_FILE_SCOPE } from './scopes.js';
+import { DRIVE_FILE_SCOPE, DRIVE_READONLY_SCOPE } from './scopes.js';
 
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
 
 /**
  * Reading the contents of a student's files.
  *
- * Access is PER FILE. Holding drive.file grants nothing by itself -- the
- * student hands over individual files through the Google Picker, and only
- * those become readable. A file that exists and is not shared with the app is
- * indistinguishable from one that does not exist: Drive answers 404 to both.
- * That shapes the error handling below, because "not found" is the normal
- * response for a file the student simply has not added yet, and telling them
- * it does not exist would be both wrong and a dead end.
+ * Works under either of two grants, and the difference is visible to the
+ * student rather than hidden:
  *
- * See scopes.ts for why per-file rather than drive.readonly.
+ *   drive.file (default) -- per file. The scope grants nothing by itself; the
+ *   student hands over files through the Picker. A file that exists but was
+ *   not handed over is indistinguishable from one that does not exist, since
+ *   Drive answers 404 to both, so "not found" is treated as "not added yet".
+ *
+ *   drive.readonly (opt-in) -- the whole Drive, Classroom materials included.
+ *   No picking. Here a 404 really does mean the file is not there, and saying
+ *   "add it in Settings" would send the student in a circle.
+ *
+ * Everything below the fetch is identical either way; only availability and
+ * the wording of failures change. See scopes.ts for what each grant costs.
  */
 
 /** Google's own formats hold no bytes to download; they must be exported. */
@@ -58,6 +63,10 @@ const NO_ACCESS =
   'Files, and use "Add files" to pick it -- Contexto can only read files you ' +
   'hand over individually.';
 
+const FILE_GONE =
+  'That file does not exist, or it is not shared with you. Check the link, or ' +
+  'ask whoever posted it to share it.';
+
 const readFileInput = z.object({
   fileId: z
     .string()
@@ -89,8 +98,16 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
     if (isUnavailable(meta)) {
-      // 404 here almost always means "not handed over", not "gone".
-      return meta.reason.includes('does not exist') ? unavailable(NO_ACCESS) : meta;
+      /*
+       * A 404 means different things depending on the grant. Under per-file
+       * access it almost always means "not handed over yet", and the fix is
+       * to pick it. Under full Drive access the file really is not there, and
+       * sending the student to the picker would be a wild goose chase.
+       */
+      if (meta.reason.includes('does not exist')) {
+        return unavailable(ctx.google?.hasScope(DRIVE_READONLY_SCOPE) ? FILE_GONE : NO_ACCESS);
+      }
+      return meta;
     }
 
     const mimeType = meta.mimeType ?? '';
@@ -223,22 +240,48 @@ const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const MAX_FOLDER_DEPTH = 3;
 const MAX_FOLDERS = 25;
 
+export interface ListOptions {
+  /** True when drive.readonly is granted: the whole Drive is visible. */
+  broadAccess?: boolean;
+  /** Match on file name. Essential once the whole Drive is in scope. */
+  search?: string;
+  signal?: AbortSignal;
+}
+
+/** Drive query strings are single-quoted; an apostrophe in a title breaks them. */
+function escapeQuery(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 export async function listAccessibleFiles(
   token: string,
-  signal?: AbortSignal,
+  options: ListOptions = {},
 ): Promise<AccessibleFile[] | ReturnType<typeof unavailable>> {
+  const { broadAccess = false, search, signal } = options;
+
+  const clauses = ['trashed = false'];
+  if (search?.trim()) clauses.push(`name contains '${escapeQuery(search.trim())}'`);
+
   const result = await googleFetch<{ files?: FileMeta[] }>(
-    `${FILES_URL}?pageSize=100&orderBy=modifiedTime desc` +
-      '&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true',
+    `${FILES_URL}?q=${encodeURIComponent(clauses.join(' and '))}` +
+      '&pageSize=100&orderBy=modifiedTime desc' +
+      '&fields=files(id,name,mimeType,modifiedTime)' +
+      '&supportsAllDrives=true&includeItemsFromAllDrives=true',
     token,
     { ...(signal ? { signal } : {}) },
   );
   if (isUnavailable(result)) return result;
 
   const top = result.files ?? [];
-  const expanded = await expandFolders(top, token, signal);
 
-  return expanded.map((f) => ({
+  /*
+   * Folder expansion exists to work around per-file access. With
+   * drive.readonly every file is already listed, so walking folders would be
+   * up to 25 extra round trips returning things we already have.
+   */
+  const files = broadAccess ? top : await expandFolders(top, token, signal);
+
+  return files.map((f) => ({
     fileId: f.id,
     name: f.name ?? 'Untitled',
     kind: describeKind(f.mimeType ?? ''),
@@ -305,16 +348,23 @@ async function expandFolders(
   return out;
 }
 
-export const listDriveFiles: Tool<Record<string, never>, unknown> = {
+const listFilesInput = z.object({
+  search: z
+    .string()
+    .optional()
+    .describe('Match part of a file name, e.g. "exam review". Omit to list recent files.'),
+});
+
+export const listDriveFiles: Tool<z.infer<typeof listFilesInput>, unknown> = {
   id: 'google_drive_list_files',
   requiredScopes: [DRIVE_FILE_SCOPE],
   description:
-    'List the files the student has given Contexto access to, with their ids. Call this when ' +
-    'they refer to a document by name and you do not already have its id, or when they ask ' +
-    'what files you can read.',
-  inputSchema: z.object({}),
+    "Find files in the student's Drive and get their ids, so you can read them. Call this " +
+    'when they name a document you do not have an id for, or ask what you can read. ' +
+    'Pass `search` to look for a specific one by name.',
+  inputSchema: listFilesInput,
 
-  async execute(_input, ctx) {
+  async execute({ search }, ctx) {
     const token = await ctx.google?.getAccessToken('drive');
     if (!token) {
       return unavailable(
@@ -322,16 +372,28 @@ export const listDriveFiles: Tool<Record<string, never>, unknown> = {
       );
     }
 
-    const files = await listAccessibleFiles(token, ctx.signal);
+    const broadAccess = ctx.google?.hasScope(DRIVE_READONLY_SCOPE) ?? false;
+    const files = await listAccessibleFiles(token, {
+      broadAccess,
+      ...(search ? { search } : {}),
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
     if (isUnavailable(files)) return files;
 
     if (files.length === 0) {
+      /*
+       * Empty means two different things, and the wrong one wastes the
+       * student's time. With per-file access it means "nothing handed over
+       * yet"; with full access it means the file genuinely is not there.
+       */
       return {
         files: [],
         count: 0,
-        note:
-          'The student has not added any files yet. They can add them in Settings, ' +
-          'under Files.',
+        note: broadAccess
+          ? search
+            ? `No file matching "${search}" was found in the student's Drive.`
+            : 'No files found.'
+          : 'The student has not added any files yet. They can add them in Settings, under Files.',
       };
     }
     return { files, count: files.length };

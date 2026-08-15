@@ -56,6 +56,15 @@ export interface GoogleTokenProvider {
    * granted at sign-in and no tool asks for it.
    */
   getAccessToken(scopeGroup: Exclude<ScopeGroup, 'identity'>): Promise<string | null>;
+
+  /**
+   * Whether one specific scope was granted.
+   *
+   * Registration already gates on required scopes, so this is for tools whose
+   * BEHAVIOUR changes with an optional scope rather than their availability --
+   * reading one picked file versus searching a whole Drive.
+   */
+  hasScope(scope: string): boolean;
 }
 
 /** Returned when a tool cannot run for a reason the student can act on. */

@@ -49,7 +49,7 @@ export async function runTurnForAgent(
       purpose: agent.purpose,
       message: content,
       ...(profile?.timezone ? { timezone: profile.timezone } : {}),
-      google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups),
+      google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
       ...(signal ? { signal } : {}),
     },
   );

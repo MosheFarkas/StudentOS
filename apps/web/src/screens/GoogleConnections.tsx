@@ -51,7 +51,11 @@ export function GoogleConnections() {
     try {
       // The server decides the scope list, because it has to include what is
       // already granted -- see lib/auth.ts.
-      const res = await api.google['connect-scopes'][':group'].$get({ param: { group } });
+      // No elective scopes for these groups; the key is required by the type.
+      const res = await api.google['connect-scopes'][':group'].$get({
+        param: { group },
+        query: {},
+      });
       if (!res.ok) throw new Error('Could not work out which permissions to request.');
 
       const body = await res.json();

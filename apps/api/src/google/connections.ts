@@ -1,7 +1,13 @@
 import { and, eq } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
 import { account } from '@contexto/db';
-import { grantedScopeGroups, type GoogleTokenProvider, type ScopeGroup } from '@contexto/agent';
+import {
+  grantedScopeGroups,
+  hasScope,
+  parseGrantedScopes,
+  type GoogleTokenProvider,
+  type ScopeGroup,
+} from '@contexto/agent';
 import type { Auth } from '../auth.js';
 
 const GOOGLE_PROVIDER_ID = 'google';
@@ -48,11 +54,20 @@ export async function getGoogleGrant(db: Database, userId: string): Promise<Goog
  * -- without a refresh token this works for an hour and then quietly stops.
  */
 export class BetterAuthGoogleTokenProvider implements GoogleTokenProvider {
+  private readonly grantedScopes: Set<string>;
+
   constructor(
     private readonly auth: Auth,
     private readonly userId: string,
     private readonly granted: ScopeGroup[],
-  ) {}
+    grantedScope: string | null = null,
+  ) {
+    this.grantedScopes = parseGrantedScopes(grantedScope);
+  }
+
+  hasScope(scope: string): boolean {
+    return hasScope(scope, this.grantedScopes);
+  }
 
   async getAccessToken(scopeGroup: Exclude<ScopeGroup, 'identity'>): Promise<string | null> {
     // Checked before minting: a token is useless for a scope the student never

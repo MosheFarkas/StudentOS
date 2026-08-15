@@ -22,6 +22,15 @@ export interface ScopeGroupDefinition {
   readonly required: readonly string[];
   /** Enhance the group. Absent ones disable specific tools, nothing more. */
   readonly optional: readonly string[];
+  /**
+   * Requested ONLY when the student explicitly asks for them.
+   *
+   * Distinct from optional, which is always requested and merely tolerated
+   * when refused. Elective scopes are ones where the broader grant is a real
+   * decision with a cost -- so putting them on a consent screen the student
+   * did not ask for would be taking that decision for them.
+   */
+  readonly elective?: readonly string[];
 }
 
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
@@ -50,6 +59,27 @@ export const CLASSROOM_MATERIALS_SCOPE =
  * of this file.
  */
 export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+/**
+ * Read every file in the student's Drive, Classroom materials included.
+ *
+ * RESTRICTED. What that costs depends entirely on who is using the app, and
+ * the two cases are far apart:
+ *
+ *   Personal use -- you, or a handful of people you know personally. Google
+ *   lists this as an explicit EXCEPTION to verification. No review, no
+ *   security assessment. There is a user cap, an "unverified app" warning on
+ *   the consent screen, and a shorter refresh-token lifetime.
+ *
+ *   Public launch -- restricted-scope verification, plus a CASA security
+ *   assessment because we transmit file text to an LLM, redone every 12
+ *   months.
+ *
+ * So this is offered, not requested by default. A student who wants their
+ * agent to read everything can say so; the per-file grant stays the default
+ * because it is what survives contact with a school admin.
+ */
+export const DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 
 export type ScopeGroup = 'identity' | 'calendar' | 'classroom' | 'drive';
 
@@ -104,8 +134,14 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   drive: {
     required: [DRIVE_FILE_SCOPE],
     optional: [],
+    elective: [DRIVE_READONLY_SCOPE],
   },
 };
+
+/** Every elective scope across all groups. */
+export const ELECTIVE_SCOPES: readonly string[] = Object.values(SCOPE_GROUPS).flatMap(
+  (group) => group.elective ?? [],
+);
 
 /**
  * Narrower scopes that still satisfy a broader requirement.
@@ -118,6 +154,9 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
  */
 const ALSO_SATISFIED_BY: Record<string, readonly string[]> = {
   [CALENDAR_SCOPE]: [CALENDAR_EVENTS_SCOPE],
+  // Reading everything covers reading a picked file. A student who granted
+  // full Drive access must not be told Drive is disconnected.
+  [DRIVE_FILE_SCOPE]: [DRIVE_READONLY_SCOPE],
 };
 
 /**
@@ -162,12 +201,26 @@ export function missingOptionalScopes(
   return SCOPE_GROUPS[group].optional.filter((scope) => !hasScope(scope, granted));
 }
 
-/** Everything to request for these groups: required plus optional. */
-export function scopesFor(groups: ScopeGroup[]): string[] {
+/**
+ * Everything to request for these groups: required plus optional, plus any
+ * elective scopes named in `elective`.
+ *
+ * Callers must pass elective scopes the student ALREADY holds, not just newly
+ * chosen ones. Google issues a token carrying exactly what was asked for, so
+ * omitting a held elective scope silently downgrades it the next time the
+ * student connects anything -- the same failure the union rule in
+ * routes/google.ts exists to prevent, one level down.
+ */
+export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []): string[] {
+  const allowed = new Set(ELECTIVE_SCOPES);
   return [
-    ...new Set(
-      groups.flatMap((group) => [...SCOPE_GROUPS[group].required, ...SCOPE_GROUPS[group].optional]),
-    ),
+    ...new Set([
+      ...groups.flatMap((group) => [
+        ...SCOPE_GROUPS[group].required,
+        ...SCOPE_GROUPS[group].optional,
+      ]),
+      ...elective.filter((scope) => allowed.has(scope)),
+    ]),
   ];
 }
 
