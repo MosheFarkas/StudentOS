@@ -86,12 +86,48 @@ export function DriveFiles() {
       </p>
 
       {!connected ? (
-        <div className="row static">
-          <span className="muted">Connect Drive to let your agent read files.</span>
-          <button disabled={busy} onClick={() => void connect(false)}>
-            {busy ? 'Opening…' : 'Connect Drive'}
-          </button>
-        </div>
+        /*
+         * Both grants are offered HERE, at the moment of connecting.
+         *
+         * They were not, and that was a real failure: the only button on this
+         * branch granted per-file access, and the broader option lived inside
+         * the already-connected branch below. A student who wanted their agent
+         * to just read their files had no way to say so, connected, and then
+         * got told to attach files one at a time -- which is the exact
+         * friction they were trying to avoid.
+         */
+        <>
+          <div className="row static">
+            <span>
+              <strong>Files I pick</strong>
+              <br />
+              <span className="muted">
+                You choose which files or folders. Nothing else is visible.
+              </span>
+            </span>
+            <button disabled={busy} onClick={() => void connect(false)}>
+              {busy ? 'Opening…' : 'Connect'}
+            </button>
+          </div>
+
+          <div className="row static">
+            <span>
+              <strong>My whole Drive</strong>
+              <br />
+              <span className="muted">
+                No picking — your agent can read any file, Classroom materials included.
+              </span>
+            </span>
+            <button disabled={busy} onClick={() => void connect(true)}>
+              {busy ? 'Opening…' : 'Connect'}
+            </button>
+          </div>
+
+          <p className="muted">
+            Whole-Drive access shows an &quot;unverified app&quot; warning from Google, and a school
+            account may have it blocked by an administrator. You can change either one later.
+          </p>
+        </>
       ) : (
         <>
           <div className="row static">
@@ -141,9 +177,10 @@ export function DriveFiles() {
             <>
               <hr />
               <p className="muted">
-                Tired of adding files? You can give your agent read access to your{' '}
-                <strong>whole Drive</strong> instead — every file, not just Classroom ones. Google
-                will show an &quot;unverified app&quot; warning, and on a school account an
+                {files && files.length === 0
+                  ? 'Rather not pick files at all? Give your agent read access to your whole Drive instead — every file, Classroom materials included.'
+                  : 'You can also give your agent read access to your whole Drive, so you never need to add files individually.'}{' '}
+                Google will show an &quot;unverified app&quot; warning, and on a school account an
                 administrator may block it.
               </p>
               <button disabled={busy} onClick={() => void connect(true)}>

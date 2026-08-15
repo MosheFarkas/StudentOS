@@ -58,10 +58,17 @@ interface FileMeta {
   webViewLink?: string;
 }
 
+/*
+ * Names BOTH ways out, because only one of them is what most students
+ * actually want. Being told to go and attach a file, every time, is the
+ * friction that makes this feature not worth using -- so the message that
+ * delivers that news is also the right place to mention that they can stop
+ * doing it entirely.
+ */
 const NO_ACCESS =
-  'You have not given Contexto access to that file yet. Open Settings, then ' +
-  'Files, and use "Add files" to pick it -- Contexto can only read files you ' +
-  'hand over individually.';
+  'You have not given me access to that file yet. In Settings > Files you can either ' +
+  'use "Add files" to pick it, or choose "Give access to all my Drive" so you never ' +
+  'have to add files one at a time.';
 
 const FILE_GONE =
   'That file does not exist, or it is not shared with you. Check the link, or ' +
@@ -393,7 +400,9 @@ export const listDriveFiles: Tool<z.infer<typeof listFilesInput>, unknown> = {
           ? search
             ? `No file matching "${search}" was found in the student's Drive.`
             : 'No files found.'
-          : 'The student has not added any files yet. They can add them in Settings, under Files.',
+          : 'The student has not added any files yet. Tell them they can either add files in ' +
+            'Settings > Files, or choose "Give access to all my Drive" there so they never ' +
+            'need to add files individually.',
       };
     }
     return { files, count: files.length };

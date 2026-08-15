@@ -70,8 +70,10 @@ describe('readDriveFile', () => {
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     const reason = (result as { reason: string }).reason;
 
-    expect(reason).toContain('have not given Contexto access');
+    expect(reason).toContain('have not given me access');
     expect(reason).toContain('Add files');
+    // Also names the way to stop doing this, not just the way to do it again.
+    expect(reason).toContain('all my Drive');
     expect(reason).not.toContain('does not exist');
   });
 
@@ -317,5 +319,6 @@ describe('listDriveFiles', () => {
     const result = (await listDriveFiles.execute({}, ctx())) as { count: number; note: string };
     expect(result.count).toBe(0);
     expect(result.note).toContain('Settings');
+    expect(result.note).toContain('all my Drive');
   });
 });
