@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { isIP } from 'node:net';
+import { extractText } from 'unpdf';
 
 /**
  * Fetching a web page on the student's behalf.
@@ -165,6 +166,22 @@ function requestOnce(
   });
 }
 
+async function readBytes(response: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+
+  for await (const chunk of response) {
+    const buffer = chunk as Buffer;
+    size += buffer.length;
+    if (size > MAX_BYTES) {
+      response.destroy();
+      break;
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function readBody(response: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -212,6 +229,36 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
     }
 
     const contentType = String(response.headers['content-type'] ?? '');
+
+    /*
+     * A linked PDF is the same kind of object as a PDF in Drive, and we
+     * already extract those. Refusing it here made the answer depend on how
+     * the student happened to reach the file, which is not a distinction they
+     * would ever think in.
+     */
+    if (/^application\/pdf/i.test(contentType)) {
+      const bytes = await readBytes(response);
+      let text: string;
+      try {
+        const result = await extractText(new Uint8Array(bytes), { mergePages: true });
+        text = Array.isArray(result.text) ? result.text.join('\n\n') : result.text;
+      } catch {
+        throw new FetchRejected('That PDF could not be read -- it may be password protected.');
+      }
+      if (text.trim().length < 20) {
+        throw new FetchRejected(
+          'That PDF is a scan with no text layer, so there is nothing to read.',
+        );
+      }
+      const tooLong = text.length > MAX_CHARS;
+      return {
+        url: target.toString(),
+        title: null,
+        text: tooLong ? text.slice(0, MAX_CHARS) : text,
+        truncated: tooLong,
+      };
+    }
+
     if (!/^text\/(html|plain)/i.test(contentType)) {
       response.destroy();
       throw new FetchRejected(

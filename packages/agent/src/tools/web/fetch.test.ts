@@ -68,8 +68,8 @@ describe('redirects', () => {
         return;
       }
       if (req.url === '/binary') {
-        res.writeHead(200, { 'content-type': 'application/pdf' });
-        res.end('%PDF-1.4');
+        res.writeHead(200, { 'content-type': 'application/zip' });
+        res.end('PK');
         return;
       }
       res.writeHead(200, { 'content-type': 'text/html' });

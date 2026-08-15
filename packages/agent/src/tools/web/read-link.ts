@@ -27,7 +27,8 @@ export const readWebLink: Tool<z.infer<typeof readLinkInput>, unknown> = {
   description:
     'Read the text of a web page, so you can answer questions about something a teacher ' +
     'linked to. Use this for link attachments from Classroom, or any URL the student asks ' +
-    'about. Does not work for YouTube videos, PDFs behind a link, or pages that need a login.',
+    'about, including links that point straight at a PDF. Does not work for YouTube videos, ' +
+    'pages that need a login, or pages that build themselves with JavaScript.',
   inputSchema: readLinkInput,
 
   async execute({ url }, _ctx) {
