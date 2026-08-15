@@ -76,6 +76,19 @@ async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
      */
     case 'accessNotConfigured':
     case 'access_not_configured':
+      /*
+       * Google reuses this reason for two unrelated failures: a Workspace
+       * admin who has not approved the app, and an API not enabled in OUR
+       * Cloud project. Only the message distinguishes them, and getting it
+       * wrong sends a student to their school IT department over a checkbox
+       * we forgot to tick.
+       */
+      if (/has not been used in project|is disabled|enable it by visiting/i.test(message)) {
+        return unavailable(
+          'Contexto is not set up to use this Google service yet. This is on us, ' +
+            'not you or your school -- it needs enabling on our side.',
+        );
+      }
       return unavailable(
         'Your school has not approved Contexto yet, so this cannot be used. ' +
           'An administrator needs to allow the app before it will work.',

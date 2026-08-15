@@ -121,6 +121,37 @@ APIs & Services → Credentials → your OAuth client:
 
 Keep the localhost entries so local development keeps working.
 
+**6b. Drive file reading (Google Picker)**
+
+Needed for the agent to read file _contents_. Everything else works without
+it; the Files panel in Settings just says it is not configured.
+
+In the same Cloud project:
+
+1. **APIs & Services → Library** — enable **Google Drive API** _and_ **Google
+   Picker API**. Both. Missing either produces `accessNotConfigured`, which
+   Google also uses for "your school blocked this app" — client.ts tells the
+   two apart by message text so a student is not sent to their IT department
+   over an unticked box here.
+2. **OAuth consent screen → Data access** — add the scope
+   `https://www.googleapis.com/auth/drive.file`. It is **non-sensitive**, so
+   it needs no security assessment. Do not add `drive.readonly`; see
+   `packages/agent/src/tools/google/scopes.ts` for why.
+3. **Credentials → Create credentials → API key.** Restrict it:
+   - Application restrictions → Websites → `https://contextoagent.ai/*`
+   - API restrictions → Google Picker API only
+
+Then on the droplet:
+
+```bash
+printf 'VITE_GOOGLE_PICKER_API_KEY=%s\n' "<key>" >> /srv/contexto/.env
+sudo -u contexto /srv/contexto/deploy/deploy.sh   # Vite inlines it at build
+```
+
+`VITE_GOOGLE_CLIENT_ID` is set automatically from `GOOGLE_CLIENT_ID`. Both
+values are public — the client id appears in every OAuth redirect, and the API
+key is referrer-restricted — which is why they can be inlined into the bundle.
+
 **7. Telegram webhook**
 
 ```bash
