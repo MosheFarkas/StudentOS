@@ -11,6 +11,9 @@ import type { ToolContext } from '../types.js';
 const extractTextMock = vi.hoisted(() => vi.fn());
 vi.mock('unpdf', () => ({ extractText: extractTextMock }));
 
+/** Mirrors the real one-page shape unpdf returns, so per-page detection works. */
+const pdfText = (text: string, totalPages = 1) => ({ text, totalPages });
+
 /** Google's 404 body shape, verbatim from Drive v3. */
 const NOT_FOUND = {
   error: { code: 404, message: 'File not found: abc.', errors: [{ reason: 'notFound' }] },
@@ -126,7 +129,7 @@ describe('readDriveFile', () => {
 
   it('extracts a PDF', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
-    extractTextMock.mockResolvedValue({ text: 'Solve for x. Show your work.' });
+    extractTextMock.mockResolvedValue(pdfText('Solve for x. Show your work.'));
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     expect((result as { content: string }).content).toContain('Solve for x');
@@ -139,7 +142,7 @@ describe('readDriveFile', () => {
    */
   it('recognises a scan with no text layer', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
-    extractTextMock.mockResolvedValue({ text: '  \n \n ' });
+    extractTextMock.mockResolvedValue(pdfText('  \n \n ', 12));
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     const reason = (result as { reason: string }).reason;
@@ -157,9 +160,9 @@ describe('readDriveFile', () => {
 
   it('joins multi-page extraction output', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
-    extractTextMock.mockResolvedValue({
-      text: ['Question 1. Define inertia.', 'Question 2. Define momentum.'],
-    });
+    extractTextMock.mockResolvedValue(
+      pdfText(['Question 1. Define inertia.', 'Question 2. Define momentum.'] as never, 2),
+    );
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     expect((result as { content: string }).content).toBe(
@@ -175,7 +178,7 @@ describe('readDriveFile', () => {
    */
   it('does not mistake a very short real document for a scan', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
-    extractTextMock.mockResolvedValue({ text: 'Exam Friday, room 204.' });
+    extractTextMock.mockResolvedValue(pdfText('Exam Friday, room 204.'));
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     expect((result as { content: string }).content).toBe('Exam Friday, room 204.');

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { extractText } from 'unpdf';
+import { extractPdfText } from '../pdf.js';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, googleFetchRaw, isUnavailable } from './client.js';
@@ -166,28 +166,16 @@ async function extract(
     const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
     if (isUnavailable(bytes)) return bytes;
 
-    let text: string;
-    try {
-      const result = await extractText(new Uint8Array(bytes), { mergePages: true });
-      text = Array.isArray(result.text) ? result.text.join('\n\n') : result.text;
-    } catch {
-      // Encrypted or malformed PDFs throw rather than returning nothing.
-      return unavailable(`"${name}" is a PDF I could not read -- it may be password protected.`);
+    const extracted = await extractPdfText(new Uint8Array(bytes));
+    if (!extracted.ok) {
+      return extracted.reason === 'unreadable'
+        ? unavailable(`"${name}" is a PDF I could not read -- it may be password protected.`)
+        : unavailable(
+            `"${name}" looks like a scan or photos with no text layer, so there is nothing ` +
+              'for me to read. I can only read PDFs that contain real text.',
+          );
     }
-
-    /*
-     * A scanned worksheet is a PDF full of images with no text layer. It
-     * extracts to whitespace, and reporting that as an empty document reads
-     * as a bug. Naming the cause tells the student the file needs OCR, which
-     * we do not do.
-     */
-    if (text.trim().length < 20) {
-      return unavailable(
-        `"${name}" looks like a scan or photos with no text layer, so there is nothing ` +
-          'for me to read. I can only read PDFs that contain real text.',
-      );
-    }
-    return text;
+    return extracted.text;
   }
 
   if (PLAIN_TEXT.test(mimeType)) {

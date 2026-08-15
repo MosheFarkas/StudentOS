@@ -2,7 +2,7 @@ import { lookup as dnsLookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { isIP } from 'node:net';
-import { extractText } from 'unpdf';
+import { extractPdfText } from '../pdf.js';
 
 /**
  * Fetching a web page on the student's behalf.
@@ -238,18 +238,15 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
      */
     if (/^application\/pdf/i.test(contentType)) {
       const bytes = await readBytes(response);
-      let text: string;
-      try {
-        const result = await extractText(new Uint8Array(bytes), { mergePages: true });
-        text = Array.isArray(result.text) ? result.text.join('\n\n') : result.text;
-      } catch {
-        throw new FetchRejected('That PDF could not be read -- it may be password protected.');
-      }
-      if (text.trim().length < 20) {
+      const extracted = await extractPdfText(new Uint8Array(bytes));
+      if (!extracted.ok) {
         throw new FetchRejected(
-          'That PDF is a scan with no text layer, so there is nothing to read.',
+          extracted.reason === 'unreadable'
+            ? 'That PDF could not be read -- it may be password protected.'
+            : 'That PDF is a scan with no text layer, so there is nothing to read.',
         );
       }
+      const text = extracted.text;
       const tooLong = text.length > MAX_CHARS;
       return {
         url: target.toString(),
