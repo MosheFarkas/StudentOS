@@ -39,6 +39,16 @@ export interface FetchedPage {
   title: string | null;
   text: string;
   truncated: boolean;
+  /**
+   * How the text was obtained.
+   *
+   * Callers need this because "hardly any text" means different things per
+   * kind: an almost-empty HTML page is usually one that builds itself with
+   * JavaScript, while an almost-empty PDF has already been checked for a text
+   * layer by the extractor. Treating them the same rejected a valid
+   * fourteen-character PDF as a broken page.
+   */
+  kind: 'html' | 'text' | 'pdf';
 }
 
 export class FetchRejected extends Error {}
@@ -253,6 +263,7 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
         title: null,
         text: tooLong ? text.slice(0, MAX_CHARS) : text,
         truncated: tooLong,
+        kind: 'pdf',
       };
     }
 
@@ -272,6 +283,7 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
       title: /html/i.test(contentType) ? extractTitle(body) : null,
       text: truncated ? text.slice(0, MAX_CHARS) : text,
       truncated,
+      kind: /html/i.test(contentType) ? 'html' : 'text',
     };
   }
 

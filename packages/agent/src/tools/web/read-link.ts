@@ -35,7 +35,14 @@ export const readWebLink: Tool<z.infer<typeof readLinkInput>, unknown> = {
     try {
       const page = await fetchPage(url);
 
-      if (page.text.trim().length < 40) {
+      /*
+       * Only HTML gets this check. A near-empty web page is almost always one
+       * that renders with JavaScript, which we cannot run -- but a near-empty
+       * PDF has already been through the extractor's own text-layer check, and
+       * a short document is allowed to be short. Applying one floor to both
+       * rejected a perfectly readable fourteen-character PDF.
+       */
+      if (page.kind === 'html' && page.text.trim().length < 40) {
         return unavailable(
           'That page has almost no readable text -- it probably builds itself with ' +
             'JavaScript, which I cannot run.',
