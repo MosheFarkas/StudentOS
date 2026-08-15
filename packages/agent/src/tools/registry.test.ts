@@ -5,8 +5,8 @@ import { buildToolRegistry } from './builtin.js';
 import { SCOPE_GROUPS } from './google/scopes.js';
 
 /** Everything a fully-approved student would hold. */
-const ALL_GRANTED = (['calendar', 'classroom'] as const)
-  .flatMap((g) => [...SCOPE_GROUPS[g].required, ...SCOPE_GROUPS[g].optional])
+const ALL_GRANTED = Object.values(SCOPE_GROUPS)
+  .flatMap((group) => [...group.required, ...group.optional, ...(group.elective ?? [])])
   .join(',');
 import type { Tool } from './types.js';
 
@@ -104,5 +104,35 @@ describe('toDefinitions', () => {
       expect(def.description.length).toBeGreaterThan(0);
       expect(def.parameters).toHaveProperty('type', 'object');
     }
+  });
+});
+
+describe('scope declarations', () => {
+  /**
+   * The guard that lets buildToolRegistry register scope-free tools safely.
+   *
+   * Registration now treats "no requiredScopes" as "needs no Google grant".
+   * That is correct for web_read_link, and silently wrong for a google_* tool
+   * that simply forgot to declare its scopes -- it would register for every
+   * student and fail at call time. Catch that here rather than by banning
+   * scope-free tools, which only hid the mistake in the other direction.
+   */
+  it('every google tool declares the scopes it needs', () => {
+    const registry = buildToolRegistry(ALL_GRANTED);
+
+    const undeclared = registry
+      .ids()
+      .filter((id) => id.startsWith('google_'))
+      .filter((id) => (registry.get(id)?.requiredScopes ?? []).length === 0);
+
+    expect(undeclared).toEqual([]);
+  });
+
+  /** Tools needing no Google data must work for a student with no grant. */
+  it('registers scope-free tools when nothing is connected', () => {
+    const ids = buildToolRegistry(null).ids();
+
+    expect(ids).toContain('web_read_link');
+    expect(ids.filter((id) => id.startsWith('google_'))).toEqual([]);
   });
 });

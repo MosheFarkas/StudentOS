@@ -19,6 +19,7 @@ import {
   unsubmitAssignment,
 } from './google/classroom.js';
 import { listDriveFiles, readDriveFile } from './google/drive.js';
+import { readWebLink } from './web/read-link.js';
 
 const ALL_TOOLS: Tool<never, unknown>[] = [
   listCalendarEvents,
@@ -36,6 +37,7 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   attachToSubmission,
   listDriveFiles,
   readDriveFile,
+  readWebLink,
 ] as unknown as Tool<never, unknown>[];
 
 /**
@@ -60,7 +62,17 @@ export function buildToolRegistry(grantedScope: string | null | undefined): Tool
 
   for (const tool of ALL_TOOLS) {
     const required = tool.requiredScopes ?? [];
-    if (required.length > 0 && required.every((scope) => hasScope(scope, granted))) {
+
+    /*
+     * No declared scopes means the tool touches no Google data and is always
+     * available -- web_read_link is the first of these.
+     *
+     * The risk in this branch is a Google tool that simply FORGOT to declare
+     * its scopes: it would register for everyone and fail at call time. That
+     * is caught by a test asserting every google_* tool declares them, rather
+     * than by refusing scope-free tools here, which only hid the mistake.
+     */
+    if (required.length === 0 || required.every((scope) => hasScope(scope, granted))) {
       registry.register(tool);
     }
   }
