@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ArchiveError, readDocx, readPptx, readZip } from '../archive.js';
 import { describeOcrFailure, ocrImage, ocrPdf } from '../ocr.js';
 import { extractPdfText } from '../pdf.js';
 import type { Tool } from '../types.js';
@@ -86,10 +87,11 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
   id: 'google_drive_read_file',
   requiredScopes: [DRIVE_FILE_SCOPE],
   description:
-    'Read the actual text contents of a Google Doc, Slides deck, Sheet, PDF, text file, or ' +
-    "IMAGE from the student's Drive. Photographed or scanned worksheets are read with OCR. Use the fileId from a Classroom material, or from " +
-    'google_drive_list_files. Call this when they ask you to summarise, explain, quiz them on, ' +
-    'or answer questions about a specific document -- do not guess at contents from a title.',
+    "Read the actual text contents of almost any file in the student's Drive: Google Docs, " +
+    'Slides, Sheets, PDFs, Word and PowerPoint files, zip archives, plain text, and images. ' +
+    'Photographed or scanned worksheets are read with OCR. Use the fileId from a Classroom ' +
+    'material, or from google_drive_list_files. Call this when they ask you to summarise, ' +
+    'explain, or quiz them on a document -- do not guess at contents from a title.',
   inputSchema: readFileInput,
 
   async execute({ fileId }, ctx) {
@@ -210,15 +212,112 @@ async function extract(
     return unavailable(`"${name}" is a video, and I cannot listen to it.`);
   }
 
+  const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
   /*
-   * Word and PowerPoint files land here. Drive will not export a file it does
-   * not own the format of, so reading them means parsing the format
-   * ourselves -- worth doing, not done yet. Say which file and why.
+   * .docx and .pptx are zips of XML, so they need no converter service and no
+   * write access to Drive -- just unzip and read. Worth doing precisely
+   * because there are only a handful: a student does not care that their one
+   * Word handout is an unusual format.
    */
+  if (mimeType === DOCX || mimeType === PPTX) {
+    const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
+    if (isUnavailable(bytes)) return bytes;
+    try {
+      const text =
+        mimeType === DOCX ? readDocx(new Uint8Array(bytes)) : readPptx(new Uint8Array(bytes));
+      if (text.trim().length === 0) {
+        return unavailable(`"${name}" has no text in it -- it may be all images.`);
+      }
+      return text;
+    } catch (cause) {
+      return unavailable(
+        cause instanceof ArchiveError ? cause.message : `I could not read "${name}".`,
+      );
+    }
+  }
+
+  if (mimeType === 'application/zip') {
+    const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
+    if (isUnavailable(bytes)) return bytes;
+    return readArchive(new Uint8Array(bytes), name);
+  }
+
   return unavailable(
     `I cannot read "${name}" yet (${mimeType || 'unknown format'}). I can read Google Docs, ` +
-      'Slides, Sheets, PDFs, and plain text.',
+      'Slides, Sheets, PDFs, Word and PowerPoint files, images, and plain text.',
   );
+}
+
+/** Extensions worth reading out of an archive as-is. */
+const TEXT_IN_ARCHIVE =
+  /\.(txt|md|csv|json|xml|ya?ml|py|js|ts|java|c|cpp|h|cs|rb|go|rs|sql|html?|css|ino)$/i;
+
+/**
+ * Open an archive and read what is inside it.
+ *
+ * Teachers post zips of coursework -- this account's are Python files and PDFs
+ * for robotics. Listing the filenames and stopping would name the homework
+ * without showing any of it, so readable members are read, and everything else
+ * is listed so the student knows it is there.
+ */
+async function readArchive(
+  bytes: Uint8Array,
+  name: string,
+): Promise<string | ReturnType<typeof unavailable>> {
+  let entries;
+  try {
+    entries = readZip(bytes);
+  } catch (cause) {
+    return unavailable(cause instanceof ArchiveError ? cause.message : `Could not open "${name}".`);
+  }
+
+  const parts: string[] = [];
+  const listedOnly: string[] = [];
+  let budget = MAX_CHARS;
+
+  for (const entry of entries) {
+    if (budget <= 0) {
+      listedOnly.push(entry.path);
+      continue;
+    }
+
+    let text: string | null = null;
+    if (TEXT_IN_ARCHIVE.test(entry.path)) {
+      text = decode(
+        entry.bytes.buffer.slice(
+          entry.bytes.byteOffset,
+          entry.bytes.byteOffset + entry.bytes.byteLength,
+        ) as ArrayBuffer,
+      );
+    } else if (entry.path.toLowerCase().endsWith('.pdf')) {
+      const extracted = await extractPdfText(entry.bytes);
+      text = extracted.ok ? extracted.text : null;
+    }
+
+    if (text === null || text.trim().length === 0) {
+      // CAD models, images, binaries. Named rather than silently dropped.
+      listedOnly.push(entry.path);
+      continue;
+    }
+
+    const slice = text.slice(0, budget);
+    budget -= slice.length;
+    parts.push(`--- ${entry.path} ---\n${slice}`);
+  }
+
+  if (parts.length === 0) {
+    return unavailable(
+      `"${name}" contains ${entries.length} files, but none of them hold readable text: ` +
+        `${listedOnly.slice(0, 12).join(', ')}`,
+    );
+  }
+
+  const listing = listedOnly.length
+    ? `\n\n--- also inside, not readable as text ---\n${listedOnly.slice(0, 40).join('\n')}`
+    : '';
+  return parts.join('\n\n') + listing;
 }
 
 /** Google exports UTF-8; a lone bad byte should not fail the whole read. */
