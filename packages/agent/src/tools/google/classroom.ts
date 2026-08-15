@@ -6,7 +6,10 @@ import {
   CLASSROOM_ANNOUNCEMENTS_SCOPE,
   CLASSROOM_COURSES_SCOPE,
   CLASSROOM_COURSEWORK_SCOPE,
+  CLASSROOM_COURSEWORK_WRITE_SCOPE,
   CLASSROOM_MATERIALS_SCOPE,
+  CLASSROOM_SUBMISSIONS_SCOPE,
+  CLASSROOM_TOPICS_SCOPE,
 } from './scopes.js';
 
 const COURSES_URL = 'https://classroom.googleapis.com/v1/courses';
@@ -368,3 +371,251 @@ function formatDue(
 
   return `${day}T${pad(time.hours ?? 0)}:${pad(time.minutes ?? 0)}`;
 }
+
+/* ==========================================================================
+ * Parity with what a student can do in the Classroom UI.
+ *
+ * The tools below exist because the goal is that the agent can reach anything
+ * a student could reach by opening Classroom themselves, and change anything
+ * they could change there. Two limits on that, both Google's rather than ours:
+ *
+ *   1. Scopes. A tool is registered only when its scope is granted, so a
+ *      school that withholds one loses that tool and nothing else.
+ *   2. The API is narrower than the UI. Private and class comments have NO
+ *      endpoint -- not a scope problem, simply absent from the API. Nothing
+ *      here can reach them, and the agent should say so rather than pretend.
+ * ========================================================================== */
+
+export interface SubmissionSummary {
+  course: string;
+  assignment: string;
+  state: string;
+  late: boolean;
+  grade: number | null;
+  maxPoints: number | null;
+  submissionId: string;
+  courseId: string;
+  courseWorkId: string;
+  link?: string;
+}
+
+const SUBMISSION_STATES: Record<string, string> = {
+  NEW: 'not started',
+  CREATED: 'not turned in',
+  TURNED_IN: 'turned in',
+  RETURNED: 'graded and returned',
+  RECLAIMED_BY_STUDENT: 'taken back',
+};
+
+/**
+ * Grades and turn-in status.
+ *
+ * Uses the `-` wildcard for courseWork, which asks Classroom for every
+ * submission in a course in one call. Iterating assignments instead would be
+ * one request per assignment per course -- on a 14-course account that is
+ * hundreds of calls and a guaranteed rate limit.
+ */
+export const listSubmissions: Tool<Record<string, never>, unknown> = {
+  id: 'google_classroom_list_submissions',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_SUBMISSIONS_SCOPE],
+  description:
+    "List the student's own work: what is turned in, what is missing, what is late, and any " +
+    'grades they have been given. Call this when they ask how they are doing, what they still ' +
+    'owe, what they got on something, or whether they handed something in.',
+  inputSchema: z.object({}),
+
+  async execute(_input, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable(
+        'Google Classroom is not connected, or your school has not approved Contexto.',
+      );
+    }
+
+    const submissions = await forEachCourse<SubmissionSummary>(
+      token,
+      ctx.signal,
+      (id) => `${COURSES_URL}/${id}/courseWork/-/studentSubmissions?pageSize=200`,
+      (payload: { studentSubmissions?: RawSubmission[] }, courseName) =>
+        (payload.studentSubmissions ?? []).map((s) => ({
+          course: courseName,
+          // The API returns no assignment title here; the agent can join on
+          // courseWorkId via list_coursework when the student needs names.
+          assignment: s.courseWorkId ?? '(unknown assignment)',
+          state: SUBMISSION_STATES[s.state ?? ''] ?? (s.state ?? 'unknown').toLowerCase(),
+          late: s.late === true,
+          grade: typeof s.assignedGrade === 'number' ? s.assignedGrade : null,
+          maxPoints: null,
+          submissionId: s.id ?? '',
+          courseId: s.courseId ?? '',
+          courseWorkId: s.courseWorkId ?? '',
+          ...(s.alternateLink ? { link: s.alternateLink } : {}),
+        })),
+    );
+    if (isUnavailable(submissions)) return submissions;
+
+    const late = submissions.filter((s) => s.late).length;
+    const missing = submissions.filter((s) => s.state === 'not turned in').length;
+
+    return {
+      submissions,
+      count: submissions.length,
+      late,
+      missing,
+      note:
+        'assignment holds a courseWorkId, not a title. Use google_classroom_list_coursework ' +
+        'to match ids to assignment names when the student needs to know which is which.',
+    };
+  },
+};
+
+interface RawSubmission {
+  id?: string;
+  courseId?: string;
+  courseWorkId?: string;
+  state?: string;
+  late?: boolean;
+  assignedGrade?: number;
+  alternateLink?: string;
+}
+
+export interface Topic {
+  course: string;
+  name: string;
+  topicId: string;
+}
+
+export const listTopics: Tool<Record<string, never>, unknown> = {
+  id: 'google_classroom_list_topics',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_TOPICS_SCOPE],
+  description:
+    'List the topics (units or sections) teachers use to organise each course. Useful when a ' +
+    'student asks what a class covers, or refers to a unit by name.',
+  inputSchema: z.object({}),
+
+  async execute(_input, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable(
+        'Google Classroom is not connected, or your school has not approved Contexto.',
+      );
+    }
+
+    const topics = await forEachCourse<Topic>(
+      token,
+      ctx.signal,
+      (id) => `${COURSES_URL}/${id}/topics?pageSize=100`,
+      (payload: { topic?: { topicId?: string; name?: string }[] }, courseName) =>
+        (payload.topic ?? []).map((t) => ({
+          course: courseName,
+          name: t.name ?? 'Untitled topic',
+          topicId: t.topicId ?? '',
+        })),
+    );
+    if (isUnavailable(topics)) return topics;
+
+    return { topics, count: topics.length };
+  },
+};
+
+const submissionRefInput = z.object({
+  courseId: z.string().min(1).describe('From google_classroom_list_submissions'),
+  courseWorkId: z.string().min(1).describe('From google_classroom_list_submissions'),
+  submissionId: z.string().min(1).describe('From google_classroom_list_submissions'),
+});
+
+/**
+ * Turn work in.
+ *
+ * Gated on an ELECTIVE scope, so it exists only for a student who explicitly
+ * asked for it. Handing work in is not undoable on the student's side once a
+ * teacher returns it, and it is their name on the submission -- so the
+ * description tells the model to confirm first. That instruction is a
+ * safeguard, not a guarantee: the real control is that the scope is off by
+ * default.
+ */
+export const turnInAssignment: Tool<z.infer<typeof submissionRefInput>, unknown> = {
+  id: 'google_classroom_turn_in',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_WRITE_SCOPE],
+  description:
+    "Turn in an assignment on the student's behalf. This submits their work under their name, " +
+    'so ALWAYS confirm with them which assignment, and that they are ready, before calling it. ' +
+    'Never turn work in as a side effect of another request.',
+  inputSchema: submissionRefInput,
+
+  async execute({ courseId, courseWorkId, submissionId }, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable('Google Classroom is not connected.');
+    }
+
+    const result = await googleFetch<Record<string, never>>(
+      `${COURSES_URL}/${courseId}/courseWork/${courseWorkId}/studentSubmissions/${submissionId}:turnIn`,
+      token,
+      { method: 'POST', body: {}, ...(ctx.signal ? { signal: ctx.signal } : {}) },
+    );
+    if (isUnavailable(result)) return result;
+
+    return { turnedIn: true, note: 'The assignment is now turned in.' };
+  },
+};
+
+export const unsubmitAssignment: Tool<z.infer<typeof submissionRefInput>, unknown> = {
+  id: 'google_classroom_unsubmit',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_WRITE_SCOPE],
+  description:
+    'Take back an assignment the student has turned in, so they can keep working on it. ' +
+    'Confirm with them first. Note this can mark the work late if they resubmit after the ' +
+    'due date.',
+  inputSchema: submissionRefInput,
+
+  async execute({ courseId, courseWorkId, submissionId }, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable('Google Classroom is not connected.');
+    }
+
+    const result = await googleFetch<Record<string, never>>(
+      `${COURSES_URL}/${courseId}/courseWork/${courseWorkId}/studentSubmissions/${submissionId}:reclaim`,
+      token,
+      { method: 'POST', body: {}, ...(ctx.signal ? { signal: ctx.signal } : {}) },
+    );
+    if (isUnavailable(result)) return result;
+
+    return { reclaimed: true, note: 'Taken back. It is no longer turned in.' };
+  },
+};
+
+const attachInput = submissionRefInput.extend({
+  fileId: z.string().min(1).describe('Drive file id to attach, from google_drive_list_files'),
+});
+
+export const attachToSubmission: Tool<z.infer<typeof attachInput>, unknown> = {
+  id: 'google_classroom_attach_file',
+  requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_COURSEWORK_WRITE_SCOPE],
+  description:
+    'Attach a Drive file to an assignment the student has not turned in yet. Does NOT turn it ' +
+    'in -- use google_classroom_turn_in for that, as a separate confirmed step.',
+  inputSchema: attachInput,
+
+  async execute({ courseId, courseWorkId, submissionId, fileId }, ctx) {
+    const token = await ctx.google?.getAccessToken('classroom');
+    if (!token) {
+      return unavailable('Google Classroom is not connected.');
+    }
+
+    const result = await googleFetch<Record<string, never>>(
+      `${COURSES_URL}/${courseId}/courseWork/${courseWorkId}/studentSubmissions/${submissionId}` +
+        ':modifyAttachments',
+      token,
+      {
+        method: 'POST',
+        body: { addAttachments: [{ driveFile: { id: fileId } }] },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      },
+    );
+    if (isUnavailable(result)) return result;
+
+    return { attached: true, note: 'Attached. Not turned in yet.' };
+  },
+};

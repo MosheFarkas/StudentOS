@@ -32,10 +32,17 @@ export {
   listCourses,
   listCourseMaterials,
   listAnnouncements,
+  listSubmissions,
+  listTopics,
+  turnInAssignment,
+  unsubmitAssignment,
+  attachToSubmission,
   type Assignment,
   type Attachment,
   type CourseMaterial,
   type Announcement,
+  type SubmissionSummary,
+  type Topic,
 } from './tools/google/classroom.js';
 export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
 export * from './tools/google/scopes.js';

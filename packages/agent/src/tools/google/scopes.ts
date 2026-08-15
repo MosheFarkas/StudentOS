@@ -48,6 +48,16 @@ export const CLASSROOM_MATERIALS_SCOPE =
   'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly';
 
 /**
+ * Turn work in, take it back, attach files to a submission.
+ *
+ * The write counterpart of coursework.me.readonly, and elective rather than
+ * requested by default -- see the note at the bottom of this file on what it
+ * means to let an agent submit work under a student's name.
+ */
+export const CLASSROOM_COURSEWORK_WRITE_SCOPE =
+  'https://www.googleapis.com/auth/classroom.coursework.me';
+
+/**
  * Per-file Drive access.
  *
  * NON-SENSITIVE -- the lightest tier Google has, needing only basic OAuth
@@ -121,6 +131,7 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
       CLASSROOM_TOPICS_SCOPE,
       CLASSROOM_MATERIALS_SCOPE,
     ],
+    elective: [CLASSROOM_COURSEWORK_WRITE_SCOPE],
   },
 
   /**

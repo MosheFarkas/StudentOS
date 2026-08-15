@@ -5,6 +5,7 @@ import { connectGoogleScopes } from '../lib/auth.js';
 type Status = {
   calendar: boolean;
   classroom: boolean;
+  classroomWrite: boolean;
   missing: { calendar: string[]; classroom: string[] };
 };
 type Group = 'calendar' | 'classroom';
@@ -44,17 +45,17 @@ export function GoogleConnections() {
     void load();
   }, []);
 
-  async function connect(group: Group) {
+  async function connect(group: Group, elective = false) {
     setBusy(group);
     setError(null);
 
     try {
       // The server decides the scope list, because it has to include what is
-      // already granted -- see lib/auth.ts.
-      // No elective scopes for these groups; the key is required by the type.
+      // already granted -- see lib/auth.ts. `elective` adds the group's
+      // opt-in scopes on top, which for Classroom means turning work in.
       const res = await api.google['connect-scopes'][':group'].$get({
         param: { group },
-        query: {},
+        query: elective ? { elective: 'true' } : {},
       });
       if (!res.ok) throw new Error('Could not work out which permissions to request.');
 
@@ -118,6 +119,32 @@ export function GoogleConnections() {
         <p className="muted">
           Your school hasn&apos;t approved everything: your agent can&apos;t see{' '}
           {describeMissing(status.missing.classroom)}. Courses still work.
+        </p>
+      )}
+
+      {/*
+       * Turning work in is off unless asked for, and stays a separate decision
+       * from connecting Classroom. It is the student's name on a submission,
+       * so it should never arrive as a side effect of connecting to read.
+       */}
+      {status.classroom && !status.classroomWrite && (
+        <div className="row static">
+          <span>
+            <strong>Let your agent turn work in</strong>
+            <br />
+            <span className="muted">
+              Hand in and take back assignments, and attach files to them.
+            </span>
+          </span>
+          <button disabled={busy !== null} onClick={() => void connect('classroom', true)}>
+            {busy === 'classroom' ? 'Opening…' : 'Allow'}
+          </button>
+        </div>
+      )}
+
+      {status.classroomWrite && (
+        <p className="muted">
+          Your agent can turn work in. It will ask you before submitting anything.
         </p>
       )}
 

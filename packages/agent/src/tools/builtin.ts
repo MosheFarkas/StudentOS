@@ -8,10 +8,15 @@ import {
   updateCalendarEvent,
 } from './google/calendar.js';
 import {
+  attachToSubmission,
   listAnnouncements,
   listCourseMaterials,
   listCourses,
   listCoursework,
+  listSubmissions,
+  listTopics,
+  turnInAssignment,
+  unsubmitAssignment,
 } from './google/classroom.js';
 import { listDriveFiles, readDriveFile } from './google/drive.js';
 
@@ -24,6 +29,11 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   listCoursework,
   listCourseMaterials,
   listAnnouncements,
+  listSubmissions,
+  listTopics,
+  turnInAssignment,
+  unsubmitAssignment,
+  attachToSubmission,
   listDriveFiles,
   readDriveFile,
 ] as unknown as Tool<never, unknown>[];
