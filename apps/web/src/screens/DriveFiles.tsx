@@ -109,8 +109,8 @@ export function DriveFiles() {
 
           {files && files.length === 0 && (
             <p className="muted">
-              No files yet. Use <strong>Add files</strong> to pick them — teacher-posted materials
-              are under <em>Shared with me</em>.
+              No files yet. Use <strong>Add files</strong> — you can select several at once, or a
+              whole folder. Teacher-posted materials are under <em>Shared with me</em>.
             </p>
           )}
 

@@ -172,6 +172,13 @@ async function extract(
     return decode(bytes);
   }
 
+  if (mimeType === FOLDER_MIME) {
+    return unavailable(
+      `"${name}" is a folder, not a document. Use google_drive_list_files to see what is ` +
+        'inside it, then read those files.',
+    );
+  }
+
   if (mimeType.startsWith('image/') || mimeType.startsWith('video/')) {
     return unavailable(`"${name}" is a ${mimeType.split('/')[0]}, so there is no text to read.`);
   }
@@ -210,6 +217,12 @@ export interface AccessibleFile {
  * listing to what the app was granted, so we keep no record of our own to
  * drift out of sync when a student revokes access from their Google account.
  */
+const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+/** How deep to walk into picked folders, and how many to expand at all. */
+const MAX_FOLDER_DEPTH = 3;
+const MAX_FOLDERS = 25;
+
 export async function listAccessibleFiles(
   token: string,
   signal?: AbortSignal,
@@ -222,12 +235,74 @@ export async function listAccessibleFiles(
   );
   if (isUnavailable(result)) return result;
 
-  return (result.files ?? []).map((f) => ({
+  const top = result.files ?? [];
+  const expanded = await expandFolders(top, token, signal);
+
+  return expanded.map((f) => ({
     fileId: f.id,
     name: f.name ?? 'Untitled',
     kind: describeKind(f.mimeType ?? ''),
     ...(f.modifiedTime ? { modifiedAt: f.modifiedTime } : {}),
   }));
+}
+
+/**
+ * Walk into picked folders.
+ *
+ * A student picking a folder means "read what is in here" -- one action for a
+ * whole course instead of one per handout, which is the difference between
+ * this feature being usable and being a chore.
+ *
+ * Whether it works is Google's call, not ours: drive.file is documented as
+ * per-file, and the docs do not say whether granting a folder cascades to its
+ * contents. So this ASKS and accepts the answer. If Drive declines, the query
+ * returns nothing, the folder is simply listed on its own, and per-file
+ * picking still works -- no error either way, because a student picking a
+ * folder that turns out not to cascade has done nothing wrong.
+ *
+ * Bounded on both depth and folder count. A shared drive can be enormous, and
+ * an unbounded walk would hang Settings on someone else's filing habits.
+ */
+async function expandFolders(
+  files: FileMeta[],
+  token: string,
+  signal: AbortSignal | undefined,
+): Promise<FileMeta[]> {
+  const seen = new Set(files.map((f) => f.id));
+  const out = [...files];
+
+  let frontier = files.filter((f) => f.mimeType === FOLDER_MIME);
+  let budget = MAX_FOLDERS;
+
+  for (let depth = 0; depth < MAX_FOLDER_DEPTH && frontier.length > 0 && budget > 0; depth += 1) {
+    const next: FileMeta[] = [];
+
+    for (const folder of frontier) {
+      if (budget-- <= 0) break;
+
+      const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
+      const children = await googleFetch<{ files?: FileMeta[] }>(
+        `${FILES_URL}?q=${query}&pageSize=100` +
+          '&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true' +
+          '&includeItemsFromAllDrives=true',
+        token,
+        { ...(signal ? { signal } : {}) },
+      );
+      // Not an error: this is the expected answer when access does not cascade.
+      if (isUnavailable(children)) continue;
+
+      for (const child of children.files ?? []) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
+        out.push(child);
+        if (child.mimeType === FOLDER_MIME) next.push(child);
+      }
+    }
+
+    frontier = next;
+  }
+
+  return out;
 }
 
 export const listDriveFiles: Tool<Record<string, never>, unknown> = {

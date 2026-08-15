@@ -197,6 +197,82 @@ describe('readDriveFile', () => {
   });
 });
 
+const FOLDER = 'application/vnd.google-apps.folder';
+
+describe('picked folders', () => {
+  /**
+   * The point of allowing folder selection: one pick covers a course. This
+   * only works if Drive cascades access under drive.file, which the docs do
+   * not promise -- so the two tests below pin BOTH outcomes as acceptable.
+   */
+  it('lists what is inside a picked folder', async () => {
+    responses = [
+      {
+        match: /files\?pageSize=100/,
+        json: { files: [{ id: 'dir', name: 'Math 10', mimeType: FOLDER }] },
+      },
+      {
+        match: /files\?q=/,
+        json: {
+          files: [
+            { id: 'c1', name: 'Review', mimeType: 'application/pdf' },
+            { id: 'c2', name: 'Notes', mimeType: 'application/vnd.google-apps.document' },
+          ],
+        },
+      },
+    ];
+
+    const result = (await listDriveFiles.execute({}, ctx())) as {
+      files: { name: string }[];
+      count: number;
+    };
+    expect(result.count).toBe(3);
+    expect(result.files.map((f) => f.name)).toContain('Review');
+  });
+
+  /**
+   * When access does NOT cascade, Drive answers 403/404 for the children.
+   * That is not an error the student caused and must not break the listing --
+   * they simply see the folder and can still pick files individually.
+   */
+  it('degrades quietly when Drive will not expand the folder', async () => {
+    responses = [
+      {
+        match: /files\?pageSize=100/,
+        json: { files: [{ id: 'dir', name: 'Math 10', mimeType: FOLDER }] },
+      },
+      { match: /files\?q=/, status: 403, json: { error: { message: 'Insufficient permission' } } },
+    ];
+
+    const result = (await listDriveFiles.execute({}, ctx())) as {
+      files: { name: string; kind: string }[];
+      count: number;
+    };
+    expect(result.count).toBe(1);
+    expect(result.files[0]?.kind).toBe('Folder');
+  });
+
+  it('does not loop forever on a folder that contains itself', async () => {
+    responses = [
+      {
+        match: /files\?pageSize=100/,
+        json: { files: [{ id: 'dir', name: 'Loop', mimeType: FOLDER }] },
+      },
+      // Drive should never return this, but a cycle here would hang Settings.
+      { match: /files\?q=/, json: { files: [{ id: 'dir', name: 'Loop', mimeType: FOLDER }] } },
+    ];
+
+    const result = (await listDriveFiles.execute({}, ctx())) as { count: number };
+    expect(result.count).toBe(1);
+  });
+
+  it('tells the agent to list a folder rather than read it', async () => {
+    responses = [meta(FOLDER)];
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { reason: string }).reason).toContain('is a folder');
+  });
+});
+
 describe('listDriveFiles', () => {
   it('labels file kinds readably', async () => {
     responses = [

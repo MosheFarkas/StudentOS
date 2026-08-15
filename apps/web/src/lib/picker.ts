@@ -49,6 +49,7 @@ interface GoogleGlobal {
 }
 interface PickerView {
   setIncludeFolders(value: boolean): PickerView;
+  setSelectFolderEnabled(value: boolean): PickerView;
   setOwnedByMe(value: boolean): PickerView;
 }
 interface PickerBuilder {
@@ -155,12 +156,20 @@ export async function pickDriveFiles(): Promise<PickerDoc[]> {
      * offering only the default view would hide the exact files this feature
      * exists to read.
      */
+    /*
+     * Folders are selectable, not just visible. Picking a course folder is one
+     * action instead of one per handout. Whether Drive then grants the files
+     * inside is Google's call -- the server asks and degrades quietly if not,
+     * see expandFolders in packages/agent/src/tools/google/drive.ts.
+     */
     const sharedWithMe = new picker.DocsView(picker.ViewId.DOCS)
       .setOwnedByMe(false)
-      .setIncludeFolders(true);
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true);
     const myDrive = new picker.DocsView(picker.ViewId.DOCS)
       .setOwnedByMe(true)
-      .setIncludeFolders(true);
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true);
 
     const built = new picker.PickerBuilder()
       .setTitle('Choose files your agent can read')
