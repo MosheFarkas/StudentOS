@@ -1,3 +1,4 @@
+import { strToU8, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listDriveFiles, readDriveFile } from './drive.js';
 import type { ToolContext } from '../types.js';
@@ -33,7 +34,13 @@ const NOT_FOUND = {
   error: { code: 404, message: 'File not found: abc.', errors: [{ reason: 'notFound' }] },
 };
 
-let responses: Array<{ match: RegExp; status?: number; json?: unknown; body?: string }>;
+let responses: Array<{
+  match: RegExp;
+  status?: number;
+  json?: unknown;
+  body?: string;
+  bytes?: Uint8Array;
+}>;
 
 function ctx(token: string | null = 'token', broadAccess = false): ToolContext {
   return {
@@ -55,6 +62,10 @@ beforeEach(() => {
     if (!stub) throw new Error(`Unexpected request: ${url}`);
 
     const status = stub.status ?? 200;
+    if (stub.bytes) {
+      // Copied into a fresh ArrayBuffer: Response wants a plain buffer source.
+      return new Response(stub.bytes.slice().buffer as ArrayBuffer, { status });
+    }
     const body = stub.json !== undefined ? JSON.stringify(stub.json) : (stub.body ?? '');
     return new Response(body, { status, headers: { 'Content-Type': 'application/json' } });
   });
@@ -233,13 +244,26 @@ describe('readDriveFile', () => {
   });
 
   it('names the format it cannot read yet', async () => {
-    const docx = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    responses = [meta(docx)];
+    // Word and PowerPoint are read now; this is for what genuinely is not.
+    responses = [meta('application/x-iso9660-image')];
 
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
     const reason = (result as { reason: string }).reason;
     expect(reason).toContain('Exam Review');
     expect(reason).toContain('Google Docs');
+  });
+
+  it('reads a Word document', async () => {
+    const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const body =
+      '<w:document><w:body><w:p><w:t>Quiet </w:t><w:t>Revolution</w:t></w:p></w:body></w:document>';
+    responses = [
+      meta(DOCX),
+      { match: /alt=media/, bytes: zipSync({ 'word/document.xml': strToU8(body) }) },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { content: string }).content).toContain('Quiet Revolution');
   });
 
   it('reads a plain text file directly', async () => {
