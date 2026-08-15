@@ -369,7 +369,17 @@ export async function listAccessibleFiles(
   const { broadAccess = false, search, signal } = options;
 
   const clauses = ['trashed = false'];
-  if (search?.trim()) clauses.push(`name contains '${escapeQuery(search.trim())}'`);
+  if (search?.trim()) {
+    /*
+     * Both matchers, because they find different things. Measured against a
+     * real school account: `name contains 'Crack the Case'` returned NOTHING
+     * for a file that exists and is readable, while `fullText contains` found
+     * it. fullText covers the file's content and its name, and reaches files
+     * a plain name match does not.
+     */
+    const term = escapeQuery(search.trim());
+    clauses.push(`(name contains '${term}' or fullText contains '${term}')`);
+  }
 
   const result = await googleFetch<{ files?: FileMeta[] }>(
     `${FILES_URL}?q=${encodeURIComponent(clauses.join(' and '))}` +

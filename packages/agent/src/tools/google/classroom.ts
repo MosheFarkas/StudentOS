@@ -261,11 +261,12 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
   id: 'google_classroom_list_materials',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_MATERIALS_SCOPE],
   description:
-    "List the files, slides, videos, and links teachers have posted to the student's " +
-    'courses. Call this when they ask about class materials, readings, notes, or "the files" ' +
-    'for a course. You cannot read file contents, only titles and links. Always include each ' +
-    "item's link as a markdown link -- the student can open and read the file in Contexto by " +
-    'clicking it, so a title without its link is not useful to them.',
+    "List the files, slides, videos, and links teachers have posted to the student's courses. " +
+    'Call this when they ask about class materials, readings, notes, or "the files" for a ' +
+    'course. THIS IS THE RELIABLE WAY TO FIND COURSE FILES: each attachment carries a fileId ' +
+    'you can pass straight to google_drive_read_file to read its contents, and searching Drive ' +
+    'by name will often miss these because Drive omits files the student has never opened. ' +
+    "Include each item's link as a markdown link too, so the student can open it themselves.",
   inputSchema: z.object({}),
 
   async execute(_input, ctx) {
