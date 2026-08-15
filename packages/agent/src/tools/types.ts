@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { ScopeGroup } from './google/scopes.js';
 
 /**
  * Something an agent can do in the world.
@@ -49,7 +50,12 @@ export interface ToolContext {
  * already stores refreshToken and accessTokenExpiresAt.
  */
 export interface GoogleTokenProvider {
-  getAccessToken(scopeGroup: 'calendar' | 'classroom'): Promise<string | null>;
+  /**
+   * Derived from ScopeGroup rather than listed, so adding a group cannot
+   * leave this signature behind -- 'identity' is excluded because it is
+   * granted at sign-in and no tool asks for it.
+   */
+  getAccessToken(scopeGroup: Exclude<ScopeGroup, 'identity'>): Promise<string | null>;
 }
 
 /** Returned when a tool cannot run for a reason the student can act on. */

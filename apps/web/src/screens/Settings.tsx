@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ByokProvider, CredentialSummary, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { DriveFiles } from './DriveFiles.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 
@@ -62,6 +63,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       )}
 
       <GoogleConnections />
+
+      <DriveFiles />
 
       <TelegramConnection />
 

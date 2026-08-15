@@ -156,7 +156,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
 
 /** Attachments Classroom hangs off materials, announcements, and coursework. */
 interface ClassroomMaterial {
-  driveFile?: { driveFile?: { title?: string; alternateLink?: string } };
+  driveFile?: { driveFile?: { id?: string; title?: string; alternateLink?: string } };
   youtubeVideo?: { title?: string; alternateLink?: string };
   link?: { title?: string; url?: string };
   form?: { title?: string; formUrl?: string };
@@ -166,6 +166,8 @@ export interface Attachment {
   kind: 'file' | 'video' | 'link' | 'form';
   title: string;
   url?: string;
+  /** Drive id, for reading the file's contents. Files only. */
+  fileId?: string;
 }
 
 function toAttachments(materials: ClassroomMaterial[] | undefined): Attachment[] {
@@ -177,6 +179,9 @@ function toAttachments(materials: ClassroomMaterial[] | undefined): Attachment[]
           kind: 'file',
           title: f.title ?? 'Untitled file',
           ...(f.alternateLink ? { url: f.alternateLink } : {}),
+          // Carried so the read tool has a handle. Without it the agent can
+          // name a file and has no way to open it.
+          ...(f.id ? { fileId: f.id } : {}),
         },
       ];
     }

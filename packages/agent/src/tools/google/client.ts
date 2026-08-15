@@ -37,6 +37,31 @@ export async function googleFetch<T>(
     return (await response.json()) as T;
   }
 
+  return mapGoogleError(response);
+}
+
+/**
+ * Fetch a response body Google does not return as JSON.
+ *
+ * Drive exports and media downloads return the file itself, so the JSON caller
+ * above cannot be reused for them -- but the error mapping must be, because a
+ * blocked download fails for exactly the same reasons a blocked list does.
+ */
+export async function googleFetchRaw(
+  url: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer | ToolUnavailable> {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    ...(signal ? { signal } : {}),
+  });
+
+  if (response.ok) return await response.arrayBuffer();
+  return mapGoogleError(response);
+}
+
+async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
   const errorBody = (await response.json().catch(() => null)) as GoogleErrorBody | null;
   const reason = errorBody?.error?.errors?.[0]?.reason ?? errorBody?.error?.status ?? '';
   const message = errorBody?.error?.message ?? `HTTP ${response.status}`;

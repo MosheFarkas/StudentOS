@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
-import { SCOPE_GROUPS, missingOptionalScopes, scopesFor, type ScopeGroup } from '@contexto/agent';
+import {
+  SCOPE_GROUPS,
+  listAccessibleFiles,
+  missingOptionalScopes,
+  scopesFor,
+  type ScopeGroup,
+} from '@contexto/agent';
 import type { AppContext } from '../context.js';
-import { getGoogleGrant } from '../google/connections.js';
+import { BetterAuthGoogleTokenProvider, getGoogleGrant } from '../google/connections.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 /**
@@ -27,6 +33,9 @@ export function createGoogleRoutes(ctx: AppContext) {
         return c.json({
           calendar: grant.groups.includes('calendar'),
           classroom: grant.groups.includes('classroom'),
+          // Drive being connected means "ready to be given files", not "can
+          // read your Drive" -- access is per file. The UI has to say so.
+          drive: grant.groups.includes('drive'),
           missing: {
             calendar: missingOptionalScopes('calendar', grant.scope),
             classroom: missingOptionalScopes('classroom', grant.scope),
@@ -60,10 +69,39 @@ export function createGoogleRoutes(ctx: AppContext) {
 
         return c.json({ scopes: scopesFor(groups) });
       })
+
+      /**
+       * The files the student has handed over.
+       *
+       * Drive itself is the record: under drive.file, files.list returns
+       * exactly what was picked. Keeping our own table of picked ids would
+       * add a second source of truth that drifts the moment a student
+       * revokes access from their Google account.
+       */
+      .get('/drive/files', auth, async (c) => {
+        const userId = c.get('userId');
+        const grant = await getGoogleGrant(ctx.db, userId);
+
+        if (!grant.groups.includes('drive')) {
+          return c.json({ files: [], connected: false });
+        }
+
+        const provider = new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups);
+        const token = await provider.getAccessToken('drive');
+        if (!token) {
+          return c.json({ files: [], connected: true, error: 'Reconnect Google in Settings.' });
+        }
+
+        const files = await listAccessibleFiles(token);
+        if ('unavailable' in files) {
+          return c.json({ files: [], connected: true, error: files.reason });
+        }
+        return c.json({ files, connected: true });
+      })
   );
 }
 
 /** Identity is granted at sign-in and is not separately connectable. */
-function isConnectableGroup(value: string): value is 'calendar' | 'classroom' {
+function isConnectableGroup(value: string): value is Exclude<ScopeGroup, 'identity'> {
   return value in SCOPE_GROUPS && value !== 'identity';
 }

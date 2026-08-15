@@ -54,7 +54,7 @@ export class BetterAuthGoogleTokenProvider implements GoogleTokenProvider {
     private readonly granted: ScopeGroup[],
   ) {}
 
-  async getAccessToken(scopeGroup: 'calendar' | 'classroom'): Promise<string | null> {
+  async getAccessToken(scopeGroup: Exclude<ScopeGroup, 'identity'>): Promise<string | null> {
     // Checked before minting: a token is useless for a scope the student never
     // granted, and asking for one costs a round trip to answer "no".
     if (!this.granted.includes(scopeGroup)) {

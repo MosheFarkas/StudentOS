@@ -38,7 +38,20 @@ export const CLASSROOM_TOPICS_SCOPE = 'https://www.googleapis.com/auth/classroom
 export const CLASSROOM_MATERIALS_SCOPE =
   'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly';
 
-export type ScopeGroup = 'identity' | 'calendar' | 'classroom';
+/**
+ * Per-file Drive access.
+ *
+ * NON-SENSITIVE -- the lightest tier Google has, needing only basic OAuth
+ * verification. It grants nothing on its own: the app can read a file only
+ * once the student has explicitly handed that file over through the Google
+ * Picker.
+ *
+ * That is why this scope and not drive.readonly. See the note at the bottom
+ * of this file.
+ */
+export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+export type ScopeGroup = 'identity' | 'calendar' | 'classroom' | 'drive';
 
 export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   /** Always requested. The minimum to create an account and nothing more. */
@@ -78,6 +91,19 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
       CLASSROOM_TOPICS_SCOPE,
       CLASSROOM_MATERIALS_SCOPE,
     ],
+  },
+
+  /**
+   * Reading the contents of files the student hands over.
+   *
+   * Granting this scope alone lets the agent read NOTHING. Access is per file
+   * and is granted by the student picking that file, which is what makes the
+   * scope non-sensitive. The connection being green therefore means "ready to
+   * be given files", not "can read your Drive" -- the UI has to say so.
+   */
+  drive: {
+    required: [DRIVE_FILE_SCOPE],
+    optional: [],
   },
 };
 
@@ -187,5 +213,29 @@ export function scopesFor(groups: ScopeGroup[]): string[] {
  * Sources:
  *   https://support.google.com/a/answer/13288950
  *   https://developers.google.com/workspace/classroom/best-practices/access-control-enhancements
+ * ===========================================================================
+ *
+ * ===========================================================================
+ * WHY DRIVE IS PER-FILE (drive.file) AND NOT drive.readonly
+ * ===========================================================================
+ *
+ * drive.readonly is RESTRICTED. Google's own qualification text is explicit
+ * that storing or transmitting restricted-scope data off the device triggers a
+ * security assessment, and we necessarily transmit file text to an LLM. That
+ * assessment recurs ANNUALLY. drive.file is non-sensitive: basic verification,
+ * no assessment, no recurring cost. Google's Drive scope guide now recommends
+ * migrating restricted-scope apps to it.
+ *
+ * The tradeoff is real and worth naming: drive.file means the agent can only
+ * read what the student has handed it through the Picker. It cannot go looking.
+ * For a product used by minors, being structurally unable to read a student's
+ * whole Drive is a feature -- it is the difference between "reads the exam
+ * review you gave it" and "has your entire Drive".
+ *
+ * If broad access is ever wanted, Contexto DOES qualify to apply, under the
+ * "Productivity and education" category. Only the scope constant and the
+ * Picker gate would change; the extraction pipeline is identical.
+ *
+ * Source: https://developers.google.com/workspace/drive/api/guides/api-specific-auth
  * ===========================================================================
  */

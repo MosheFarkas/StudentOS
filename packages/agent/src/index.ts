@@ -37,6 +37,7 @@ export {
   type CourseMaterial,
   type Announcement,
 } from './tools/google/classroom.js';
+export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
 export * from './tools/google/scopes.js';
 
 export {

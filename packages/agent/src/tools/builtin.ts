@@ -13,6 +13,7 @@ import {
   listCourses,
   listCoursework,
 } from './google/classroom.js';
+import { listDriveFiles, readDriveFile } from './google/drive.js';
 
 const ALL_TOOLS: Tool<never, unknown>[] = [
   listCalendarEvents,
@@ -23,6 +24,8 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   listCoursework,
   listCourseMaterials,
   listAnnouncements,
+  listDriveFiles,
+  readDriveFile,
 ] as unknown as Tool<never, unknown>[];
 
 /**
