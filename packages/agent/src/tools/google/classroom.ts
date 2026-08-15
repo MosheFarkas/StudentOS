@@ -14,6 +14,9 @@ import {
 
 const COURSES_URL = 'https://classroom.googleapis.com/v1/courses';
 
+/** Stops a pathological account from looping forever on paging. */
+const MAX_PAGES = 20;
+
 /**
  * List active courses.
  *
@@ -242,9 +245,29 @@ async function forEachCourse<T>(
 
   const out: T[] = [];
   for (const course of courses.courses ?? []) {
-    const payload = await googleFetch(path(course.id), token, { ...(signal ? { signal } : {}) });
-    if (isUnavailable(payload)) continue;
-    out.push(...extract(payload as never, course.name ?? 'Unknown course'));
+    let pageToken: string | undefined;
+
+    /*
+     * Followed to the end rather than taking the first page. Today every
+     * course fits in one -- measured, 234 items either way -- but a page cap
+     * that silently drops a student's coursework is the kind of bug that
+     * looks like the teacher never posted it.
+     */
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const base = path(course.id);
+      const url = pageToken
+        ? `${base}${base.includes('?') ? '&' : '?'}pageToken=${encodeURIComponent(pageToken)}`
+        : base;
+
+      const payload = await googleFetch<{ nextPageToken?: string }>(url, token, {
+        ...(signal ? { signal } : {}),
+      });
+      if (isUnavailable(payload)) break;
+
+      out.push(...extract(payload as never, course.name ?? 'Unknown course'));
+      pageToken = payload.nextPageToken;
+      if (!pageToken) break;
+    }
   }
   return out;
 }
@@ -263,9 +286,10 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
   description:
     "List the files, slides, videos, and links teachers have posted to the student's courses. " +
     'Call this when they ask about class materials, readings, notes, or "the files" for a ' +
-    'course. THIS IS THE RELIABLE WAY TO FIND COURSE FILES: each attachment carries a fileId ' +
-    'you can pass straight to google_drive_read_file to read its contents, and searching Drive ' +
-    'by name will often miss these because Drive omits files the student has never opened. ' +
+    'course. Each attachment carries a fileId you can pass straight to google_drive_read_file ' +
+    'to read its contents. If a file is not here, check google_classroom_list_announcements -- ' +
+    'teachers attach files to announcements as well. Searching Drive by name ' +
+    'will often miss them, because Drive omits files the student has never opened. ' +
     "Include each item's link as a markdown link too, so the student can open it themselves.",
   inputSchema: z.object({}),
 
@@ -280,7 +304,7 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
     const materials = await forEachCourse<CourseMaterial>(
       token,
       ctx.signal,
-      (id) => `${COURSES_URL}/${id}/courseWorkMaterials`,
+      (id) => `${COURSES_URL}/${id}/courseWorkMaterials?pageSize=100`,
       (payload: { courseWorkMaterial?: RawMaterial[] }, courseName) =>
         (payload.courseWorkMaterial ?? []).map((item) => ({
           course: courseName,
@@ -315,8 +339,11 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
   id: 'google_classroom_list_announcements',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_ANNOUNCEMENTS_SCOPE],
   description:
-    "List recent announcements teachers have posted to the student's courses. Call this " +
-    'when they ask what their teacher said, what they missed, or what is new in a class.',
+    "List announcements teachers have posted to the student's courses. Call this when they " +
+    'ask what a teacher said, what they missed, or what is new in a class. IMPORTANT: teachers ' +
+    'also attach FILES to announcements, and those attachments carry a fileId you can pass to ' +
+    'google_drive_read_file. If a file is not in google_classroom_list_materials, look here ' +
+    'before concluding it does not exist.',
   inputSchema: z.object({}),
 
   async execute(_input, ctx) {
@@ -330,7 +357,7 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
     const announcements = await forEachCourse<Announcement>(
       token,
       ctx.signal,
-      (id) => `${COURSES_URL}/${id}/announcements?pageSize=20`,
+      (id) => `${COURSES_URL}/${id}/announcements?pageSize=100`,
       (payload: { announcements?: RawAnnouncement[] }, courseName) =>
         (payload.announcements ?? []).map((item) => ({
           course: courseName,
