@@ -52,7 +52,7 @@ export async function runTurnForAgent(
       google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
       ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
       youtube: ctx.youtube,
-      ...(ctx.youtubeTranscripts ? { youtubeTranscripts: ctx.youtubeTranscripts } : {}),
+      youtubeTranscripts: ctx.youtubeTranscripts,
       ...(signal ? { signal } : {}),
     },
   );

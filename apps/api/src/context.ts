@@ -6,6 +6,8 @@ import { createAuth, type Auth } from './auth.js';
 import { OpenAiTranscriber } from './transcription.js';
 import { GoogleYoutubeMetadata } from './youtube.js';
 import { TranscriptApiSource } from './youtube-transcript.js';
+import { ChainedTranscriptSource, FreeTranscriptSource } from './youtube-transcript-free.js';
+import type { YoutubeTranscriptSource } from '@contexto/agent';
 import type { Env } from './env.js';
 
 /**
@@ -30,8 +32,8 @@ export interface AppContext {
   transcriber: OpenAiTranscriber | undefined;
   /** Always present: falls back to keyless oEmbed when no API key is set. */
   youtube: GoogleYoutubeMetadata;
-  /** Undefined without a key; the agent then has metadata but no transcript. */
-  youtubeTranscripts: TranscriptApiSource | undefined;
+  /** Always present: the free source needs no key. */
+  youtubeTranscripts: YoutubeTranscriptSource;
 }
 
 export function createContext(env: Env): AppContext {
@@ -64,9 +66,17 @@ export function createContext(env: Env): AppContext {
     // Constructed unconditionally: without a key it still answers from
     // oEmbed, which needs none and works today.
     youtube: new GoogleYoutubeMetadata(env.YOUTUBE_API_KEY),
-    youtubeTranscripts: env.YOUTUBE_TRANSCRIPT_API_KEY
-      ? new TranscriptApiSource(env.YOUTUBE_TRANSCRIPT_API_KEY)
-      : undefined,
+    /*
+     * Free first, paid second. The free route costs nothing when it works,
+     * and its failures are indistinguishable from a bot wall -- so a key,
+     * when set, covers exactly the videos it cannot reach.
+     */
+    youtubeTranscripts: new ChainedTranscriptSource([
+      new FreeTranscriptSource(),
+      ...(env.YOUTUBE_TRANSCRIPT_API_KEY
+        ? [new TranscriptApiSource(env.YOUTUBE_TRANSCRIPT_API_KEY)]
+        : []),
+    ]),
 
     // env.ts guarantees the secret is present whenever the token is.
     telegram:
