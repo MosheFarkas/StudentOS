@@ -1,5 +1,9 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { currentTimeSection } from './run.js';
+import { currentTimeSection, runAgentTurn } from './run.js';
+import { ToolRegistry } from './tools/registry.js';
+import type { ToolContext } from './tools/types.js';
+import type { AgentRunDeps } from './run.js';
 
 /**
  * Temporal grounding.
@@ -52,5 +56,75 @@ describe('currentTimeSection', () => {
     const lateUtc = new Date('2026-08-14T23:30:00Z');
     expect(currentTimeSection('Asia/Tokyo', lateUtc)).toContain('15 August 2026');
     expect(currentTimeSection('UTC', lateUtc)).toContain('14 August 2026');
+  });
+});
+
+/**
+ * Capability plumbing.
+ *
+ * The regression this exists for: AgentRunInput accepted a transcriber and
+ * runAgentTurn never forwarded it, so every video reported "transcription
+ * isn't configured" on a server where it was. The seam existed and stopped
+ * one layer short -- invisible to every other test, because they exercise the
+ * tools directly and build the context themselves.
+ */
+describe('tool context', () => {
+  /** Answers one tool call, then replies. Enough to reach a tool. */
+  function llmCallingProbe() {
+    let turn = 0;
+    return {
+      async chat() {
+        turn += 1;
+        const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+        return turn === 1
+          ? {
+              content: '',
+              toolCalls: [{ id: 'c1', name: 'probe', arguments: '{}' }],
+              usage,
+              finishReason: 'tool_calls' as const,
+            }
+          : { content: 'done', toolCalls: [], usage, finishReason: 'stop' as const };
+      },
+    };
+  }
+
+  it('forwards every optional capability to the tool', async () => {
+    const seen: ToolContext[] = [];
+    const tools = new ToolRegistry();
+    tools.register({
+      id: 'probe',
+      description: 'records the context it receives',
+      inputSchema: z.object({}),
+      execute: async (_input: Record<string, never>, ctx: ToolContext) => {
+        seen.push(ctx);
+        return 'ok';
+      },
+    } as never);
+
+    const google = { getAccessToken: async () => 'token', hasScope: () => true };
+    const transcriber = { transcribe: async () => 'words' };
+
+    const deps = {
+      llm: llmCallingProbe(),
+      memory: {
+        recall: async () => ({ summaries: [], recent: [] }),
+        record: async () => ({}),
+      },
+      skills: { list: async () => [] },
+      tools,
+    } as unknown as AgentRunDeps;
+
+    await runAgentTurn(deps, {
+      userId: 'u1',
+      agentId: 'a1',
+      purpose: 'test',
+      message: 'go',
+      google,
+      transcriber,
+    } as never);
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.google).toBe(google);
+    expect(seen[0]?.transcriber).toBe(transcriber);
   });
 });

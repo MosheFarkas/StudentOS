@@ -2,6 +2,7 @@ import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext } from './tools/types.js';
+import type { AudioTranscriber } from './tools/transcribe.js';
 import type { ToolRegistry } from './tools/registry.js';
 
 /**
@@ -34,6 +35,8 @@ export interface AgentRunInput {
   timezone?: string;
   /** Supplied when the student has connected Google. Omitted otherwise. */
   google?: GoogleTokenProvider;
+  /** Supplied when the deployment can transcribe audio. Omitted otherwise. */
+  transcriber?: AudioTranscriber;
   signal?: AbortSignal;
 }
 
@@ -75,6 +78,7 @@ export async function runAgentTurn(
     agentId: input.agentId,
     signal: input.signal,
     ...(input.google ? { google: input.google } : {}),
+    ...(input.transcriber ? { transcriber: input.transcriber } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,
