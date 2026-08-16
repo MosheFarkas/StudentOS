@@ -25,6 +25,27 @@ export function createRoutes(ctx: AppContext) {
       .get('/health', (c) => c.json({ ok: true }))
 
       /**
+       * Whether the optional pieces are actually working.
+       *
+       * Separate from /health, which must stay a cheap liveness probe for the
+       * deploy script. This one reaches out, so it is for a human asking why
+       * something got worse -- most often a residential relay on a machine at
+       * home that has been rebooted or unplugged.
+       */
+      .get('/health/egress', auth, async (c) => {
+        const residential = ctx.residential ? await ctx.residential.healthy() : null;
+        return c.json({
+          residential,
+          note:
+            residential === null
+              ? 'No residential egress configured. Sites that block datacenters will fail.'
+              : residential
+                ? 'Residential egress reachable.'
+                : 'Residential egress configured but NOT reachable -- is the machine on?',
+        });
+      })
+
+      /**
        * Record the student's timezone.
        *
        * Sent by the browser, which is the only thing that reliably knows it.

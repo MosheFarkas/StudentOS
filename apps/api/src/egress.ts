@@ -22,6 +22,15 @@ import { ProxyAgent } from 'undici';
 export interface Egress {
   /** Same shape as fetch, routed through a residential IP. */
   fetch: typeof globalThis.fetch;
+  /**
+   * Whether the residential path is currently usable.
+   *
+   * Worth exposing because the failure is silent otherwise: when the machine
+   * at home is off, transcripts quietly fall back to a paid tier or stop
+   * working, and the only symptom is an agent that has got worse at answering.
+   * A health check turns that into something you can see.
+   */
+  healthy(): Promise<boolean>;
 }
 
 /**
@@ -77,7 +86,19 @@ export function createRelayEgress(relayUrl: string, token: string): Egress {
     });
   };
 
-  return { fetch: relayFetch };
+  return {
+    fetch: relayFetch,
+    async healthy() {
+      try {
+        const response = await globalThis.fetch(new URL('/health', relayUrl), {
+          signal: AbortSignal.timeout(5000),
+        });
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+  };
 }
 
 function headersToObject(headers: RequestInit['headers']): Record<string, string> {
@@ -99,5 +120,19 @@ export function createResidentialEgress(proxyUrl: string | undefined): Egress | 
   const proxiedFetch: typeof globalThis.fetch = (input, init) =>
     globalThis.fetch(input, { ...init, dispatcher: agent } as RequestInit);
 
-  return { fetch: proxiedFetch };
+  return {
+    fetch: proxiedFetch,
+    // A rented proxy has no health endpoint of its own; reaching a known-good
+    // host through it is the closest equivalent.
+    async healthy() {
+      try {
+        const response = await proxiedFetch('https://www.google.com/generate_204', {
+          signal: AbortSignal.timeout(8000),
+        });
+        return response.status === 204 || response.ok;
+      } catch {
+        return false;
+      }
+    },
+  };
 }

@@ -184,30 +184,40 @@ Rather than renting one, run this on a machine you already have at home. It is
 a single dependency-free file. Nothing else moves: no database, no state, no
 student data -- so there is nothing to lose when that machine reboots.
 
-On the home machine, from a checkout of this repo:
-
-```bash
-export RELAY_TOKEN=$(openssl rand -hex 32)   # keep this, the droplet needs it
-node apps/relay/relay.mjs
-```
-
-It binds to **127.0.0.1 only**. Expose it to the droplet with a tunnel rather
-than a forwarded port -- no inbound firewall rule, and no dependence on a home
-IP that changes:
+On the home machine (macOS), once:
 
 ```bash
 brew install cloudflared
-cloudflared tunnel --url http://127.0.0.1:8787
+cloudflared tunnel login          # authorises this machine on your account
+curl -fsSL https://contextoagent.ai/relay-setup.sh -o /tmp/relay-setup.sh
+bash /tmp/relay-setup.sh
 ```
 
-Then on the droplet:
+That creates a **named** tunnel with a stable hostname, points
+`relay.contextoagent.ai` at it, and installs two launchd agents -- the relay
+and the tunnel -- so both return after a reboot with nobody logged in. It is
+idempotent: run it again to pick up a new relay version.
+
+Do NOT use `cloudflared tunnel --url ...` for anything permanent. Those quick
+tunnels get a **new hostname every restart**, so `RELAY_URL` on the droplet
+goes stale and transcripts silently fall back to a paid tier.
+
+The script prints the two values the droplet needs:
 
 ```bash
-RELAY_URL=https://<your-tunnel-hostname>
-RELAY_TOKEN=<the same token>
+RELAY_URL=https://relay.contextoagent.ai
+RELAY_TOKEN=<printed by the script>
 ```
 
-Keep it running across reboots with a launchd agent (`~/Library/LaunchAgents`).
+Check it from the droplet at any time:
+
+```bash
+curl -s https://contextoagent.ai/api/health/egress -H "Authorization: Bearer <session>"
+```
+
+That reports whether the home machine is actually reachable. Worth knowing,
+because the failure is otherwise silent -- the agent just quietly gets worse
+at answering.
 
 The relay refuses private, loopback and link-local addresses **after resolving
 them**, so a hostname pointing at `192.168.1.1` is refused just as a literal

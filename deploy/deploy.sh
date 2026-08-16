@@ -24,6 +24,11 @@ pnpm --filter @contexto/db migrate
 echo "==> Building the web bundle"
 pnpm --filter @contexto/web build
 
+# Publish the relay so a home machine can fetch the current version with
+# curl, rather than needing a checkout of this repo.
+cp apps/relay/relay.mjs apps/web/dist/relay.mjs
+cp apps/relay/setup-macos.sh apps/web/dist/relay-setup.sh
+
 echo "==> Restarting services"
 # The contexto user needs a sudoers entry for exactly these two commands:
 #   contexto ALL=(root) NOPASSWD: /bin/systemctl restart contexto-api, /bin/systemctl restart contexto-worker
