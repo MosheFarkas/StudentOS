@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import type { ScopeGroup } from './google/scopes.js';
 import type { AudioTranscriber } from './transcribe.js';
-import type { YoutubeMetadataSource } from './web/youtube.js';
+import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './web/youtube.js';
 
 /**
  * Something an agent can do in the world.
@@ -45,6 +45,8 @@ export interface ToolContext {
   transcriber?: AudioTranscriber;
   /** Looks up YouTube video metadata. Absent when not configured. */
   youtube?: YoutubeMetadataSource;
+  /** Fetches YouTube transcripts. Absent when no transcript key is set. */
+  youtubeTranscripts?: YoutubeTranscriptSource;
   signal?: AbortSignal;
 }
 

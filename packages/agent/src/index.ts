@@ -50,6 +50,8 @@ export {
   readYoutubeVideo,
   parseVideoId,
   type YoutubeMetadataSource,
+  type YoutubeTranscriptSource,
+  type TranscriptOutcome,
   type YoutubeVideo,
 } from './tools/web/youtube.js';
 export { ocrImage, ocrPdf, describeOcrFailure, type OcrResult } from './tools/ocr.js';

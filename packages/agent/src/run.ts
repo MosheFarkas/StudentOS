@@ -3,7 +3,7 @@ import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext } from './tools/types.js';
 import type { AudioTranscriber } from './tools/transcribe.js';
-import type { YoutubeMetadataSource } from './tools/web/youtube.js';
+import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './tools/web/youtube.js';
 import type { ToolRegistry } from './tools/registry.js';
 
 /**
@@ -40,6 +40,8 @@ export interface AgentRunInput {
   transcriber?: AudioTranscriber;
   /** Supplied when the deployment can look up YouTube metadata. */
   youtube?: YoutubeMetadataSource;
+  /** Supplied when the deployment has a transcript service key. */
+  youtubeTranscripts?: YoutubeTranscriptSource;
   signal?: AbortSignal;
 }
 
@@ -83,6 +85,7 @@ export async function runAgentTurn(
     ...(input.google ? { google: input.google } : {}),
     ...(input.transcriber ? { transcriber: input.transcriber } : {}),
     ...(input.youtube ? { youtube: input.youtube } : {}),
+    ...(input.youtubeTranscripts ? { youtubeTranscripts: input.youtubeTranscripts } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,

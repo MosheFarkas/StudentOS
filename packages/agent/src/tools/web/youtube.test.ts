@@ -27,8 +27,14 @@ describe('parseVideoId', () => {
   });
 });
 
-const ctx = (lookup: (id: string) => Promise<unknown>): ToolContext =>
-  ({ youtube: { lookup } }) as unknown as ToolContext;
+const ctx = (
+  lookup: (id: string) => Promise<unknown>,
+  transcripts?: (id: string) => Promise<unknown>,
+): ToolContext =>
+  ({
+    youtube: { lookup },
+    ...(transcripts ? { youtubeTranscripts: { fetch: transcripts } } : {}),
+  }) as unknown as ToolContext;
 
 describe('readYoutubeVideo', () => {
   it('returns what the video is', async () => {
@@ -44,7 +50,9 @@ describe('readYoutubeVideo', () => {
     )) as { title: string; note: string };
 
     expect(result.title).toContain('rivières');
-    expect(result.note).toMatch(/not watched or heard/i);
+    // No transcript source configured at all, so the agent must still be
+    // told plainly that it has not heard the video.
+    expect(result.note).toMatch(/NOT heard this video/i);
   });
 
   /**
@@ -88,5 +96,68 @@ describe('readYoutubeVideo', () => {
   it('says so when lookups are not configured at all', async () => {
     const result = await readYoutubeVideo.execute({ url: 'dQw4w9WgXcQ' }, {} as ToolContext);
     expect((result as { reason: string }).reason).toContain('not configured');
+  });
+});
+
+describe('transcripts', () => {
+  const video = async () => ({
+    title: 'Les rivières trop salées',
+    channel: 'Radio-Canada Info',
+    description: 'Le sel de voirie.',
+    durationSeconds: 132,
+    publishedAt: null,
+  });
+
+  it('returns the transcript when one exists', async () => {
+    const result = (await readYoutubeVideo.execute(
+      { url: 'Lgq0KXYptLA' },
+      ctx(video, async () => ({
+        ok: true,
+        text: 'Le sel se retrouve dans les rivieres.',
+        language: 'fr',
+      })),
+    )) as { transcript: string; title: string; note?: string };
+
+    expect(result.transcript).toContain('rivieres');
+    // The "I have not heard this" warning must not survive a real transcript.
+    expect(result.note).toBeUndefined();
+    expect(result.title).toContain('rivières');
+  });
+
+  /**
+   * Metadata is free and a transcript is billed, so losing the transcript
+   * must still leave a usable answer rather than failing the whole lookup.
+   */
+  it('keeps the metadata when the transcript is unavailable', async () => {
+    const result = (await readYoutubeVideo.execute(
+      { url: 'Lgq0KXYptLA' },
+      ctx(video, async () => ({ ok: false, reason: 'none-available' })),
+    )) as { transcript: null; title: string; note: string };
+
+    expect(result.transcript).toBeNull();
+    expect(result.title).toContain('rivières');
+    expect(result.note).toMatch(/NOT heard/);
+    expect(result.note).toMatch(/no transcript available/i);
+  });
+
+  /** A service problem must not be reported as a fact about the video. */
+  it('distinguishes our outage from a video with no captions', async () => {
+    const result = (await readYoutubeVideo.execute(
+      { url: 'Lgq0KXYptLA' },
+      ctx(video, async () => ({ ok: false, reason: 'service-unavailable' })),
+    )) as { note: string };
+
+    expect(result.note).toMatch(/could not reach the transcript service/i);
+    expect(result.note).not.toMatch(/no transcript available/i);
+  });
+
+  it('truncates a very long transcript', async () => {
+    const result = (await readYoutubeVideo.execute(
+      { url: 'Lgq0KXYptLA' },
+      ctx(video, async () => ({ ok: true, text: 'x'.repeat(60_000), language: 'en' })),
+    )) as { transcript: string; truncated: boolean };
+
+    expect(result.truncated).toBe(true);
+    expect(result.transcript.length).toBe(40_000);
   });
 });

@@ -152,6 +152,26 @@ sudo -u contexto /srv/contexto/deploy/deploy.sh   # Vite inlines it at build
 values are public — the client id appears in every OAuth redirect, and the API
 key is referrer-restricted — which is why they can be inlined into the bundle.
 
+**6c. YouTube (optional)**
+
+Two independent keys, both optional, both in `/srv/contexto/.env`:
+
+```bash
+YOUTUBE_API_KEY=              # Data API v3: adds description + duration
+YOUTUBE_TRANSCRIPT_API_KEY=   # transcriptapi.com: adds the transcript
+```
+
+Without either, the agent still identifies a video by title and channel
+through oEmbed, which needs no key.
+
+`YOUTUBE_TRANSCRIPT_API_KEY` exists because YouTube blocks caption access from
+datacenter IPs. Measured from this droplet: the watch page returns bot-walled
+HTML, `timedtext` returns zero bytes, innertube `get_transcript` returns 400,
+and yt-dlp fails on every player client including with curl_cffi TLS
+impersonation. The block is the IP, not the client, so the only routes are a
+residential proxy or a service that runs one. 100 free credits, then $5/month;
+failed requests are not billed.
+
 **7. Telegram webhook**
 
 ```bash

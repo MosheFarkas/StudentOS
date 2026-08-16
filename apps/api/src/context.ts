@@ -5,6 +5,7 @@ import { TelegramChannel } from '@contexto/channels';
 import { createAuth, type Auth } from './auth.js';
 import { OpenAiTranscriber } from './transcription.js';
 import { GoogleYoutubeMetadata } from './youtube.js';
+import { TranscriptApiSource } from './youtube-transcript.js';
 import type { Env } from './env.js';
 
 /**
@@ -29,6 +30,8 @@ export interface AppContext {
   transcriber: OpenAiTranscriber | undefined;
   /** Always present: falls back to keyless oEmbed when no API key is set. */
   youtube: GoogleYoutubeMetadata;
+  /** Undefined without a key; the agent then has metadata but no transcript. */
+  youtubeTranscripts: TranscriptApiSource | undefined;
 }
 
 export function createContext(env: Env): AppContext {
@@ -61,6 +64,9 @@ export function createContext(env: Env): AppContext {
     // Constructed unconditionally: without a key it still answers from
     // oEmbed, which needs none and works today.
     youtube: new GoogleYoutubeMetadata(env.YOUTUBE_API_KEY),
+    youtubeTranscripts: env.YOUTUBE_TRANSCRIPT_API_KEY
+      ? new TranscriptApiSource(env.YOUTUBE_TRANSCRIPT_API_KEY)
+      : undefined,
 
     // env.ts guarantees the secret is present whenever the token is.
     telegram:

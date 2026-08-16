@@ -95,6 +95,12 @@ const envSchema = z.object({
    * for teaching material is usually the substance.
    */
   YOUTUBE_API_KEY: optional(z.string().min(1)),
+  /*
+   * Optional. Without it the agent can say what a YouTube video IS but not
+   * what it says -- YouTube blocks caption access from datacenter IPs by
+   * every route, so a service with a residential pool is the only way in.
+   */
+  YOUTUBE_TRANSCRIPT_API_KEY: optional(z.string().min(1)),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   /** Shared secret echoed back by Telegram on every webhook request. */
   TELEGRAM_WEBHOOK_SECRET: optional(z.string().min(16)),
