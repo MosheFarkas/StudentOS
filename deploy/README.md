@@ -172,7 +172,49 @@ impersonation. The block is the IP, not the client, so the only routes are a
 residential proxy or a service that runs one. 100 free credits, then $5/month;
 failed requests are not billed.
 
-**6d. Residential proxy (optional)**
+**6d. Residential relay on a machine at home (optional, preferred)**
+
+Some sites -- YouTube first among them -- serve a bot wall to datacenter IPs
+and the real page to a home connection. Measured from this droplet: real
+Chromium with a warmed cookie session still gets "Sign in to confirm you're
+not a bot" for videos a home machine fetches without trouble. The variable is
+the IP, so the fix has to be an IP.
+
+Rather than renting one, run this on a machine you already have at home. It is
+a single dependency-free file. Nothing else moves: no database, no state, no
+student data -- so there is nothing to lose when that machine reboots.
+
+On the home machine, from a checkout of this repo:
+
+```bash
+export RELAY_TOKEN=$(openssl rand -hex 32)   # keep this, the droplet needs it
+node apps/relay/relay.mjs
+```
+
+It binds to **127.0.0.1 only**. Expose it to the droplet with a tunnel rather
+than a forwarded port -- no inbound firewall rule, and no dependence on a home
+IP that changes:
+
+```bash
+brew install cloudflared
+cloudflared tunnel --url http://127.0.0.1:8787
+```
+
+Then on the droplet:
+
+```bash
+RELAY_URL=https://<your-tunnel-hostname>
+RELAY_TOKEN=<the same token>
+```
+
+Keep it running across reboots with a launchd agent (`~/Library/LaunchAgents`).
+
+The relay refuses private, loopback and link-local addresses **after resolving
+them**, so a hostname pointing at `192.168.1.1` is refused just as a literal
+is. That check is what stops a relay on a home network becoming a window onto
+the house; `apps/relay/relay.test.mjs` covers it.
+
+**6e. Residential proxy (optional, alternative)**
 
 ```bash
 RESIDENTIAL_PROXY_URL=http://user:pass@gate.provider.com:7777

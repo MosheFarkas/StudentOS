@@ -110,6 +110,13 @@ const envSchema = z.object({
    * serves a bot wall to cloud IPs can be retried through it.
    */
   RESIDENTIAL_PROXY_URL: optional(z.string().url()),
+  /*
+   * A relay on a machine at home, reached over a tunnel. Preferred over a
+   * rented proxy: the residential IP is one you already own, so there is no
+   * per-gigabyte bill and no third party in the path.
+   */
+  RELAY_URL: optional(z.string().url()),
+  RELAY_TOKEN: optional(z.string().min(32)),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   /** Shared secret echoed back by Telegram on every webhook request. */
   TELEGRAM_WEBHOOK_SECRET: optional(z.string().min(16)),
@@ -129,6 +136,12 @@ export function loadEnv(source?: NodeJS.ProcessEnv): Env {
   const parsed = envSchema
     // A bot token without a webhook secret means an unauthenticated public
     // endpoint that runs agent turns. Refuse to start rather than expose it.
+    .refine((env) => !env.RELAY_URL || Boolean(env.RELAY_TOKEN), {
+      path: ['RELAY_TOKEN'],
+      message:
+        'Required when RELAY_URL is set -- an unauthenticated relay lets anyone who finds ' +
+        'the tunnel make requests from your home connection.',
+    })
     .refine((env) => !env.TELEGRAM_BOT_TOKEN || Boolean(env.TELEGRAM_WEBHOOK_SECRET), {
       path: ['TELEGRAM_WEBHOOK_SECRET'],
       message:

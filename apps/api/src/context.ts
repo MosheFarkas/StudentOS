@@ -7,7 +7,7 @@ import { OpenAiTranscriber } from './transcription.js';
 import { GoogleYoutubeMetadata } from './youtube.js';
 import { TranscriptApiSource } from './youtube-transcript.js';
 import { ChainedTranscriptSource, FreeTranscriptSource } from './youtube-transcript-free.js';
-import { createResidentialEgress, type Egress } from './egress.js';
+import { createRelayEgress, createResidentialEgress, type Egress } from './egress.js';
 import type { YoutubeTranscriptSource } from '@contexto/agent';
 import type { Env } from './env.js';
 
@@ -43,7 +43,14 @@ export function createContext(env: Env): AppContext {
   const db = createDatabase({ url: env.DATABASE_URL });
 
   // Shared by everything that can be datacenter-blocked, not just YouTube.
-  const residential = createResidentialEgress(env.RESIDENTIAL_PROXY_URL);
+  /*
+   * A relay at home wins over a rented proxy when both are set: same
+   * capability, an IP you already own, and no metered bandwidth.
+   */
+  const residential =
+    env.RELAY_URL && env.RELAY_TOKEN
+      ? createRelayEgress(env.RELAY_URL, env.RELAY_TOKEN)
+      : createResidentialEgress(env.RESIDENTIAL_PROXY_URL);
 
   const masterKey = new EnvMasterKeyProvider(env.MASTER_ENCRYPTION_KEY);
   const vault = new CredentialVault(db, masterKey);

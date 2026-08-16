@@ -61,7 +61,14 @@ export {
   type AudioTranscriber,
   type TranscriptionResult,
 } from './tools/transcribe.js';
-export { fetchPage, htmlToText, FetchRejected } from './tools/web/fetch.js';
+export {
+  fetchPage,
+  htmlToText,
+  FetchRejected,
+  isForbiddenAddress,
+  resolvePublicAddress,
+  pinnedLookup,
+} from './tools/web/fetch.js';
 export * from './tools/google/scopes.js';
 
 export {

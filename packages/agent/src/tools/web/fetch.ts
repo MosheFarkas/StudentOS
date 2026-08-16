@@ -54,7 +54,7 @@ export interface FetchedPage {
 export class FetchRejected extends Error {}
 
 /** True for anything that must never be reachable from our server. */
-function isForbiddenAddress(ip: string): boolean {
+export function isForbiddenAddress(ip: string): boolean {
   const version = isIP(ip);
   if (version === 0) return true;
 
@@ -81,7 +81,7 @@ function isForbiddenAddress(ip: string): boolean {
 }
 
 /** Resolve, and reject unless EVERY answer is a public address. */
-async function resolvePublicAddress(
+export async function resolvePublicAddress(
   hostname: string,
 ): Promise<{ address: string; family: number }> {
   if (isIP(hostname) !== 0) {

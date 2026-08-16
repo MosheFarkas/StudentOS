@@ -24,6 +24,69 @@ export interface Egress {
   fetch: typeof globalThis.fetch;
 }
 
+/**
+ * Egress through a relay running on a machine at home.
+ *
+ * Preferred over a rented proxy when one is available: the residential IP is
+ * one you already own, so there is no per-gigabyte bill and no third party in
+ * the path of your students' requests.
+ *
+ * Shaped as a plain fetch so callers cannot tell the difference. The relay
+ * returns the response base64-encoded inside JSON, which is what lets a
+ * single endpoint carry HTML, JSON and binary alike.
+ */
+export function createRelayEgress(relayUrl: string, token: string): Egress {
+  const relayFetch: typeof globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+    const body =
+      init?.body === undefined || init.body === null
+        ? undefined
+        : typeof init.body === 'string'
+          ? init.body
+          : Buffer.from(init.body as ArrayBuffer).toString('utf8');
+
+    const response = await globalThis.fetch(new URL('/fetch', relayUrl), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        method: init?.method ?? 'GET',
+        headers: headersToObject(init?.headers),
+        ...(body !== undefined ? { body } : {}),
+      }),
+      ...(init?.signal ? { signal: init.signal } : {}),
+    });
+
+    if (!response.ok) {
+      // The relay being down or refusing must look like a failed request,
+      // not throw something the tool layer has never seen.
+      throw new Error(`relay returned ${response.status}`);
+    }
+
+    const payload = (await response.json()) as {
+      status: number;
+      finalUrl?: string;
+      headers?: Record<string, string>;
+      body: string;
+    };
+
+    return new Response(Buffer.from(payload.body, 'base64'), {
+      status: payload.status,
+      headers: payload.headers ?? {},
+    });
+  };
+
+  return { fetch: relayFetch };
+}
+
+function headersToObject(headers: RequestInit['headers']): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers);
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return headers as Record<string, string>;
+}
+
 export function createResidentialEgress(proxyUrl: string | undefined): Egress | undefined {
   if (!proxyUrl) return undefined;
 

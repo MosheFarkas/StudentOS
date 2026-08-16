@@ -34,8 +34,28 @@ export class FreeTranscriptSource implements YoutubeTranscriptSource {
     // The library exposes all three of its requests, and every one of them
     // has to take the same route -- discovering caption tracks over a
     // residential IP and then fetching them directly would be blocked again.
-    const via = (params: { url: string; init?: RequestInit }) =>
-      (this.transport as typeof globalThis.fetch)(params.url, params.init);
+    /*
+     * FetchParams is FLAT -- {url, method, body, headers, userAgent} -- not a
+     * fetch-style {url, init}. Passing params.init sends every request as a
+     * bare GET with no body, which YouTube answers with "this video is no
+     * longer available": a perfectly plausible-looking wrong answer that
+     * looks like the video's fault rather than ours.
+     */
+    const via = (params: {
+      url: string;
+      method?: 'GET' | 'POST';
+      body?: string;
+      headers?: Record<string, string>;
+      userAgent?: string;
+    }) =>
+      (this.transport as typeof globalThis.fetch)(params.url, {
+        method: params.method ?? 'GET',
+        headers: {
+          ...(params.userAgent ? { 'User-Agent': params.userAgent } : {}),
+          ...(params.headers ?? {}),
+        },
+        ...(params.body !== undefined ? { body: params.body } : {}),
+      });
     return { ...extra, videoFetch: via, transcriptFetch: via, playerFetch: via };
   }
 
