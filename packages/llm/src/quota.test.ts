@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { QuotaService } from './quota.js';
 import { currentWindowEnd, currentWindowStart, platformCostMicroUsd } from './quota.js';
 import { PLATFORM_PRICING } from './config.js';
 
@@ -88,5 +89,55 @@ describe('quota window', () => {
   it('treats the very first instant of a month as the new window', () => {
     const start = currentWindowStart(new Date('2026-09-01T00:00:00Z'));
     expect(start.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+});
+
+describe('exempt accounts', () => {
+  /**
+   * The operator pays for the platform key and has to be able to use the
+   * product without metering themselves, while students stay capped. Before
+   * this the only lever was the global quota, which raises the ceiling for
+   * everyone at once -- so testing the product heavily meant either blocking
+   * yourself or removing the cost control you built the cap for.
+   */
+  function serviceFor(unlimited: boolean, tokensUsed: number) {
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [{ unlimited }],
+          }),
+        }),
+      }),
+    };
+    const service = new QuotaService(db as never, 100);
+    // The usage scan is separate from the exemption lookup; stub it so the
+    // test is about the limit decision and not about SQL shapes.
+    service.tokensUsedThisWindow = async () => tokensUsed;
+    return service;
+  }
+
+  it('lets an exempt account past a limit it has already blown', async () => {
+    await expect(serviceFor(true, 10_000).assertWithinQuota('u1')).resolves.toBeUndefined();
+  });
+
+  it('still stops a normal account', async () => {
+    await expect(serviceFor(false, 10_000).assertWithinQuota('u1')).rejects.toThrow(
+      /monthly allowance/i,
+    );
+  });
+
+  it('leaves a normal account under the limit alone', async () => {
+    await expect(serviceFor(false, 5).assertWithinQuota('u1')).resolves.toBeUndefined();
+  });
+
+  /**
+   * Usage is still recorded for exempt accounts. An exemption that also hid
+   * the spend would make the one account most likely to run up a bill the one
+   * account nobody could see.
+   */
+  it('does not skip the usage scan for reporting purposes', async () => {
+    const service = serviceFor(true, 4242);
+    expect(await service.tokensUsedThisWindow('u1')).toBe(4242);
   });
 });

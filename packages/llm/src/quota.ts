@@ -1,6 +1,6 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
-import { llmUsage } from '@contexto/db';
+import { llmUsage, user } from '@contexto/db';
 import type { ProviderId } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
 import { DEFAULT_MONTHLY_TOKEN_QUOTA, PLATFORM_PRICING } from './config.js';
@@ -28,6 +28,10 @@ export class QuotaService {
    * of tokens it would save.
    */
   async assertWithinQuota(userId: string): Promise<void> {
+    // Checked first: an exempt account should not pay for a usage scan on
+    // every turn to reach a limit that will never apply to it.
+    if (await this.isExempt(userId)) return;
+
     const used = await this.tokensUsedThisWindow(userId);
     if (used >= this.monthlyTokenQuota) {
       throw new ContextoError(
@@ -36,6 +40,24 @@ export class QuotaService {
           'or wait for the allowance to reset.',
       );
     }
+  }
+
+  /**
+   * Whether this account is exempt from the allowance.
+   *
+   * Usage is still RECORDED for exempt accounts -- what it cost remains
+   * visible, only the limit stops applying. An exemption that also hid the
+   * spend would make the one account most likely to run up a bill the one
+   * nobody could see.
+   */
+  async isExempt(userId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ unlimited: user.unlimitedUsage })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    return row?.unlimited === true;
   }
 
   async tokensUsedThisWindow(userId: string): Promise<number> {

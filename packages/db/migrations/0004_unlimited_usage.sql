@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "unlimited_usage" boolean DEFAULT false NOT NULL;

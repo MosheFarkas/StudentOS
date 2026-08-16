@@ -29,6 +29,24 @@ export const user = pgTable('user', {
    * student may never load the web app; UTC is the fallback.
    */
   timezone: text('timezone'),
+  /**
+   * Exempts this account from the platform token allowance.
+   *
+   * Ours, not Better Auth's. The operator running the deployment pays for the
+   * platform key and needs to use the product without metering themselves,
+   * while students stay capped -- and before this the only lever was the
+   * global quota, which raises the ceiling for everyone at once.
+   *
+   * Set deliberately, by hand, on specific accounts. There is intentionally
+   * no way to grant it from inside the product.
+   */
+  /*
+   * .default() and not .$defaultFn(): the latter is a JS-side default, so
+   * drizzle-kit emits ADD COLUMN ... NOT NULL with no DEFAULT, which fails
+   * outright on a table that already has rows. A real SQL default is what
+   * makes this migration survive contact with production.
+   */
+  unlimitedUsage: boolean('unlimited_usage').default(false).notNull(),
   createdAt: timestamp('created_at')
     .$defaultFn(() => new Date())
     .notNull(),
