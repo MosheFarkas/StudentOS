@@ -4,6 +4,7 @@ import { PostgresMemoryStore, PostgresSkillRegistry } from '@contexto/agent';
 import { TelegramChannel } from '@contexto/channels';
 import { createAuth, type Auth } from './auth.js';
 import { OpenAiTranscriber } from './transcription.js';
+import { GoogleYoutubeMetadata } from './youtube.js';
 import type { Env } from './env.js';
 
 /**
@@ -26,6 +27,8 @@ export interface AppContext {
   telegram: TelegramChannel | undefined;
   /** Undefined when there is no platform key to transcribe with. */
   transcriber: OpenAiTranscriber | undefined;
+  /** Always present: falls back to keyless oEmbed when no API key is set. */
+  youtube: GoogleYoutubeMetadata;
 }
 
 export function createContext(env: Env): AppContext {
@@ -54,6 +57,10 @@ export function createContext(env: Env): AppContext {
     transcriber: env.PLATFORM_OPENAI_API_KEY
       ? new OpenAiTranscriber(env.PLATFORM_OPENAI_API_KEY)
       : undefined,
+
+    // Constructed unconditionally: without a key it still answers from
+    // oEmbed, which needs none and works today.
+    youtube: new GoogleYoutubeMetadata(env.YOUTUBE_API_KEY),
 
     // env.ts guarantees the secret is present whenever the token is.
     telegram:

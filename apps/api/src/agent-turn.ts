@@ -51,6 +51,7 @@ export async function runTurnForAgent(
       ...(profile?.timezone ? { timezone: profile.timezone } : {}),
       google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
       ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
+      youtube: ctx.youtube,
       ...(signal ? { signal } : {}),
     },
   );

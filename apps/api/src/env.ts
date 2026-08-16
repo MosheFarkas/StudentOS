@@ -88,6 +88,13 @@ const envSchema = z.object({
    * Telegram gateway. Both optional -- unset disables the gateway entirely,
    * and the product must work without it.
    */
+  /*
+   * Optional. Without it YouTube lookups fall back to oEmbed, which needs no
+   * key and returns title and channel -- enough for the agent to say what a
+   * link is. With it, the Data API adds the description and duration, which
+   * for teaching material is usually the substance.
+   */
+  YOUTUBE_API_KEY: optional(z.string().min(1)),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   /** Shared secret echoed back by Telegram on every webhook request. */
   TELEGRAM_WEBHOOK_SECRET: optional(z.string().min(16)),

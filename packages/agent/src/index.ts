@@ -46,6 +46,12 @@ export {
 } from './tools/google/classroom.js';
 export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
 export { readWebLink } from './tools/web/read-link.js';
+export {
+  readYoutubeVideo,
+  parseVideoId,
+  type YoutubeMetadataSource,
+  type YoutubeVideo,
+} from './tools/web/youtube.js';
 export { ocrImage, ocrPdf, describeOcrFailure, type OcrResult } from './tools/ocr.js';
 export {
   transcribeMedia,

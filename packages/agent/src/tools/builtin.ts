@@ -20,6 +20,7 @@ import {
 } from './google/classroom.js';
 import { listDriveFiles, readDriveFile } from './google/drive.js';
 import { readWebLink } from './web/read-link.js';
+import { readYoutubeVideo } from './web/youtube.js';
 
 const ALL_TOOLS: Tool<never, unknown>[] = [
   listCalendarEvents,
@@ -38,6 +39,7 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   listDriveFiles,
   readDriveFile,
   readWebLink,
+  readYoutubeVideo,
 ] as unknown as Tool<never, unknown>[];
 
 /**
