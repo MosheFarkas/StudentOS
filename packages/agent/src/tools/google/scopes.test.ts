@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALENDAR_SCOPE,
+  CLASSROOM_SUBMISSIONS_SCOPE,
+  hasScope,
+  parseGrantedScopes,
   DRIVE_FILE_SCOPE,
   DRIVE_READONLY_SCOPE,
   CLASSROOM_COURSES_SCOPE,
@@ -183,5 +186,29 @@ describe('elective scopes', () => {
   /** Full read covers per-file read, so it must not read as disconnected. */
   it('treat drive.readonly as satisfying the drive group', () => {
     expect(grantedScopeGroups(DRIVE_READONLY_SCOPE)).toContain('drive');
+  });
+});
+
+describe('coursework readability', () => {
+  /**
+   * Measured against a real school account: with student-submissions granted
+   * and coursework.me.readonly withheld, courseWork.list still returned 188
+   * assignments with titles and due dates.
+   *
+   * Before this, the assignments tool was gated on coursework.me.readonly
+   * alone, so it was never registered for that student -- the single most
+   * useful Classroom capability, silently absent, with nothing to indicate
+   * it was a gating mistake rather than a school restriction.
+   */
+  it('treats student-submissions as enough to read assignments', () => {
+    const granted = parseGrantedScopes(
+      [CLASSROOM_COURSES_SCOPE, CLASSROOM_SUBMISSIONS_SCOPE].join(','),
+    );
+    expect(hasScope(CLASSROOM_COURSEWORK_SCOPE, granted)).toBe(true);
+  });
+
+  it('still reports nothing when neither is granted', () => {
+    const granted = parseGrantedScopes(CLASSROOM_COURSES_SCOPE);
+    expect(hasScope(CLASSROOM_COURSEWORK_SCOPE, granted)).toBe(false);
   });
 });

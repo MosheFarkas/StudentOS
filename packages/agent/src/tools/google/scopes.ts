@@ -168,6 +168,22 @@ const ALSO_SATISFIED_BY: Record<string, readonly string[]> = {
   // Reading everything covers reading a picked file. A student who granted
   // full Drive access must not be told Drive is disconnected.
   [DRIVE_FILE_SCOPE]: [DRIVE_READONLY_SCOPE],
+
+  /*
+   * MEASURED, not inferred from the docs. On a real school account holding
+   * student-submissions.me.readonly and NOT coursework.me.readonly,
+   * courses.courseWork.list returns 188 assignments with titles and due
+   * dates. Which makes sense -- a submission is meaningless without the
+   * assignment it belongs to.
+   *
+   * This mattered: gating the assignments tool on coursework.me.readonly
+   * alone withheld it from a student who could read assignments perfectly
+   * well, and produced advice to go and ask a school administrator for a
+   * permission they did not need. Under-registering hides a working feature
+   * completely; over-registering costs one wasted turn, and the tool reports
+   * unavailability cleanly if this ever stops holding.
+   */
+  [CLASSROOM_COURSEWORK_SCOPE]: [CLASSROOM_SUBMISSIONS_SCOPE],
 };
 
 /**
