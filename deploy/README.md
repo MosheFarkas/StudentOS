@@ -172,6 +172,26 @@ impersonation. The block is the IP, not the client, so the only routes are a
 residential proxy or a service that runs one. 100 free credits, then $5/month;
 failed requests are not billed.
 
+**6d. Residential proxy (optional)**
+
+```bash
+RESIDENTIAL_PROXY_URL=http://user:pass@gate.provider.com:7777
+```
+
+A second way out of the network, for hosts that serve a bot wall to cloud IPs
+and the real page to a home connection. Not YouTube-specific -- `web_read_link`
+retries 403 and 429 through it too.
+
+Only reached when a direct request was refused, so the bill tracks the
+blocking rather than the traffic. At a few dozen videos a month that is cents:
+residential providers charge roughly $1.75-4 per GB and a watch page is about
+1MB. Any provider works; it takes a standard proxy URL.
+
+Why it is needed at all, measured from this droplet: real Chromium executing
+JavaScript, with a warmed cookie session and consent accepted, still gets
+"Sign in to confirm you're not a bot" for videos that a residential machine
+fetches without trouble. The variable is the IP, so the fix has to be an IP.
+
 **7. Telegram webhook**
 
 ```bash

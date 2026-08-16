@@ -208,7 +208,25 @@ async function readBody(response: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
+/**
+ * Retry a page through a residential IP when this host is refused.
+ *
+ * 403 and 429 from a datacenter are very often "you are a bot" rather than
+ * "you may not have this" -- the same page loads fine from a home
+ * connection. Only these two statuses retry, and only when an egress is
+ * configured, so a genuine 404 or a paywall does not spend proxy bandwidth.
+ *
+ * The SSRF checks are NOT skipped on this path. They are less critical here,
+ * since the proxy makes the connection and our own network is out of reach,
+ * but pointing someone else's proxy at internal addresses is both rude and a
+ * good way to get an account suspended.
+ */
+const RETRY_VIA_PROXY = new Set([403, 429]);
+
+export async function fetchPage(
+  rawUrl: string,
+  transport?: typeof globalThis.fetch,
+): Promise<FetchedPage> {
   let target: URL;
   try {
     target = new URL(rawUrl);
@@ -235,6 +253,9 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
 
     if (status >= 400) {
       response.destroy();
+      if (transport && RETRY_VIA_PROXY.has(status)) {
+        return await fetchViaProxy(target, transport);
+      }
       throw new FetchRejected(`That page returned an error (${status}).`);
     }
 
@@ -288,6 +309,71 @@ export async function fetchPage(rawUrl: string): Promise<FetchedPage> {
   }
 
   throw new FetchRejected('That link redirected too many times.');
+}
+
+/**
+ * The same fetch, through someone else's IP.
+ *
+ * Uses plain fetch rather than the pinned-lookup path: the proxy resolves the
+ * hostname itself, so pinning here would describe a connection we are not the
+ * one making. The address was already validated before we got here.
+ */
+async function fetchViaProxy(
+  target: URL,
+  transport: typeof globalThis.fetch,
+): Promise<FetchedPage> {
+  let response: Response;
+  try {
+    response = await transport(target.toString(), {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+          '(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+        Accept: 'text/html,text/plain;q=0.9,*/*;q=0.1',
+        'Accept-Language': 'en',
+      },
+      redirect: 'follow',
+    });
+  } catch {
+    throw new FetchRejected('That page could not be reached.');
+  }
+
+  if (!response.ok) {
+    throw new FetchRejected(`That page returned an error (${response.status}).`);
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (/^application\/pdf/i.test(contentType)) {
+    const extracted = await extractPdfText(new Uint8Array(await response.arrayBuffer()));
+    if (!extracted.ok) throw new FetchRejected('That PDF could not be read.');
+    const long = extracted.text.length > MAX_CHARS;
+    return {
+      url: target.toString(),
+      title: null,
+      text: long ? extracted.text.slice(0, MAX_CHARS) : extracted.text,
+      truncated: long,
+      kind: 'pdf',
+    };
+  }
+
+  if (!/^text\/(html|plain)/i.test(contentType)) {
+    throw new FetchRejected(
+      `That link is a ${contentType.split(';')[0] || 'file'}, not a readable page.`,
+    );
+  }
+
+  const body = (await response.text()).slice(0, MAX_BYTES);
+  const isHtml = /html/i.test(contentType);
+  const text = isHtml ? htmlToText(body) : body;
+  const long = text.length > MAX_CHARS;
+
+  return {
+    url: target.toString(),
+    title: isHtml ? extractTitle(body) : null,
+    text: long ? text.slice(0, MAX_CHARS) : text,
+    truncated: long,
+    kind: isHtml ? 'html' : 'text',
+  };
 }
 
 function extractTitle(html: string): string | null {

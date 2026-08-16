@@ -53,6 +53,7 @@ export async function runTurnForAgent(
       ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
       youtube: ctx.youtube,
       youtubeTranscripts: ctx.youtubeTranscripts,
+      ...(ctx.residential ? { residentialFetch: ctx.residential.fetch } : {}),
       ...(signal ? { signal } : {}),
     },
   );

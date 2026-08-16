@@ -101,6 +101,15 @@ const envSchema = z.object({
    * every route, so a service with a residential pool is the only way in.
    */
   YOUTUBE_TRANSCRIPT_API_KEY: optional(z.string().min(1)),
+  /*
+   * Optional residential proxy, as a standard URL:
+   *   http://user:pass@gate.provider.com:7777
+   *
+   * Used only for requests that were refused directly, so cost tracks the
+   * blocking rather than the traffic. Not YouTube-specific -- any host that
+   * serves a bot wall to cloud IPs can be retried through it.
+   */
+  RESIDENTIAL_PROXY_URL: optional(z.string().url()),
   TELEGRAM_BOT_TOKEN: optional(z.string().min(1)),
   /** Shared secret echoed back by Telegram on every webhook request. */
   TELEGRAM_WEBHOOK_SECRET: optional(z.string().min(16)),

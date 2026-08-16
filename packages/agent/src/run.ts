@@ -42,6 +42,8 @@ export interface AgentRunInput {
   youtube?: YoutubeMetadataSource;
   /** Supplied when the deployment has a transcript service key. */
   youtubeTranscripts?: YoutubeTranscriptSource;
+  /** Supplied when a residential proxy is configured. */
+  residentialFetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }
 
@@ -86,6 +88,7 @@ export async function runAgentTurn(
     ...(input.transcriber ? { transcriber: input.transcriber } : {}),
     ...(input.youtube ? { youtube: input.youtube } : {}),
     ...(input.youtubeTranscripts ? { youtubeTranscripts: input.youtubeTranscripts } : {}),
+    ...(input.residentialFetch ? { residentialFetch: input.residentialFetch } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,

@@ -22,6 +22,23 @@ import type { TranscriptOutcome, YoutubeTranscriptSource } from '@contexto/agent
  * no transcript while YouTube shows them one.
  */
 export class FreeTranscriptSource implements YoutubeTranscriptSource {
+  /**
+   * @param transport how to reach YouTube. Omitted means straight out of this
+   *   host; pass a residential egress to retry what that host is blocked from.
+   *   The same class serves as both tiers, so the chain is just this twice.
+   */
+  constructor(private readonly transport?: typeof globalThis.fetch) {}
+
+  private config(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    if (!this.transport) return extra;
+    // The library exposes all three of its requests, and every one of them
+    // has to take the same route -- discovering caption tracks over a
+    // residential IP and then fetching them directly would be blocked again.
+    const via = (params: { url: string; init?: RequestInit }) =>
+      (this.transport as typeof globalThis.fetch)(params.url, params.init);
+    return { ...extra, videoFetch: via, transcriptFetch: via, playerFetch: via };
+  }
+
   async fetch(videoId: string): Promise<TranscriptOutcome> {
     try {
       /*
@@ -35,7 +52,7 @@ export class FreeTranscriptSource implements YoutubeTranscriptSource {
        * and asking for their actual language returned every one, byte for
        * byte identical to what the paid service charges for.
        */
-      const tracks = await listLanguages(videoId);
+      const tracks = await listLanguages(videoId, this.config());
       if (tracks.length === 0) return { ok: false, reason: 'service-unavailable' };
 
       // Prefer a human-written track; auto-generated is the fallback.
@@ -43,7 +60,10 @@ export class FreeTranscriptSource implements YoutubeTranscriptSource {
       const language = chosen?.languageCode;
 
       // Always an object: the overload set does not accept undefined here.
-      const segments = await fetchTranscript(videoId, language ? { lang: language } : {});
+      const segments = await fetchTranscript(
+        videoId,
+        this.config(language ? { lang: language } : {}),
+      );
       const text = segments
         .map((segment) => segment.text)
         .join(' ')

@@ -31,9 +31,10 @@ export const readWebLink: Tool<z.infer<typeof readLinkInput>, unknown> = {
     'pages that need a login, or pages that build themselves with JavaScript.',
   inputSchema: readLinkInput,
 
-  async execute({ url }, _ctx) {
+  async execute({ url }, ctx) {
     try {
-      const page = await fetchPage(url);
+      // Retried through a residential IP when this host is refused.
+      const page = await fetchPage(url, ctx.residentialFetch);
 
       /*
        * Only HTML gets this check. A near-empty web page is almost always one

@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FetchRejected, fetchPage, htmlToText, pinnedLookup } from './fetch.js';
 
 /**
@@ -173,5 +173,35 @@ describe('pinnedLookup', () => {
     }) as never);
 
     expect(args[1]).toBe('208.80.154.224');
+  });
+});
+
+describe('residential retry', () => {
+  /**
+   * A 403 from a datacenter is very often "you are a bot" rather than "you
+   * may not have this" -- measured on YouTube, which serves a wall to this
+   * host and the real page to a home connection. Only 403 and 429 retry, so
+   * a genuine 404 or a paywall never spends proxy bandwidth.
+   */
+  it('does not retry statuses that are not blocking', async () => {
+    const transport = vi.fn();
+    // Loopback is refused before any request, so the proxy must stay unused.
+    await expect(fetchPage('http://127.0.0.1:9/', transport as never)).rejects.toBeInstanceOf(
+      FetchRejected,
+    );
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The SSRF checks are NOT skipped on the proxied path. Our own network is
+   * out of reach once the proxy makes the connection, but pointing someone
+   * else's proxy at internal addresses is rude and gets accounts suspended.
+   */
+  it('still refuses internal addresses even with an egress available', async () => {
+    const transport = vi.fn();
+    for (const url of ['http://169.254.169.254/', 'http://10.0.0.1/', 'http://[::1]/']) {
+      await expect(fetchPage(url, transport as never)).rejects.toBeInstanceOf(FetchRejected);
+    }
+    expect(transport).not.toHaveBeenCalled();
   });
 });

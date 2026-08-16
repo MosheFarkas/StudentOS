@@ -47,6 +47,13 @@ export interface ToolContext {
   youtube?: YoutubeMetadataSource;
   /** Fetches YouTube transcripts. Absent when no transcript key is set. */
   youtubeTranscripts?: YoutubeTranscriptSource;
+  /**
+   * Fetch through a residential IP. Absent when no proxy is configured.
+   *
+   * For hosts that serve a bot wall to datacenters -- not YouTube-specific,
+   * which is why it is a plain fetch rather than a per-site interface.
+   */
+  residentialFetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
 }
 
