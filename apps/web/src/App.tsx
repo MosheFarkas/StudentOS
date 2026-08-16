@@ -1,23 +1,15 @@
-import { useEffect, useState } from 'react';
-import type { Agent } from '@contexto/shared';
+import { useEffect } from 'react';
 import { api } from './lib/api.js';
+import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
 import { Settings } from './screens/Settings.js';
 
-/**
- * View state is held in React rather than the URL.
- *
- * TODO(routing): this means refresh drops you back to the agent list and there
- * are no shareable links. Fine while the app is three screens; add a router
- * before it is more.
- */
-type View = { name: 'agents' } | { name: 'chat'; agent: Agent } | { name: 'settings' };
-
 export function App() {
   const { data: session, isPending } = useSession();
-  const [view, setView] = useState<View>({ name: 'agents' });
+  // View state lives in the URL now, so refresh and Back both behave.
+  const route = useRoute();
 
   /*
    * Report the browser's timezone once signed in.
@@ -59,20 +51,29 @@ export function App() {
       <header className="app-header">
         <h1>Contexto</h1>
         <nav>
-          {view.name !== 'settings' && (
-            <button onClick={() => setView({ name: 'settings' })}>Settings</button>
+          {route.name !== 'settings' && (
+            <button onClick={() => navigate({ name: 'settings' })}>Settings</button>
           )}
           <button onClick={() => void signOut()}>Sign out</button>
         </nav>
       </header>
 
-      {view.name === 'agents' && <Agents onOpen={(agent) => setView({ name: 'chat', agent })} />}
-
-      {view.name === 'chat' && (
-        <Chat agent={view.agent} onBack={() => setView({ name: 'agents' })} />
+      {route.name === 'agents' && (
+        <Agents onOpen={(agent) => navigate({ name: 'chat', agentId: agent.id })} />
       )}
 
-      {view.name === 'settings' && <Settings onBack={() => setView({ name: 'agents' })} />}
+      {route.name === 'chat' && (
+        <Chat agentId={route.agentId} onBack={() => navigate({ name: 'agents' })} />
+      )}
+
+      {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}
+
+      {route.name === 'notFound' && (
+        <div className="panel">
+          <p>There&apos;s nothing at this address.</p>
+          <button onClick={() => navigate({ name: 'agents' })}>Go to your agents</button>
+        </div>
+      )}
     </main>
   );
 }

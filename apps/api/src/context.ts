@@ -3,6 +3,7 @@ import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from
 import { PostgresMemoryStore, PostgresSkillRegistry } from '@contexto/agent';
 import { TelegramChannel } from '@contexto/channels';
 import { createAuth, type Auth } from './auth.js';
+import { OpenAiTranscriber } from './transcription.js';
 import type { Env } from './env.js';
 
 /**
@@ -23,6 +24,8 @@ export interface AppContext {
   skills: PostgresSkillRegistry;
   /** Undefined when the Telegram gateway is not configured. */
   telegram: TelegramChannel | undefined;
+  /** Undefined when there is no platform key to transcribe with. */
+  transcriber: OpenAiTranscriber | undefined;
 }
 
 export function createContext(env: Env): AppContext {
@@ -45,6 +48,12 @@ export function createContext(env: Env): AppContext {
     }),
     memory: new PostgresMemoryStore(db),
     skills: new PostgresSkillRegistry(db),
+
+    // Shares the platform key. A student on their own OpenAI key still gets
+    // transcription; it is not metered per student either way.
+    transcriber: env.PLATFORM_OPENAI_API_KEY
+      ? new OpenAiTranscriber(env.PLATFORM_OPENAI_API_KEY)
+      : undefined,
 
     // env.ts guarantees the secret is present whenever the token is.
     telegram:

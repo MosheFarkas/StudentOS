@@ -47,6 +47,12 @@ export {
 export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
 export { readWebLink } from './tools/web/read-link.js';
 export { ocrImage, ocrPdf, describeOcrFailure, type OcrResult } from './tools/ocr.js';
+export {
+  transcribeMedia,
+  describeTranscriptionFailure,
+  type AudioTranscriber,
+  type TranscriptionResult,
+} from './tools/transcribe.js';
 export { fetchPage, htmlToText, FetchRejected } from './tools/web/fetch.js';
 export * from './tools/google/scopes.js';
 

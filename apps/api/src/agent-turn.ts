@@ -50,6 +50,7 @@ export async function runTurnForAgent(
       message: content,
       ...(profile?.timezone ? { timezone: profile.timezone } : {}),
       google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
+      ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
       ...(signal ? { signal } : {}),
     },
   );

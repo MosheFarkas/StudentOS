@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { ArchiveError, readDocx, readPptx, readZip } from '../archive.js';
 import { describeOcrFailure, ocrImage, ocrPdf } from '../ocr.js';
+import {
+  describeTranscriptionFailure,
+  transcribeMedia,
+  type AudioTranscriber,
+} from '../transcribe.js';
 import { extractPdfText } from '../pdf.js';
 import type { Tool } from '../types.js';
 import { unavailable } from '../types.js';
@@ -89,7 +94,8 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
   description:
     "Read the actual text contents of almost any file in the student's Drive: Google Docs, " +
     'Slides, Sheets, PDFs, Word and PowerPoint files, zip archives, plain text, and images. ' +
-    'Photographed or scanned worksheets are read with OCR. Use the fileId from a Classroom ' +
+    'Photographed or scanned worksheets are read with OCR, and videos are transcribed. ' +
+    'Use the fileId from a Classroom ' +
     'material, or from google_drive_list_files. Call this when they ask you to summarise, ' +
     'explain, or quiz them on a document -- do not guess at contents from a title.',
   inputSchema: readFileInput,
@@ -124,11 +130,13 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
     const name = meta.name ?? 'Untitled';
 
     const size = Number(meta.size ?? 0);
-    if (size > MAX_BYTES) {
+    const streams = mimeType.startsWith('video/') || mimeType.startsWith('audio/');
+    // Streamed media has its own, much higher ceiling; it never lands in memory.
+    if (!streams && size > MAX_BYTES) {
       return unavailable(`"${name}" is too large to read (${Math.round(size / 1024 / 1024)} MB).`);
     }
 
-    const extracted = await extract(meta, mimeType, token, ctx.signal);
+    const extracted = await extract(meta, mimeType, token, ctx.signal, ctx.transcriber);
     if (isUnavailable(extracted)) return extracted;
 
     const truncated = extracted.length > MAX_CHARS;
@@ -151,6 +159,7 @@ async function extract(
   mimeType: string,
   token: string,
   signal: AbortSignal | undefined,
+  transcriber: AudioTranscriber | undefined,
 ): Promise<string | ReturnType<typeof unavailable>> {
   const name = meta.name ?? 'Untitled';
 
@@ -208,8 +217,22 @@ async function extract(
     return read.text;
   }
 
-  if (mimeType.startsWith('video/')) {
-    return unavailable(`"${name}" is a video, and I cannot listen to it.`);
+  if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
+    if (!transcriber) {
+      return unavailable(`I cannot listen to "${name}" -- transcription is not configured.`);
+    }
+    /*
+     * Streamed rather than downloaded into memory. These run to 279MB in one
+     * real account, against a 512MB cgroup shared with other services.
+     */
+    const heard = await transcribeMedia(
+      `${FILES_URL}/${meta.id}?alt=media&supportsAllDrives=true`,
+      token,
+      transcriber,
+      signal,
+    );
+    if (!heard.ok) return unavailable(describeTranscriptionFailure(heard.reason, name));
+    return `[Transcript of "${name}", about ${heard.minutes} minutes]\n\n${heard.text}`;
   }
 
   const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';

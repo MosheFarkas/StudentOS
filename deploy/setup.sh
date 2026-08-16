@@ -34,11 +34,15 @@ fi
 # without these the agent reports every photographed worksheet as unreadable.
 # fra as well as eng because school materials are routinely bilingual, and
 # poppler-utils to rasterise scanned PDFs, which tesseract cannot open itself.
-if ! command -v tesseract >/dev/null || ! command -v pdftoppm >/dev/null; then
-  echo "==> Installing OCR (tesseract + poppler)"
+# ffmpeg as well, to strip class recordings down to speech before
+# transcribing them. Video is mostly picture: a 16MB recording becomes 1.6MB
+# of audio, which is what keeps uploads inside the transcription size limit.
+if ! command -v tesseract >/dev/null || ! command -v pdftoppm >/dev/null \
+  || ! command -v ffmpeg >/dev/null; then
+  echo "==> Installing media tools (tesseract, poppler, ffmpeg)"
   DEBIAN_FRONTEND=noninteractive apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra poppler-utils
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra poppler-utils ffmpeg
 fi
 # The systemd units hardcode this path. Symlink if pnpm landed elsewhere.
 [[ -x /usr/local/bin/pnpm ]] || ln -sf "$(command -v pnpm)" /usr/local/bin/pnpm

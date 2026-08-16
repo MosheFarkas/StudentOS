@@ -20,6 +20,21 @@
 export const PLATFORM_MODEL = 'gpt-5.6-luna';
 
 /**
+ * The model that turns class recordings into text.
+ *
+ * gpt-4o-mini-transcribe rather than the full gpt-4o-transcribe: this is
+ * classroom speech, where the cheaper model is accurate enough, and every
+ * video a student opens is billed per minute rather than per token.
+ *
+ * gpt-4o-transcribe-diarize also exists on this key and labels speakers. That
+ * is the right model for the lecture-capture feature when it arrives, and the
+ * wrong one for reading a teacher's screencast.
+ *
+ * Verified against GET /v1/models.
+ */
+export const TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe';
+
+/**
  * Prices in micro-USD per token, so usage rows can be summed as integers
  * without float drift. $0.20 per million tokens = 0.2 micro-USD per token.
  */

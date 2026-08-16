@@ -18,6 +18,12 @@ vi.mock('unpdf', () => ({ extractText: extractTextMock }));
  * is covered in ocr.test.ts and verified against the real binary on the
  * droplet.
  */
+const transcribeMediaMock = vi.hoisted(() => vi.fn());
+vi.mock('../transcribe.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../transcribe.js')>()),
+  transcribeMedia: transcribeMediaMock,
+}));
+
 const ocrImageMock = vi.hoisted(() => vi.fn());
 const ocrPdfMock = vi.hoisted(() => vi.fn());
 vi.mock('../ocr.js', async (importOriginal) => ({
@@ -42,12 +48,17 @@ let responses: Array<{
   bytes?: Uint8Array;
 }>;
 
-function ctx(token: string | null = 'token', broadAccess = false): ToolContext {
+function ctx(
+  token: string | null = 'token',
+  broadAccess = false,
+  withTranscriber = false,
+): ToolContext {
   return {
     google: {
       getAccessToken: async () => token,
       hasScope: (scope: string) => broadAccess && scope.endsWith('drive.readonly'),
     },
+    ...(withTranscriber ? { transcriber: { transcribe: async () => '' } } : {}),
   } as unknown as ToolContext;
 }
 
@@ -56,6 +67,7 @@ beforeEach(() => {
   extractTextMock.mockReset();
   ocrImageMock.mockReset();
   ocrPdfMock.mockReset();
+  transcribeMediaMock.mockReset();
 
   vi.stubGlobal('fetch', async (url: string) => {
     const stub = responses.find((r) => r.match.test(url));
@@ -237,10 +249,44 @@ describe('readDriveFile', () => {
     expect((result as { reason: string }).reason).toContain('readable text');
   });
 
-  it('still refuses a video, which has nothing to read', async () => {
+  /** Videos are transcribed now, so the tool needs a transcriber to use. */
+  it('transcribes a video', async () => {
     responses = [meta('video/mp4')];
+    transcribeMediaMock.mockResolvedValue({
+      ok: true,
+      text: 'Welcome to grade 11 biology.',
+      minutes: 9,
+    });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx('token', false, true));
+    const content = (result as { content: string }).content;
+    expect(content).toContain('Welcome to grade 11 biology');
+    expect(content).toContain('9 minutes');
+  });
+
+  /*
+   * Transcription is optional configuration, not a property of the file. A
+   * student whose deployment lacks it should hear that, not that their video
+   * is broken.
+   */
+  it('says transcription is unconfigured rather than blaming the file', async () => {
+    responses = [meta('video/mp4')];
+
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
-    expect((result as { reason: string }).reason).toContain('video');
+    expect((result as { reason: string }).reason).toContain('not configured');
+  });
+
+  /** Video streams to disk, so the in-memory size cap must not apply to it. */
+  it('does not reject a large video on the in-memory cap', async () => {
+    responses = [meta('video/mp4', { size: String(280 * 1024 * 1024) })];
+    transcribeMediaMock.mockResolvedValue({
+      ok: true,
+      text: 'A long lecture recording.',
+      minutes: 45,
+    });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx('token', false, true));
+    expect((result as { content?: string }).content).toContain('long lecture');
   });
 
   it('names the format it cannot read yet', async () => {

@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { ScopeGroup } from './google/scopes.js';
+import type { AudioTranscriber } from './transcribe.js';
 
 /**
  * Something an agent can do in the world.
@@ -36,6 +37,11 @@ export interface ToolContext {
    * should return a clear, student-readable message rather than throwing.
    */
   google?: GoogleTokenProvider;
+  /**
+   * Turns audio into text. Absent when transcription is not configured, which
+   * a tool must report rather than treat as a broken file.
+   */
+  transcriber?: AudioTranscriber;
   signal?: AbortSignal;
 }
 

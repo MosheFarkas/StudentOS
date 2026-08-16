@@ -6,11 +6,18 @@ import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
 
 interface Props {
-  agent: Agent;
+  agentId: string;
   onBack: () => void;
 }
 
-export function Chat({ agent, onBack }: Props) {
+export function Chat({ agentId, onBack }: Props) {
+  /*
+   * Loaded here rather than handed down, because the id now comes from the
+   * URL. That is what lets a student reopen a conversation from a link, or
+   * refresh mid-chat without being thrown back to the list.
+   */
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [missing, setMissing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -19,11 +26,24 @@ export function Chat({ agent, onBack }: Props) {
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setAgent(null);
+    setMissing(false);
+    setMessages([]);
+
     void (async () => {
-      const res = await api.agents[':id'].messages.$get({ param: { id: agent.id } });
-      if (res.ok) setMessages((await res.json()).messages);
+      const detail = await api.agents[':id'].$get({ param: { id: agentId } });
+      if (!detail.ok) {
+        // 404 covers both "deleted" and "belongs to someone else" -- the API
+        // deliberately does not distinguish them.
+        setMissing(true);
+        return;
+      }
+      setAgent((await detail.json()).agent);
+
+      const history = await api.agents[':id'].messages.$get({ param: { id: agentId } });
+      if (history.ok) setMessages((await history.json()).messages);
     })();
-  }, [agent.id]);
+  }, [agentId]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,7 +63,7 @@ export function Chat({ agent, onBack }: Props) {
     // broken. Replaced by the server's copy when the response lands.
     const pending: Message = {
       id: `pending-${Date.now()}`,
-      agentId: agent.id,
+      agentId,
       role: 'user',
       content,
       toolsUsed: [],
@@ -53,7 +73,7 @@ export function Chat({ agent, onBack }: Props) {
 
     try {
       const res = await api.agents[':id'].messages.$post({
-        param: { id: agent.id },
+        param: { id: agentId },
         json: { content },
       });
 
@@ -76,6 +96,19 @@ export function Chat({ agent, onBack }: Props) {
       setSending(false);
     }
   }
+
+  if (missing) {
+    return (
+      <>
+        <div className="chat-header">
+          <button onClick={onBack}>← Agents</button>
+        </div>
+        <p className="muted">That agent doesn&apos;t exist, or isn&apos;t yours.</p>
+      </>
+    );
+  }
+
+  if (!agent) return <p className="muted">Loading…</p>;
 
   return (
     <>
