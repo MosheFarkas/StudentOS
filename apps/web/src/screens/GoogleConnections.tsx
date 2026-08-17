@@ -199,6 +199,24 @@ export function GoogleConnections() {
             </div>
 
             {/*
+             * Classroom hands back the NAME and link of every attachment but
+             * not a word of what is inside it -- reading a file is Drive's
+             * job. Without Drive the agent can tell a student a review
+             * package exists and nothing about what it says, which reads as
+             * the agent being useless rather than as a missing connection.
+             *
+             * Switched off counts as missing: the tools are deregistered
+             * either way, so the student sees the same behaviour.
+             */}
+            {group === 'classroom' && status.classroom && (!status.drive || !isOn('drive')) && (
+              <p className="notice">
+                Without <strong>Drive</strong>, your agent can see your assignments, due dates and
+                the names of files your teachers post &mdash; but it can&apos;t open those files or
+                tell you what&apos;s in them.
+              </p>
+            )}
+
+            {/*
              * The write half, shown only once the integration is connected.
              * Disabled rather than hidden when the parent is off, so the
              * setting stays visible and its state is obvious.
