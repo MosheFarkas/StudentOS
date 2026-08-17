@@ -19,6 +19,15 @@ import {
   unsubmitAssignment,
 } from './google/classroom.js';
 import { listDriveFiles, readDriveFile } from './google/drive.js';
+import {
+  listMailLabels,
+  modifyMail,
+  readMail,
+  readMailAttachment,
+  searchMail,
+  sendMail,
+  trashMail,
+} from './google/gmail.js';
 import { readWebLink } from './web/read-link.js';
 import { readYoutubeVideo } from './web/youtube.js';
 
@@ -38,6 +47,13 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   attachToSubmission,
   listDriveFiles,
   readDriveFile,
+  searchMail,
+  readMail,
+  readMailAttachment,
+  listMailLabels,
+  sendMail,
+  modifyMail,
+  trashMail,
   readWebLink,
   readYoutubeVideo,
 ] as unknown as Tool<never, unknown>[];

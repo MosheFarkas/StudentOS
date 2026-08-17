@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALENDAR_SCOPE,
+  ELECTIVE_SCOPES,
+  GMAIL_MODIFY_SCOPE,
+  GMAIL_READ_SCOPE,
   CLASSROOM_SUBMISSIONS_SCOPE,
   hasScope,
   parseGrantedScopes,
@@ -210,5 +213,40 @@ describe('coursework readability', () => {
   it('still reports nothing when neither is granted', () => {
     const granted = parseGrantedScopes(CLASSROOM_COURSES_SCOPE);
     expect(hasScope(CLASSROOM_COURSEWORK_SCOPE, granted)).toBe(false);
+  });
+});
+
+describe('gmail scopes', () => {
+  /**
+   * Sending mail is the highest-consequence action in the product: it leaves
+   * the student's control instantly, arrives under their name, and usually
+   * goes to a teacher. Connecting to READ mail must never carry it.
+   */
+  it('does not request send access when connecting mail', () => {
+    expect(scopesFor(['gmail'])).not.toContain(GMAIL_MODIFY_SCOPE);
+    expect(scopesFor(['gmail'])).toContain(GMAIL_READ_SCOPE);
+  });
+
+  it('adds send access only when explicitly asked for', () => {
+    expect(scopesFor(['gmail'], [GMAIL_MODIFY_SCOPE])).toContain(GMAIL_MODIFY_SCOPE);
+  });
+
+  /** gmail.modify supersedes readonly; a student who granted it is connected. */
+  it('treats modify as satisfying read', () => {
+    expect(grantedScopeGroups(GMAIL_MODIFY_SCOPE)).toContain('gmail');
+  });
+
+  /**
+   * https://mail.google.com/ is the only scope that can permanently delete
+   * mail. It must never appear in anything this app requests, so the worst an
+   * injected instruction can achieve is a recoverable trip to Trash.
+   */
+  it('never requests permanent-delete access anywhere', () => {
+    const everything = scopesFor(
+      ['identity', 'calendar', 'classroom', 'drive', 'gmail'],
+      ELECTIVE_SCOPES,
+    );
+    expect(everything).not.toContain('https://mail.google.com/');
+    expect(everything.some((s) => s.includes('gmail.settings'))).toBe(false);
   });
 });

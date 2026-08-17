@@ -45,6 +45,16 @@ export {
   type Topic,
 } from './tools/google/classroom.js';
 export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
+export {
+  searchMail,
+  readMail,
+  readMailAttachment,
+  listMailLabels,
+  sendMail,
+  modifyMail,
+  trashMail,
+  type MailAttachment,
+} from './tools/google/gmail.js';
 export { readWebLink } from './tools/web/read-link.js';
 export {
   readYoutubeVideo,

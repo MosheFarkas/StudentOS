@@ -6,9 +6,11 @@ type Status = {
   calendar: boolean;
   classroom: boolean;
   classroomWrite: boolean;
+  gmail: boolean;
+  gmailWrite: boolean;
   missing: { calendar: string[]; classroom: string[] };
 };
-type Group = 'calendar' | 'classroom';
+type Group = 'calendar' | 'classroom' | 'gmail';
 
 /** Turn a scope URL into something a student can act on. */
 const SCOPE_LABELS: Record<string, string> = {
@@ -145,6 +147,53 @@ export function GoogleConnections() {
       {status.classroomWrite && (
         <p className="muted">
           Your agent can turn work in. It will ask you before submitting anything.
+        </p>
+      )}
+
+      {/*
+       * Mail is its own connection, and deliberately last. It is the most
+       * invasive thing here -- there is no "only school mail" scope, so it is
+       * the whole mailbox -- and a student should be able to have Classroom
+       * and Calendar without ever being nudged into this one.
+       */}
+      <div className="row static">
+        <span>
+          <strong>Gmail</strong>
+          <br />
+          <span className="muted">
+            Lets your agent read your email and attachments. This is your whole mailbox &mdash;
+            Google has no way to share only school mail.
+          </span>
+        </span>
+        {status.gmail ? (
+          <span className="status">Connected</span>
+        ) : (
+          <button disabled={busy !== null} onClick={() => void connect('gmail')}>
+            {busy === 'gmail' ? 'Opening…' : 'Connect'}
+          </button>
+        )}
+      </div>
+
+      {status.gmail && !status.gmailWrite && (
+        <div className="row static">
+          <span>
+            <strong>Let your agent write email</strong>
+            <br />
+            <span className="muted">
+              Send and reply, archive, label, and move mail to Trash. It will always show you an
+              email and ask before sending it.
+            </span>
+          </span>
+          <button disabled={busy !== null} onClick={() => void connect('gmail', true)}>
+            {busy === 'gmail' ? 'Opening…' : 'Allow'}
+          </button>
+        </div>
+      )}
+
+      {status.gmailWrite && (
+        <p className="muted">
+          Your agent can send email as you. It asks first, and it will never send because an email
+          it read told it to. It cannot delete mail permanently &mdash; only move it to Trash.
         </p>
       )}
 

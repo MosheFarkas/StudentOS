@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import {
   CLASSROOM_COURSEWORK_WRITE_SCOPE,
   DRIVE_READONLY_SCOPE,
+  GMAIL_MODIFY_SCOPE,
   ELECTIVE_SCOPES,
   SCOPE_GROUPS,
   listAccessibleFiles,
@@ -42,12 +43,17 @@ export function createGoogleRoutes(ctx: AppContext) {
           // Drive being connected means "ready to be given files", not "can
           // read your Drive" -- access is per file. The UI has to say so.
           drive: grant.groups.includes('drive'),
+          gmail: grant.groups.includes('gmail'),
           // Elective, so it needs reporting separately -- the classroom group
           // is "connected" without it.
           classroomWrite: parseGrantedScopes(grant.scope).has(CLASSROOM_COURSEWORK_WRITE_SCOPE),
+          // Sending is elective, so the classroom group reads as connected
+          // without it -- the UI has to report it separately.
+          gmailWrite: parseGrantedScopes(grant.scope).has(GMAIL_MODIFY_SCOPE),
           missing: {
             calendar: missingOptionalScopes('calendar', grant.scope),
             classroom: missingOptionalScopes('classroom', grant.scope),
+            gmail: missingOptionalScopes('gmail', grant.scope),
           },
         });
       })

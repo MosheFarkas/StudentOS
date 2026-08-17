@@ -91,7 +91,35 @@ export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
  */
 export const DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 
-export type ScopeGroup = 'identity' | 'calendar' | 'classroom' | 'drive';
+/**
+ * Read the student's mail.
+ *
+ * RESTRICTED, and the most invasive scope in the product -- there is no
+ * "only school mail" option, so this is the whole mailbox or nothing. Offered
+ * as its own connection precisely so a student can have Classroom and
+ * Calendar without it.
+ */
+export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
+
+/**
+ * Send, reply, label, archive and trash.
+ *
+ * RESTRICTED, and a superset of gmail.readonly. Elective: an agent that can
+ * send mail as a student, to their teachers, is a different proposition from
+ * one that can read it, and that should never arrive as a side effect of
+ * connecting to read.
+ *
+ * Note what is NOT here: https://mail.google.com/, the only scope that can
+ * permanently delete. Google's own guidance is to request it only if you must
+ * bypass the trash, and nothing a study agent does needs that. Without it,
+ * every deletion this app can perform is recoverable by the student.
+ */
+export const GMAIL_MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
+
+/** Non-sensitive, and the only Gmail scope that is. */
+export const GMAIL_LABELS_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
+
+export type ScopeGroup = 'identity' | 'calendar' | 'classroom' | 'drive' | 'gmail';
 
 export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   /** Always requested. The minimum to create an account and nothing more. */
@@ -147,6 +175,19 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
     optional: [],
     elective: [DRIVE_READONLY_SCOPE],
   },
+
+  /**
+   * Mail.
+   *
+   * Reading is the connection; writing is a separate, explicit decision. See
+   * the note at the bottom of this file on why sending is treated differently
+   * from every other write in this product.
+   */
+  gmail: {
+    required: [GMAIL_READ_SCOPE],
+    optional: [GMAIL_LABELS_SCOPE],
+    elective: [GMAIL_MODIFY_SCOPE],
+  },
 };
 
 /** Every elective scope across all groups. */
@@ -184,6 +225,10 @@ const ALSO_SATISFIED_BY: Record<string, readonly string[]> = {
    * unavailability cleanly if this ever stops holding.
    */
   [CLASSROOM_COURSEWORK_SCOPE]: [CLASSROOM_SUBMISSIONS_SCOPE],
+
+  // gmail.modify includes everything readonly does, so a student who granted
+  // the write scope must not be told mail is disconnected.
+  [GMAIL_READ_SCOPE]: [GMAIL_MODIFY_SCOPE],
 };
 
 /**
@@ -317,5 +362,35 @@ export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []
  * Picker gate would change; the extraction pipeline is identical.
  *
  * Source: https://developers.google.com/workspace/drive/api/guides/api-specific-auth
+ * ===========================================================================
+ *
+ * ===========================================================================
+ * WHY SENDING MAIL IS TREATED DIFFERENTLY FROM EVERY OTHER WRITE
+ * ===========================================================================
+ *
+ * Calendar writes are recoverable and private. Turning in coursework is
+ * consequential but bounded, and the student sees it in Classroom. Sending
+ * mail is neither: it leaves the student's control the instant it goes, it
+ * arrives under their name, and the recipient is often a teacher or a
+ * university.
+ *
+ * PROMPT INJECTION MAKES THIS SHARPER. Every other source this agent reads is
+ * chosen by the student. Mail is the first where an ATTACKER CHOOSES THE
+ * CONTENT: anyone can email a student, and that text lands in the model's
+ * context. An agent that can both read mail and send it is one convincing
+ * message away from forwarding a mailbox to a stranger.
+ *
+ * Three things follow, and all three are load-bearing:
+ *
+ *   1. gmail.modify is ELECTIVE. Reading never implies sending.
+ *   2. Message bodies are labelled as untrusted data, and the send tool is
+ *      told never to act on instructions found inside mail.
+ *   3. https://mail.google.com/ is never requested, so permanent deletion is
+ *      not something this app can do at all -- an injected "delete
+ *      everything" can at worst move mail to the trash, where the student can
+ *      get it back.
+ *
+ * Prompts reduce this risk. They do not eliminate it. The scope being off by
+ * default is the control that actually holds.
  * ===========================================================================
  */
