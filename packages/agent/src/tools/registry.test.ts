@@ -169,6 +169,45 @@ describe('switched-off integrations', () => {
     expect(ids.some((id) => id.startsWith('google_classroom_'))).toBe(true);
   });
 
+  /**
+   * The write half on its own. A student wary of an agent sending mail should
+   * be able to switch that off and keep reading -- if the only choice were
+   * all-or-nothing they would turn the whole thing off, and lose the useful
+   * part to avoid the risky one.
+   */
+  it('removes only the write tools for a :write key', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail:write']).ids();
+
+    expect(ids).toContain('gmail_search');
+    expect(ids).toContain('gmail_read_message');
+    expect(ids).not.toContain('gmail_send_message');
+    expect(ids).not.toContain('gmail_trash_message');
+    expect(ids).not.toContain('gmail_modify_message');
+  });
+
+  it('does the same for classroom', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['classroom:write']).ids();
+
+    expect(ids).toContain('google_classroom_list_coursework');
+    expect(ids).not.toContain('google_classroom_turn_in');
+    expect(ids).not.toContain('google_classroom_unsubmit');
+  });
+
+  /**
+   * A parent switched off must take its child with it. The API enforces this
+   * by writing both keys, and this pins the registry end: reading off while
+   * sending somehow stayed on would be the worst possible combination.
+   */
+  it('removes the write tools when the whole integration is off', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'gmail:write']).ids();
+    expect(ids.some((id) => id.startsWith('gmail_'))).toBe(false);
+  });
+
+  it('ignores an unknown key rather than throwing', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['nonsense' as never]).ids();
+    expect(ids.length).toBeGreaterThan(0);
+  });
+
   /** Tools needing no Google grant are unaffected by any of this. */
   it('keeps scope-free tools regardless', () => {
     const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'calendar', 'classroom']).ids();

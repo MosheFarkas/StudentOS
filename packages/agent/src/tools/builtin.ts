@@ -74,9 +74,18 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
  * Tools still check availability defensively; a scope can be revoked between
  * the registry being built and the tool being called.
  */
+/**
+ * An integration, or just the write half of one.
+ *
+ * 'gmail' switches everything Gmail off; 'gmail:write' leaves reading alone
+ * and removes only sending and tidying. That split is what lets a student
+ * keep the useful half of an integration without the half they are wary of.
+ */
+export type IntegrationKey = ScopeGroup | `${ScopeGroup}:write`;
+
 export function buildToolRegistry(
   grantedScope: string | null | undefined,
-  disabled: readonly ScopeGroup[] = [],
+  disabled: readonly IntegrationKey[] = [],
 ): ToolRegistry {
   const granted = parseGrantedScopes(grantedScope);
   const registry = new ToolRegistry();
@@ -88,11 +97,15 @@ export function buildToolRegistry(
    * product being broken rather than as their own setting.
    */
   const off = new Set(
-    disabled.flatMap((group) => [
-      ...SCOPE_GROUPS[group].required,
-      ...SCOPE_GROUPS[group].optional,
-      ...(SCOPE_GROUPS[group].elective ?? []),
-    ]),
+    disabled.flatMap((key) => {
+      const [name, part] = key.split(':') as [ScopeGroup, string | undefined];
+      const definition = SCOPE_GROUPS[name];
+      if (!definition) return [];
+
+      // ':write' removes only the elective scopes, leaving reading intact.
+      if (part === 'write') return [...(definition.elective ?? [])];
+      return [...definition.required, ...definition.optional, ...(definition.elective ?? [])];
+    }),
   );
 
   for (const tool of ALL_TOOLS) {

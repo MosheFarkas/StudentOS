@@ -13,7 +13,7 @@ import {
   scopesFor,
   type ScopeGroup,
 } from '@contexto/agent';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { disabledIntegrations } from '@contexto/db';
 import type { AppContext } from '../context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from '../google/connections.js';
@@ -87,11 +87,22 @@ export function createGoogleRoutes(ctx: AppContext) {
         zValidator('query', z.object({ elective: z.enum(['true', 'false']).optional() })),
         async (c) => {
           const group = c.req.param('group');
+          const grant = await getGoogleGrant(ctx.db, c.get('userId'));
+
+          /*
+           * 'all' is the one-tap path: everything, including the write half
+           * of each integration. A student choosing it has said yes once to
+           * the whole product rather than four times to pieces of it.
+           */
+          if (group === 'all') {
+            const every = Object.keys(SCOPE_GROUPS) as ScopeGroup[];
+            return c.json({ scopes: scopesFor(every, ELECTIVE_SCOPES) });
+          }
+
           if (!isConnectableGroup(group)) {
             return c.json({ error: 'Unknown scope group' }, 400);
           }
 
-          const grant = await getGoogleGrant(ctx.db, c.get('userId'));
           const groups = [...new Set<ScopeGroup>([...grant.groups, group])];
 
           /*
@@ -102,8 +113,14 @@ export function createGoogleRoutes(ctx: AppContext) {
            */
           const held = parseGrantedScopes(grant.scope);
           const alreadyElective = ELECTIVE_SCOPES.filter((scope) => held.has(scope));
+          /*
+           * The write half comes WITH the integration rather than as a second
+           * trip through consent. The student still controls it -- the switch
+           * in Settings turns it off, and the tools disappear when it is off
+           * -- but they are not asked twice for one decision.
+           */
           const requested =
-            c.req.valid('query').elective === 'true' ? (SCOPE_GROUPS[group].elective ?? []) : [];
+            c.req.valid('query').elective === 'false' ? [] : (SCOPE_GROUPS[group].elective ?? []);
 
           return c.json({
             scopes: scopesFor(groups, [...new Set([...alreadyElective, ...requested])]),
@@ -124,12 +141,25 @@ export function createGoogleRoutes(ctx: AppContext) {
         auth,
         zValidator('json', z.object({ enabled: z.boolean() })),
         async (c) => {
-          const group = c.req.param('group');
-          if (!isConnectableGroup(group)) {
+          const key = c.req.param('group');
+          const [name, part] = key.split(':');
+          if (!name || !isConnectableGroup(name) || (part && part !== 'write')) {
             return c.json({ error: 'Unknown integration' }, 400);
           }
           const userId = c.get('userId');
           const { enabled } = c.req.valid('json');
+
+          /*
+           * A parent carries its child. Switching Gmail off must take sending
+           * with it -- leaving "can send email" on under a disabled Gmail
+           * would be a setting that reads as active and is not. Switching the
+           * parent back on restores the child too, which is what a student
+           * means by turning something back on.
+           *
+           * The child on its own changes only itself, so sending can be off
+           * while reading stays on.
+           */
+          const affected = part === 'write' ? [key] : [name, `${name}:write`];
 
           if (enabled) {
             await ctx.db
@@ -137,17 +167,17 @@ export function createGoogleRoutes(ctx: AppContext) {
               .where(
                 and(
                   eq(disabledIntegrations.userId, userId),
-                  eq(disabledIntegrations.integration, group),
+                  inArray(disabledIntegrations.integration, affected),
                 ),
               );
           } else {
             await ctx.db
               .insert(disabledIntegrations)
-              .values({ userId, integration: group })
+              .values(affected.map((integration) => ({ userId, integration })))
               .onConflictDoNothing();
           }
 
-          return c.json({ integration: group, enabled });
+          return c.json({ integration: key, enabled, affected });
         },
       )
 

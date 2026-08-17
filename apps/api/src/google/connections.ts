@@ -3,6 +3,7 @@ import type { Database } from '@contexto/db';
 import { account, disabledIntegrations } from '@contexto/db';
 import {
   grantedScopeGroups,
+  type IntegrationKey,
   hasScope,
   parseGrantedScopes,
   type GoogleTokenProvider,
@@ -26,12 +27,13 @@ export interface GoogleGrant {
   /** Groups whose required scopes are all present. */
   groups: ScopeGroup[];
   /**
-   * Groups the student has switched off.
+   * What the student has switched off -- a whole integration, or just its
+   * write half ('gmail:write').
    *
-   * Separate from the grant: a student turning Gmail off should not have to
-   * walk through Google's consent screen again to turn it back on.
+   * Separate from the grant: turning something off should not mean walking
+   * through Google's consent screen again to turn it back on.
    */
-  disabled: ScopeGroup[];
+  disabled: IntegrationKey[];
 }
 
 /**
@@ -57,7 +59,7 @@ export async function getGoogleGrant(db: Database, userId: string): Promise<Goog
   return {
     scope,
     groups: grantedScopeGroups(scope),
-    disabled: off.map((row) => row.integration as ScopeGroup),
+    disabled: off.map((row) => row.integration as IntegrationKey),
   };
 }
 

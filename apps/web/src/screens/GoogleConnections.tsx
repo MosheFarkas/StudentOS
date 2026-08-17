@@ -16,21 +16,15 @@ type Status = {
   missing: { calendar: string[]; classroom: string[]; gmail: string[] };
 };
 
-/** Turn a scope URL into something a student can act on. */
-const SCOPE_LABELS: Record<string, string> = {
-  'https://www.googleapis.com/auth/classroom.coursework.me.readonly': 'assignments and due dates',
-  'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly': 'your submissions',
-  'https://www.googleapis.com/auth/classroom.announcements.readonly': 'class announcements',
-  'https://www.googleapis.com/auth/classroom.topics.readonly': 'class topics',
-  'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly': 'class materials',
-  'https://www.googleapis.com/auth/gmail.labels': 'your mail labels',
-};
-
-function describeMissing(scopes: string[]): string {
-  return scopes.map((scope) => SCOPE_LABELS[scope] ?? scope).join(', ');
+interface Connection {
+  group: Group;
+  name: string;
+  blurb: string;
+  /** The write half, where one exists. */
+  sub?: { name: string; blurb: string };
 }
 
-const CONNECTIONS: { group: Group; name: string; blurb: string }[] = [
+const CONNECTIONS: Connection[] = [
   {
     group: 'calendar',
     name: 'Calendar',
@@ -40,6 +34,10 @@ const CONNECTIONS: { group: Group; name: string; blurb: string }[] = [
     group: 'classroom',
     name: 'Classroom',
     blurb: 'Your classes, assignments, due dates, materials and announcements.',
+    sub: {
+      name: 'Turning work in',
+      blurb: 'Hand in and take back assignments, and attach files. Always asks first.',
+    },
   },
   {
     group: 'drive',
@@ -49,22 +47,25 @@ const CONNECTIONS: { group: Group; name: string; blurb: string }[] = [
   {
     group: 'gmail',
     name: 'Gmail',
-    blurb: 'Read your email and attachments. This is your whole mailbox.',
+    blurb: 'Read your email and attachments, and keep your inbox tidy.',
+    sub: {
+      name: 'Sending email',
+      blurb: 'Send and reply as you. Shows you every message first, and never sends on its own.',
+    },
   },
 ];
 
 /**
  * Google connections.
  *
- * Each integration is a separate consent, asked for only when a student
- * chooses it -- never bundled into sign-in. Beyond converting better, that
- * separation is what lets someone who cannot get Classroom approved still use
- * everything else.
+ * Two levels. An integration is the thing itself; beneath it sits the half
+ * that WRITES -- turning work in, sending mail -- because those deserve to be
+ * visible and switchable on their own.
  *
- * Once connected the control becomes a switch rather than a disconnect
- * button. Turning something off should be instant and reversible; making a
- * student walk back through Google's consent screen to undo a tap punishes
- * them for changing their mind.
+ * A parent carries its child: switching Gmail off takes sending with it,
+ * since "can send email" left showing as on under a disabled Gmail is a lie
+ * about the state of the system. Switching the child alone changes only the
+ * child, so a student can read their mail while the agent cannot send any.
  */
 export function GoogleConnections() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -80,7 +81,7 @@ export function GoogleConnections() {
     void load();
   }, []);
 
-  async function connect(group: Group, elective = false) {
+  async function connect(group: Group | 'all') {
     setBusy(group);
     setError(null);
     try {
@@ -88,7 +89,7 @@ export function GoogleConnections() {
       // already granted -- see lib/auth.ts.
       const res = await api.google['connect-scopes'][':group'].$get({
         param: { group },
-        query: elective ? { elective: 'true' } : {},
+        query: {},
       });
       if (!res.ok) throw new Error('Could not work out which permissions to request.');
 
@@ -103,22 +104,23 @@ export function GoogleConnections() {
     }
   }
 
-  async function toggle(group: Group, enabled: boolean) {
-    // Optimistic: a switch that waits on a round trip feels broken.
-    setStatus((prev) =>
-      prev
-        ? {
-            ...prev,
-            disabled: enabled
-              ? prev.disabled.filter((g) => g !== group)
-              : [...prev.disabled, group],
-          }
-        : prev,
-    );
+  async function toggle(key: string, enabled: boolean) {
+    // Optimistic, and it mirrors the server's parent/child rule so the two
+    // switches never disagree for the length of a round trip.
+    setStatus((prev) => {
+      if (!prev) return prev;
+      const affected = key.includes(':') ? [key] : [key, `${key}:write`];
+      return {
+        ...prev,
+        disabled: enabled
+          ? prev.disabled.filter((d) => !affected.includes(d))
+          : [...new Set([...prev.disabled, ...affected])],
+      };
+    });
     setError(null);
 
     const res = await api.google.integrations[':group'].$put({
-      param: { group },
+      param: { group: key },
       json: { enabled },
     });
     if (!res.ok) {
@@ -129,110 +131,117 @@ export function GoogleConnections() {
 
   if (!status) return null;
 
-  const isOn = (group: Group) => !status.disabled.includes(group);
+  const isOn = (key: string) => !status.disabled.includes(key);
+  const connected = CONNECTIONS.filter((c) => status[c.group]);
+  const allConnected = connected.length === CONNECTIONS.length;
 
   return (
     <div className="panel">
       <div className="panel-head">
         <h2>Connections</h2>
         <p className="muted">
-          Connect only what you want your agent to use. Each one is separate, and you can switch any
-          of them off at any time.
+          What your agent can see and do. Connect everything for the full thing, or pick what you
+          want &mdash; you can switch any of it off later.
         </p>
       </div>
 
-      {CONNECTIONS.map(({ group, name, blurb }) => (
-        <div className="row static" key={group}>
-          <span className="row-main">
-            <strong>{name}</strong>
+      {/*
+       * One tap for the whole product, before the list of parts. Someone
+       * setting this up for the first time wants their agent to work, not to
+       * make four separate permission decisions before it does anything.
+       */}
+      {!allConnected && (
+        <div className="connect-all">
+          <div className="row-main">
+            <strong>Connect everything</strong>
+            <span className="badge">Recommended</span>
             <br />
-            <span className="muted">{blurb}</span>
-          </span>
-
-          <span className="row-control">
-            {status[group] ? (
-              <>
-                <span className={isOn(group) ? 'status' : 'status off'}>
-                  {isOn(group) ? 'On' : 'Off'}
-                </span>
-                <Toggle
-                  label={`${name} enabled`}
-                  checked={isOn(group)}
-                  onChange={(next) => void toggle(group, next)}
-                />
-              </>
-            ) : (
-              <button
-                className="primary"
-                disabled={busy !== null}
-                onClick={() => void connect(group)}
-              >
-                {busy === group ? 'Opening…' : 'Connect'}
-              </button>
-            )}
-          </span>
+            <span className="muted">
+              Calendar, Classroom, Drive and Gmail in one step, so your agent knows your coursework
+              from the start.
+            </span>
+          </div>
+          <button className="primary" disabled={busy !== null} onClick={() => void connect('all')}>
+            {busy === 'all' ? 'Opening…' : 'Connect'}
+          </button>
         </div>
-      ))}
+      )}
+
+      {CONNECTIONS.map(({ group, name, blurb, sub }) => {
+        const parentOn = isOn(group);
+        return (
+          <div key={group}>
+            <div className="row static">
+              <span className="row-main">
+                <strong>{name}</strong>
+                <br />
+                <span className="muted">{blurb}</span>
+              </span>
+
+              <span className="row-control">
+                {status[group] ? (
+                  <>
+                    <span className={parentOn ? 'status' : 'status off'}>
+                      {parentOn ? 'On' : 'Off'}
+                    </span>
+                    <Toggle
+                      label={`${name} enabled`}
+                      checked={parentOn}
+                      onChange={(next) => void toggle(group, next)}
+                    />
+                  </>
+                ) : (
+                  <button disabled={busy !== null} onClick={() => void connect(group)}>
+                    {busy === group ? 'Opening…' : 'Connect'}
+                  </button>
+                )}
+              </span>
+            </div>
+
+            {/*
+             * The write half, shown only once the integration is connected.
+             * Disabled rather than hidden when the parent is off, so the
+             * setting stays visible and its state is obvious.
+             */}
+            {sub && status[group] && (
+              <div className="row static sub">
+                <span className="row-main">
+                  <strong>{sub.name}</strong>
+                  <br />
+                  <span className="muted">{sub.blurb}</span>
+                </span>
+                <span className="row-control">
+                  <span className={parentOn && isOn(`${group}:write`) ? 'status' : 'status off'}>
+                    {parentOn && isOn(`${group}:write`) ? 'On' : 'Off'}
+                  </span>
+                  <Toggle
+                    label={`${sub.name} enabled`}
+                    checked={parentOn && isOn(`${group}:write`)}
+                    disabled={!parentOn}
+                    onChange={(next) => void toggle(`${group}:write`, next)}
+                  />
+                </span>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {/*
        * Partial approval is a NORMAL state on a school account, not an error.
-       * Naming what is missing is the difference between "this product is
-       * broken" and "my school didn't approve that part".
+       * Naming what is missing is the difference between "this is broken" and
+       * "my school didn't approve that part".
        */}
       {status.classroom && status.missing.classroom.length > 0 && (
         <p className="muted">
-          Your school hasn&apos;t approved everything for Classroom: your agent can&apos;t see{' '}
-          {describeMissing(status.missing.classroom)}.
+          Your school hasn&apos;t approved everything for Classroom, so some of it won&apos;t work.
         </p>
       )}
 
       {!status.classroom && (
         <p className="muted">
-          On a school Google account, Classroom may need an administrator to approve ContextoAgent
-          first. Everything else works either way.
-        </p>
-      )}
-
-      {/* Writing is always a second, explicit decision. Reading never implies it. */}
-      {((status.classroom && !status.classroomWrite) ||
-        (status.gmail && !status.gmailWrite) ||
-        status.gmailWrite) && <hr />}
-
-      {status.classroom && !status.classroomWrite && (
-        <div className="row static">
-          <span className="row-main">
-            <strong>Let your agent turn work in</strong>
-            <br />
-            <span className="muted">
-              Hand in and take back assignments, and attach files to them. It asks first.
-            </span>
-          </span>
-          <button disabled={busy !== null} onClick={() => void connect('classroom', true)}>
-            {busy === 'classroom' ? 'Opening…' : 'Allow'}
-          </button>
-        </div>
-      )}
-
-      {status.gmail && !status.gmailWrite && (
-        <div className="row static">
-          <span className="row-main">
-            <strong>Let your agent write email</strong>
-            <br />
-            <span className="muted">
-              Send and reply, archive, label, and move mail to Trash. It shows you every email
-              before sending, and can never delete mail permanently.
-            </span>
-          </span>
-          <button disabled={busy !== null} onClick={() => void connect('gmail', true)}>
-            {busy === 'gmail' ? 'Opening…' : 'Allow'}
-          </button>
-        </div>
-      )}
-
-      {status.gmailWrite && (
-        <p className="muted">
-          Your agent can send email as you. It asks first, and it will never send because an email
-          it read told it to.
+          On a school account, Classroom may need an administrator to approve ContextoAgent first.
+          Everything else works either way.
         </p>
       )}
 

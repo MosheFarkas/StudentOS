@@ -318,6 +318,52 @@ hr {
   gap: 0.6rem;
 }
 
+/*
+ * The one-tap path, set apart from the list of parts so it reads as the
+ * recommended route rather than a fifth item in a menu.
+ */
+.connect-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  margin-bottom: 1.1rem;
+  border: 1px solid var(--lavender);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #faf7ff, #f4efff);
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--violet-dark);
+  background: #ece3ff;
+  vertical-align: 0.1em;
+}
+
+/*
+ * The write half of an integration, indented under its parent. The rule down
+ * the left is what makes it read as belonging to the row above rather than as
+ * another integration in its own right.
+ */
+.row.static.sub {
+  padding-left: 1rem;
+  margin-left: 0.35rem;
+  border-left: 2px solid var(--line);
+}
+
+.row.static.sub strong {
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
 /* ---------- status ---------- */
 
 .status {

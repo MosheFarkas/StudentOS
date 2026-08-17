@@ -79,6 +79,7 @@ export {
   resolvePublicAddress,
   pinnedLookup,
 } from './tools/web/fetch.js';
+export type { IntegrationKey } from './tools/builtin.js';
 export * from './tools/google/scopes.js';
 
 export {
