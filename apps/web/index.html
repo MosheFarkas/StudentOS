@@ -4,15 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ContextoAgent</title>
-    <meta name="description" content="Build your own AI study agent." />
+    <meta name="description" content="An AI agent that knows your coursework." />
     <meta name="theme-color" content="#0a1045" />
-    <link rel="icon" type="image/png" href="/mark.png" />
+
     <!--
-      Two families, both self-hostable defaults rather than a webfont request:
-      a serif for headings, because the wordmark is a serif and an academic
-      product should read like one, and the system sans for body text, which
-      is what a student's own OS already renders best.
+      Separate files per size rather than one large icon for the browser to
+      downscale. A 512 squeezed into a 16px tab loses the thin white outline
+      inside the mark and turns to mush; a file rendered at 16 keeps it.
+
+      apple-touch-icon is deliberately opaque: iOS composites transparency
+      onto BLACK, so an alpha icon shows as a dark tile on the home screen.
     -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icon-48.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
   </head>
   <body>
     <div id="root"></div>

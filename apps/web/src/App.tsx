@@ -40,7 +40,7 @@ export function App() {
           <img src="/logo.png" alt="ContextoAgent" />
           <p className="muted">An AI agent that knows your coursework.</p>
           <div className="panel">
-            <p>Sign in with your school or personal Google account to get started.</p>
+            <p>Sign in with your educational Google account to get started.</p>
             <button className="primary" onClick={() => void signInWithGoogle()}>
               Continue with Google
             </button>
