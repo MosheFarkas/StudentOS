@@ -38,12 +38,17 @@ export function Settings({ onBack }: { onBack: () => void }) {
   return (
     <>
       <div className="chat-header">
-        <button onClick={onBack}>← Agents</button>
+        <button className="quiet" onClick={onBack}>
+          ← Agents
+        </button>
         <strong>Settings</strong>
       </div>
 
       {usage && (
         <div className="panel">
+          <div className="panel-head">
+            <h2>Usage</h2>
+          </div>
           <dl>
             <dt>Currently using</dt>
             <dd>
@@ -69,11 +74,13 @@ export function Settings({ onBack }: { onBack: () => void }) {
       <TelegramConnection />
 
       <div className="panel">
-        <h2>Your API keys</h2>
-        <p className="muted">
-          Add your own key for unlimited use. It&apos;s encrypted before it&apos;s stored, and never
-          shown again.
-        </p>
+        <div className="panel-head">
+          <h2>Your API keys</h2>
+          <p className="muted">
+            Add your own key for unlimited use. It&apos;s encrypted before it&apos;s stored, and
+            never shown again.
+          </p>
+        </div>
 
         {credentials.map((credential) => (
           <div key={credential.id} className="row static">
@@ -83,7 +90,9 @@ export function Settings({ onBack }: { onBack: () => void }) {
                 {credential.provider} ····{credential.last4}
               </span>
             </span>
-            <button onClick={() => void remove(credential.id)}>Remove</button>
+            <button className="danger" onClick={() => void remove(credential.id)}>
+              Remove
+            </button>
           </div>
         ))}
 
@@ -165,7 +174,7 @@ function AddCredential({
         />
       </label>
 
-      <button type="submit" disabled={saving}>
+      <button className="primary" type="submit" disabled={saving}>
         {saving ? 'Saving…' : 'Add key'}
       </button>
     </form>

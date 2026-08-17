@@ -136,3 +136,42 @@ describe('scope declarations', () => {
     expect(ids.filter((id) => id.startsWith('google_'))).toEqual([]);
   });
 });
+
+describe('switched-off integrations', () => {
+  /**
+   * A student turning Gmail off must remove the tools entirely, not leave
+   * them registered to refuse at call time. Registering them would burn a
+   * turn discovering the refusal and read as the product being broken rather
+   * than as their own setting.
+   */
+  it('removes the tools for an integration that is switched off', () => {
+    const on = buildToolRegistry(ALL_GRANTED).ids();
+    const off = buildToolRegistry(ALL_GRANTED, ['gmail']).ids();
+
+    expect(on.some((id) => id.startsWith('gmail_'))).toBe(true);
+    expect(off.some((id) => id.startsWith('gmail_'))).toBe(false);
+  });
+
+  it('leaves every other integration alone', () => {
+    const off = buildToolRegistry(ALL_GRANTED, ['gmail']).ids();
+
+    expect(off.some((id) => id.startsWith('google_calendar_'))).toBe(true);
+    expect(off.some((id) => id.startsWith('google_classroom_'))).toBe(true);
+    expect(off.some((id) => id.startsWith('google_drive_'))).toBe(true);
+  });
+
+  it('can switch several off at once', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'calendar']).ids();
+
+    expect(ids.some((id) => id.startsWith('gmail_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('google_drive_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('google_calendar_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('google_classroom_'))).toBe(true);
+  });
+
+  /** Tools needing no Google grant are unaffected by any of this. */
+  it('keeps scope-free tools regardless', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'calendar', 'classroom']).ids();
+    expect(ids).toContain('web_read_link');
+  });
+});

@@ -36,11 +36,15 @@ export function App() {
   if (!session?.user) {
     return (
       <main>
-        <h1>Contexto</h1>
-        <p className="muted">Build your own AI agent.</p>
-        <div className="panel">
-          <p>Sign in with your school or personal Google account to get started.</p>
-          <button onClick={() => void signInWithGoogle()}>Continue with Google</button>
+        <div className="signin">
+          <img src="/logo.png" alt="ContextoAgent" />
+          <p className="muted">An AI agent that knows your coursework.</p>
+          <div className="panel">
+            <p>Sign in with your school or personal Google account to get started.</p>
+            <button className="primary" onClick={() => void signInWithGoogle()}>
+              Continue with Google
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -49,12 +53,22 @@ export function App() {
   return (
     <main>
       <header className="app-header">
-        <h1>Contexto</h1>
+        <button
+          className="brand"
+          aria-label="Your agents"
+          onClick={() => navigate({ name: 'agents' })}
+        >
+          <img src="/logo.png" alt="ContextoAgent" />
+        </button>
         <nav>
           {route.name !== 'settings' && (
-            <button onClick={() => navigate({ name: 'settings' })}>Settings</button>
+            <button className="quiet" onClick={() => navigate({ name: 'settings' })}>
+              Settings
+            </button>
           )}
-          <button onClick={() => void signOut()}>Sign out</button>
+          <button className="quiet" onClick={() => void signOut()}>
+            Sign out
+          </button>
         </nav>
       </header>
 

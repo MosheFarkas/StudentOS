@@ -41,7 +41,7 @@ export async function runTurnForAgent(
       llm: ctx.llm,
       memory: ctx.memory,
       skills: ctx.skills,
-      tools: buildToolRegistry(grant.scope),
+      tools: buildToolRegistry(grant.scope, grant.disabled),
     },
     {
       userId,

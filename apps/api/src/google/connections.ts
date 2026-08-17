@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
-import { account } from '@contexto/db';
+import { account, disabledIntegrations } from '@contexto/db';
 import {
   grantedScopeGroups,
   hasScope,
@@ -25,6 +25,13 @@ export interface GoogleGrant {
   scope: string | null;
   /** Groups whose required scopes are all present. */
   groups: ScopeGroup[];
+  /**
+   * Groups the student has switched off.
+   *
+   * Separate from the grant: a student turning Gmail off should not have to
+   * walk through Google's consent screen again to turn it back on.
+   */
+  disabled: ScopeGroup[];
 }
 
 /**
@@ -41,8 +48,17 @@ export async function getGoogleGrant(db: Database, userId: string): Promise<Goog
     .where(and(eq(account.userId, userId), eq(account.providerId, GOOGLE_PROVIDER_ID)))
     .limit(1);
 
+  const off = await db
+    .select({ integration: disabledIntegrations.integration })
+    .from(disabledIntegrations)
+    .where(eq(disabledIntegrations.userId, userId));
+
   const scope = row?.scope ?? null;
-  return { scope, groups: grantedScopeGroups(scope) };
+  return {
+    scope,
+    groups: grantedScopeGroups(scope),
+    disabled: off.map((row) => row.integration as ScopeGroup),
+  };
 }
 
 /**

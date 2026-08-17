@@ -1,5 +1,5 @@
 import { ToolRegistry } from './registry.js';
-import { hasScope, parseGrantedScopes } from './google/scopes.js';
+import { SCOPE_GROUPS, hasScope, parseGrantedScopes, type ScopeGroup } from './google/scopes.js';
 import type { Tool } from './types.js';
 import {
   createCalendarEvent,
@@ -74,9 +74,26 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
  * Tools still check availability defensively; a scope can be revoked between
  * the registry being built and the tool being called.
  */
-export function buildToolRegistry(grantedScope: string | null | undefined): ToolRegistry {
+export function buildToolRegistry(
+  grantedScope: string | null | undefined,
+  disabled: readonly ScopeGroup[] = [],
+): ToolRegistry {
   const granted = parseGrantedScopes(grantedScope);
   const registry = new ToolRegistry();
+
+  /*
+   * A switched-off integration is treated exactly like one that was never
+   * granted: its tools are not registered at all. Registering them and
+   * refusing at call time would burn a turn and read to the student as the
+   * product being broken rather than as their own setting.
+   */
+  const off = new Set(
+    disabled.flatMap((group) => [
+      ...SCOPE_GROUPS[group].required,
+      ...SCOPE_GROUPS[group].optional,
+      ...(SCOPE_GROUPS[group].elective ?? []),
+    ]),
+  );
 
   for (const tool of ALL_TOOLS) {
     const required = tool.requiredScopes ?? [];
@@ -90,6 +107,7 @@ export function buildToolRegistry(grantedScope: string | null | undefined): Tool
      * is caught by a test asserting every google_* tool declares them, rather
      * than by refusing scope-free tools here, which only hid the mistake.
      */
+    if (required.some((scope) => off.has(scope))) continue;
     if (required.length === 0 || required.every((scope) => hasScope(scope, granted))) {
       registry.register(tool);
     }

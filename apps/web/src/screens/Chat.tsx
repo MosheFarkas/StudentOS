@@ -101,7 +101,9 @@ export function Chat({ agentId, onBack }: Props) {
     return (
       <>
         <div className="chat-header">
-          <button onClick={onBack}>← Agents</button>
+          <button className="quiet" onClick={onBack}>
+            ← Agents
+          </button>
         </div>
         <p className="muted">That agent doesn&apos;t exist, or isn&apos;t yours.</p>
       </>
@@ -113,7 +115,9 @@ export function Chat({ agentId, onBack }: Props) {
   return (
     <>
       <div className="chat-header">
-        <button onClick={onBack}>← Agents</button>
+        <button className="quiet" onClick={onBack}>
+          ← Agents
+        </button>
         <strong>{agent.name}</strong>
       </div>
 
@@ -152,7 +156,7 @@ export function Chat({ agentId, onBack }: Props) {
               placeholder={`Message ${agent.name}`}
               disabled={sending}
             />
-            <button type="submit" disabled={sending || !draft.trim()}>
+            <button className="primary" type="submit" disabled={sending || !draft.trim()}>
               Send
             </button>
           </form>

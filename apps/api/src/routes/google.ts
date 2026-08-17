@@ -13,6 +13,8 @@ import {
   scopesFor,
   type ScopeGroup,
 } from '@contexto/agent';
+import { and, eq } from 'drizzle-orm';
+import { disabledIntegrations } from '@contexto/db';
 import type { AppContext } from '../context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from '../google/connections.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -38,6 +40,7 @@ export function createGoogleRoutes(ctx: AppContext) {
         // the student deserves to know which pieces their admin withheld
         // rather than meeting a tool that silently never fires.
         return c.json({
+          disabled: grant.disabled,
           calendar: grant.groups.includes('calendar'),
           classroom: grant.groups.includes('classroom'),
           // Drive being connected means "ready to be given files", not "can
@@ -105,6 +108,46 @@ export function createGoogleRoutes(ctx: AppContext) {
           return c.json({
             scopes: scopesFor(groups, [...new Set([...alreadyElective, ...requested])]),
           });
+        },
+      )
+
+      /**
+       * Turn an integration on or off without touching the OAuth grant.
+       *
+       * A switch, not a revocation: turning Gmail off stops the agent using
+       * it immediately, and turning it back on does not mean another trip
+       * through Google's consent screen. Revoking properly is still available
+       * to the student at Google itself, and is the heavier action.
+       */
+      .put(
+        '/integrations/:group',
+        auth,
+        zValidator('json', z.object({ enabled: z.boolean() })),
+        async (c) => {
+          const group = c.req.param('group');
+          if (!isConnectableGroup(group)) {
+            return c.json({ error: 'Unknown integration' }, 400);
+          }
+          const userId = c.get('userId');
+          const { enabled } = c.req.valid('json');
+
+          if (enabled) {
+            await ctx.db
+              .delete(disabledIntegrations)
+              .where(
+                and(
+                  eq(disabledIntegrations.userId, userId),
+                  eq(disabledIntegrations.integration, group),
+                ),
+              );
+          } else {
+            await ctx.db
+              .insert(disabledIntegrations)
+              .values({ userId, integration: group })
+              .onConflictDoNothing();
+          }
+
+          return c.json({ integration: group, enabled });
         },
       )
 

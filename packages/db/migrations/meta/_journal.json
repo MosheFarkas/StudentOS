@@ -36,6 +36,13 @@
       "when": 1786846611832,
       "tag": "0004_unlimited_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786933721861,
+      "tag": "0005_disabled_integrations",
+      "breakpoints": true
     }
   ]
 }
