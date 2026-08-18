@@ -11,6 +11,8 @@ export const apiErrorCodeSchema = z.enum([
   'no_provider_configured',
   /** The student's own API key was rejected by the upstream provider. */
   'provider_key_invalid',
+  /** Too many requests from one caller, too quickly. */
+  'rate_limited',
   'internal_error',
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;

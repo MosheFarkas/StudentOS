@@ -31,7 +31,7 @@ export function handleError(error: unknown, c: Context): Response {
   return c.json(body, 500);
 }
 
-function statusFor(code: ApiError['code']): 400 | 401 | 402 | 404 | 500 {
+function statusFor(code: ApiError['code']): 400 | 401 | 402 | 404 | 429 | 500 {
   switch (code) {
     case 'unauthorized':
       return 401;
@@ -45,6 +45,8 @@ function statusFor(code: ApiError['code']): 400 | 401 | 402 | 404 | 500 {
     case 'quota_exceeded':
     case 'no_provider_configured':
       return 402;
+    case 'rate_limited':
+      return 429;
     default:
       return 500;
   }

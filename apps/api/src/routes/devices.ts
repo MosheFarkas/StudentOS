@@ -2,12 +2,13 @@ import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
-import { and, desc, eq, gt, isNotNull, isNull, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lt, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { deviceLinkRequests, devices, portalSnapshots } from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 import { hashDeviceToken, requireDevice, type DeviceVariables } from '../middleware/device.js';
 
 const LINK_TTL_MS = 10 * 60 * 1000;
@@ -47,9 +48,18 @@ export function createDeviceRoutes(ctx: AppContext) {
        */
       .post(
         '/link/start',
+        // The only unauthenticated route here that writes rows. Linking a
+        // computer is something a person does rarely, so a low ceiling costs
+        // nobody anything and keeps this from being trivially spammable.
+        rateLimit({ limit: 10, windowMs: 10 * 60 * 1000 }),
         zValidator('json', z.object({ deviceName: z.string().min(1).max(80) })),
         async (c) => {
           const { deviceName } = c.req.valid('json');
+
+          // Requests are dead ten minutes after they are made and nothing
+          // else ever deletes them. Swept here, at the only place they are
+          // created, so the table stays roughly one window deep.
+          await ctx.db.delete(deviceLinkRequests).where(lt(deviceLinkRequests.expiresAt, new Date()));
           const [request] = await ctx.db
             .insert(deviceLinkRequests)
             .values({ deviceName, expiresAt: new Date(Date.now() + LINK_TTL_MS) })

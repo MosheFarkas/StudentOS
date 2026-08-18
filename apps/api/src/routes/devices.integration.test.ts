@@ -5,7 +5,8 @@ import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
 import type { AppContext } from '../context.js';
 import { and, desc, eq } from 'drizzle-orm';
-import { portalSnapshots } from '@contexto/db';
+import { deviceLinkRequests, portalSnapshots } from '@contexto/db';
+import { resetRateLimits } from '../middleware/rate-limit.js';
 import { createUser, reset, testDb, TEST_DATABASE_URL } from '../test-support/harness.js';
 
 /**
@@ -39,7 +40,10 @@ beforeAll(async () => {
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });
 
-beforeEach(reset);
+beforeEach(async () => {
+  resetRateLimits();
+  await reset();
+});
 
 const as = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
 const json = (body: unknown, token?: string) => ({
@@ -235,5 +239,49 @@ describe('snapshot size', () => {
       json({ portalId: 'veracross', origin: 'https://portals.veracross.com', redacted: false,
              capturedAt: new Date().toISOString(), map: realistic }, device.token));
     expect(res.status).toBe(200);
+  });
+});
+
+describe('the unauthenticated link endpoint', () => {
+  it('stops answering after too many attempts from one caller', async () => {
+    // It writes a row per call and needs no credentials, so without a ceiling
+    // anyone could fill the table.
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const res = await app.request('/api/devices/link/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' },
+        body: JSON.stringify({ deviceName: 'Spam' }),
+      });
+      codes.push(res.status);
+    }
+    expect(codes.filter((c) => c === 200)).toHaveLength(10);
+    expect(codes.filter((c) => c === 429)).toHaveLength(2);
+  });
+
+  it('does not punish a different caller', async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await app.request('/api/devices/link/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' },
+        body: JSON.stringify({ deviceName: 'Spam' }),
+      });
+    }
+    const other = await app.request('/api/devices/link/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '198.51.100.4' },
+      body: JSON.stringify({ deviceName: 'Honest laptop' }),
+    });
+    expect(other.status).toBe(200);
+  });
+
+  it('sweeps expired requests, which nothing else deletes', async () => {
+    await db.insert(deviceLinkRequests).values({
+      deviceName: 'Long gone',
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    await startLink();
+    const left = await db.select({ name: deviceLinkRequests.deviceName }).from(deviceLinkRequests);
+    expect(left.map((r) => r.name)).not.toContain('Long gone');
   });
 });

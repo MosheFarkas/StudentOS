@@ -6,6 +6,7 @@ import { handleError } from './errors.js';
 import { createRoutes } from './routes/index.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
 import type { AppContext } from './context.js';
+import { resetRateLimits } from './middleware/rate-limit.js';
 import { createUser, reset, testDb, TEST_DATABASE_URL } from './test-support/harness.js';
 import realMap from './test-support/portal-map.fixture.json' with { type: 'json' };
 
@@ -40,7 +41,10 @@ beforeAll(async () => {
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });
 
-beforeEach(reset);
+beforeEach(async () => {
+  resetRateLimits();
+  await reset();
+});
 
 const post = (body: unknown, token: string) => ({
   method: 'POST',
