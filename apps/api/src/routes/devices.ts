@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
 import { and, desc, eq, gt, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
@@ -13,6 +14,17 @@ const LINK_TTL_MS = 10 * 60 * 1000;
 
 /** History kept per portal. Only the newest is ever read. */
 const SNAPSHOTS_KEPT = 5;
+
+/**
+ * Ceiling on one pushed snapshot.
+ *
+ * A forty-page portal with real values runs to a few hundred kilobytes, so
+ * this is generous. It exists because nothing else bounds it: the body is
+ * parsed into memory and then stored as JSONB, so a device with a runaway
+ * crawl -- or one that has been tampered with, since it runs on a machine we
+ * do not control -- could otherwise push until the API runs out of memory.
+ */
+const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 
 /**
  * Linking a desktop companion, and receiving what it finds.
@@ -173,6 +185,14 @@ export function createDeviceRoutes(ctx: AppContext) {
        */
       .post(
         '/portal-snapshot',
+        // Before the device lookup and before parsing: an oversized body should
+        // cost a header read, not a database round trip.
+        bodyLimit({
+          maxSize: MAX_SNAPSHOT_BYTES,
+          onError: () => {
+            throw new ContextoError('validation_failed', 'That portal snapshot is too large to store.');
+          },
+        }),
         device,
         zValidator(
           'json',

@@ -213,3 +213,27 @@ describe('snapshot retention', () => {
     expect(await rowsFor(bob.id, 'veracross')).toHaveLength(1);
   });
 });
+
+describe('snapshot size', () => {
+  it('refuses a snapshot too large to store', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    // The device runs on a machine we do not control, so this bound has to
+    // hold against a runaway crawl, not just an honest large portal.
+    const huge = { pages: [{ url: 'x', title: 'x', blob: 'y'.repeat(9 * 1024 * 1024) }] };
+    const res = await app.request('/api/devices/portal-snapshot',
+      json({ portalId: 'veracross', origin: 'https://portals.veracross.com', redacted: false,
+             capturedAt: new Date().toISOString(), map: huge }, device.token));
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it('accepts a large but realistic portal', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    const realistic = { pages: Array.from({ length: 40 }, (_, i) => ({ url: `p${i}`, title: `Page ${i}`, components: [{ shape: { rows: Array.from({ length: 50 }, (_, r) => ({ id: r, title: 'Assignment' })) } }] })) };
+    const res = await app.request('/api/devices/portal-snapshot',
+      json({ portalId: 'veracross', origin: 'https://portals.veracross.com', redacted: false,
+             capturedAt: new Date().toISOString(), map: realistic }, device.token));
+    expect(res.status).toBe(200);
+  });
+});
