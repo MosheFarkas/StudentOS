@@ -47,6 +47,21 @@ function openInBrowser(url) {
   spawn(command, args, { stdio: 'ignore', detached: true }).unref();
 }
 
+/**
+ * The server no longer recognises this machine.
+ *
+ * Distinct from a network failure, because the responses are opposite: a
+ * flaky connection should be retried, an unlinked device must stop and ask
+ * the student to link again. Retrying that one forever would mean an app
+ * quietly failing every six hours with no way to notice.
+ */
+export class DeviceUnlinked extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DeviceUnlinked';
+  }
+}
+
 async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
   const response = await fetch(new URL(path, baseUrl), {
     method,
@@ -58,6 +73,9 @@ async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
   });
   const text = await response.text();
   const parsed = text ? JSON.parse(text) : {};
+  if (response.status === 401 && token) {
+    throw new DeviceUnlinked(parsed.message ?? 'This computer is no longer linked.');
+  }
   if (!response.ok) {
     throw new Error(parsed.message ?? `${method} ${path} failed with ${response.status}`);
   }

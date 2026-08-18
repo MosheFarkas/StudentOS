@@ -9,7 +9,7 @@
 
 import { PortalBrowser } from './browser.mjs';
 import { explore } from './explorer.mjs';
-import { pushSnapshot, readConfig, writeConfig } from './sync.mjs';
+import { DeviceUnlinked, pushSnapshot, readConfig, writeConfig } from './sync.mjs';
 
 /** Login windows currently open, keyed by portal. Not persisted. */
 const openLogins = new Map();
@@ -49,6 +49,12 @@ export function addPortal({ name, url }) {
 export function removePortal(portalId) {
   const config = readConfig();
   writeConfig({ ...config, portals: (config.portals ?? []).filter((p) => p.id !== portalId) });
+}
+
+/** Drop this machine's credential, keeping the portals it has configured. */
+export function forgetDevice() {
+  const { token: _token, deviceId: _deviceId, deviceName: _deviceName, ...rest } = readConfig();
+  writeConfig(rest);
 }
 
 function updatePortal(portalId, patch) {
@@ -140,7 +146,15 @@ export async function syncPortal(portalId, { budget = 40 } = {}) {
     // A browser left running holds a lock on the profile directory, so the
     // next sync would fail for a reason unrelated to what actually broke.
     await browser.close().catch(() => {});
-    updatePortal(portalId, { lastError: String(error.message ?? error) });
+
+    if (error instanceof DeviceUnlinked) {
+      // Someone unlinked this computer from the web app. Dropping the token
+      // returns the window to "Link this computer", which is the only thing
+      // that helps; keeping it would retry every six hours forever.
+      forgetDevice();
+    } else {
+      updatePortal(portalId, { lastError: String(error.message ?? error) });
+    }
     throw error;
   }
 }

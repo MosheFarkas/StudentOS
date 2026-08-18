@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell, Tray } from 'electron';
 import { link } from './sync.mjs';
 import {
   addPortal,
@@ -28,6 +28,66 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const STALE_AFTER_MS = 60 * 60 * 1000;
 
 let window = null;
+let tray = null;
+let syncing = false;
+
+function showWindow() {
+  if (window && !window.isDestroyed()) {
+    window.show();
+    window.focus();
+    return;
+  }
+  createWindow();
+}
+
+/**
+ * The menu bar item, which is what the app mostly is.
+ *
+ * This is a sync utility -- it should be running whether or not a window is
+ * open, and closing the window should not stop portals being read. Without a
+ * tray, quitting the window would either kill the sync or leave the app alive
+ * with nothing on screen to show for it.
+ */
+function buildTray() {
+  tray = new Tray(join(here, 'assets', 'tray.png'));
+  tray.setToolTip('ContextoAgent');
+  refreshTrayMenu();
+  tray.on('click', () => showWindow());
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+  const { linked, portals } = status();
+  const synced = portals
+    .map((p) => p.lastSyncedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: !linked
+          ? 'Not linked to an account'
+          : synced
+            ? `Last synced ${new Date(synced).toLocaleString()}`
+            : 'Never synced',
+        enabled: false,
+      },
+      { type: 'separator' },
+      { label: 'Open ContextoAgent', click: () => showWindow() },
+      {
+        label: syncing ? 'Syncing…' : 'Sync now',
+        // Nothing to sync without a linked account or a signed-in portal, and
+        // an enabled item that silently does nothing reads as a broken app.
+        enabled: linked && !syncing && portals.some((p) => p.loggedInAt),
+        click: () => void syncAll(),
+      },
+      { type: 'separator' },
+      { label: 'Quit ContextoAgent', click: () => app.quit() },
+    ]),
+  );
+}
 
 function createWindow() {
   window = new BrowserWindow({
@@ -59,7 +119,12 @@ function createWindow() {
 function handle(channel, fn) {
   ipcMain.handle(channel, async (_event, ...args) => {
     try {
-      return { ok: true, value: await fn(...args) };
+      const value = await fn(...args);
+      // The menu bar reflects config the renderer just changed. Only the menu
+      // is refreshed here -- pushing an event back at the window that made the
+      // call would loop it through its own re-render.
+      refreshTrayMenu();
+      return { ok: true, value };
     } catch (error) {
       return { ok: false, error: String(error?.message ?? error) };
     }
@@ -82,6 +147,9 @@ handle('syncPortal', (id) => syncPortal(id));
  * ask for one. The window shows the last error per portal instead.
  */
 async function syncAll({ onlyStale = false } = {}) {
+  if (syncing) return;
+  syncing = true;
+  refreshTrayMenu();
   for (const portal of status().portals) {
     // No session means the only useful action is signing in, which needs the
     // student. Syncing would just record the same failure again.
@@ -97,12 +165,21 @@ async function syncAll({ onlyStale = false } = {}) {
     }
     // Per portal rather than at the end, so a slow second portal does not hold
     // back the result of the first.
-    window?.webContents.send('portals-changed');
+    notifyChanged();
   }
+  syncing = false;
+  refreshTrayMenu();
+}
+
+/** Keep the window and the menu bar showing the same thing. */
+function notifyChanged() {
+  if (window && !window.isDestroyed()) window.webContents.send('portals-changed');
+  refreshTrayMenu();
 }
 
 void app.whenReady().then(() => {
   createWindow();
+  buildTray();
   void syncAll({ onlyStale: true });
   setInterval(() => void syncAll(), SYNC_INTERVAL_MS);
 
@@ -111,6 +188,10 @@ void app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+/*
+ * Closing the window leaves the app running in the menu bar, on every
+ * platform. That is the point of a sync utility: a student who closes the
+ * window still expects their coursework to keep arriving. Quit is in the tray
+ * menu, where someone looking to stop it will look.
+ */
+app.on('window-all-closed', () => {});

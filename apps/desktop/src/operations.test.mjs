@@ -31,3 +31,23 @@ describe('portalIdFor', () => {
     }
   });
 });
+
+describe('forgetDevice', () => {
+  it('drops the credential but keeps configured portals', async () => {
+    // Unlinking from the web must not make a student re-add every portal.
+    const { forgetDevice } = await import('./operations.mjs');
+    const { readConfig, writeConfig } = await import('./sync.mjs');
+    const original = readConfig();
+    try {
+      writeConfig({ token: 't', deviceId: 'd', deviceName: 'n', apiBase: 'https://x.test', portals: [{ id: 'veracross' }] });
+      forgetDevice();
+      const after = readConfig();
+      expect(after.token).toBeUndefined();
+      expect(after.deviceId).toBeUndefined();
+      expect(after.portals).toEqual([{ id: 'veracross' }]);
+      expect(after.apiBase).toBe('https://x.test');
+    } finally {
+      writeConfig(original);
+    }
+  });
+});

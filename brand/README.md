@@ -24,6 +24,19 @@ for S in 16 32 48 192 512; do
 done
 ```
 
+Regenerate the desktop app icon. Same cropped square as above -- using
+`mark.png` directly spends half the icon on empty margin, which reads as a
+smaller app icon than every other app in the dock:
+
+```bash
+mkdir -p /tmp/icon.iconset
+for S in 16 32 128 256 512; do
+  sips -Z $S      -s format png /tmp/sq.png --out /tmp/icon.iconset/icon_${S}x${S}.png
+  sips -Z $((S*2)) -s format png /tmp/sq.png --out /tmp/icon.iconset/icon_${S}x${S}@2x.png
+done
+iconutil -c icns /tmp/icon.iconset -o apps/desktop/build/icon.icns
+```
+
 Separate files per size, not one for the browser to downscale: a 512 squeezed
 into a 16px tab loses the thin white outline inside the mark.
 
