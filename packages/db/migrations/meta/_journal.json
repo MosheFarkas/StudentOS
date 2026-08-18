@@ -43,6 +43,13 @@
       "when": 1786933721861,
       "tag": "0005_disabled_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787089024076,
+      "tag": "0006_strange_the_fallen",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,204 @@
+import { randomBytes } from 'node:crypto';
+import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { and, desc, eq, gt, isNotNull, isNull } from 'drizzle-orm';
+import { z } from 'zod';
+import { deviceLinkRequests, devices, portalSnapshots } from '@contexto/db';
+import { ContextoError } from '@contexto/shared';
+import type { AppContext } from '../context.js';
+import { requireAuth, type AuthVariables } from '../middleware/auth.js';
+import { hashDeviceToken, requireDevice, type DeviceVariables } from '../middleware/device.js';
+
+const LINK_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Linking a desktop companion, and receiving what it finds.
+ *
+ * The link flow never shows a student a token. The app opens their browser at
+ * /link/<id>, they approve inside a session they already have, and the app
+ * exchanges the same id for a token it keeps to itself. A student who is
+ * phished out of the link URL loses nothing on its own: approval requires
+ * being signed in, and the exchange happens once.
+ */
+export function createDeviceRoutes(ctx: AppContext) {
+  const auth = requireAuth(ctx);
+  const device = requireDevice(ctx);
+
+  return (
+    new Hono<{ Variables: AuthVariables & DeviceVariables }>()
+      /**
+       * Step 1, from the desktop app. Unauthenticated by necessity -- the app
+       * has no credentials yet, which is the entire problem being solved.
+       */
+      .post(
+        '/link/start',
+        zValidator('json', z.object({ deviceName: z.string().min(1).max(80) })),
+        async (c) => {
+          const { deviceName } = c.req.valid('json');
+          const [request] = await ctx.db
+            .insert(deviceLinkRequests)
+            .values({ deviceName, expiresAt: new Date(Date.now() + LINK_TTL_MS) })
+            .returning({ id: deviceLinkRequests.id, expiresAt: deviceLinkRequests.expiresAt });
+
+          if (!request) throw new ContextoError('internal_error', 'Could not start device linking.');
+          return c.json({ requestId: request.id, expiresAt: request.expiresAt });
+        },
+      )
+
+      /** Step 2, from the browser: what am I being asked to approve? */
+      .get('/link/:id', auth, async (c) => {
+        const [request] = await ctx.db
+          .select({ deviceName: deviceLinkRequests.deviceName, approvedAt: deviceLinkRequests.approvedAt })
+          .from(deviceLinkRequests)
+          .where(
+            and(
+              eq(deviceLinkRequests.id, c.req.param('id')),
+              gt(deviceLinkRequests.expiresAt, new Date()),
+              isNull(deviceLinkRequests.consumedAt),
+            ),
+          )
+          .limit(1);
+
+        if (!request) throw new ContextoError('not_found', 'That link request has expired.');
+        return c.json(request);
+      })
+
+      /** Step 3, from the browser: yes, this is my computer. */
+      .post('/link/:id/approve', auth, async (c) => {
+        const updated = await ctx.db
+          .update(deviceLinkRequests)
+          .set({ userId: c.get('userId'), approvedAt: new Date() })
+          .where(
+            and(
+              eq(deviceLinkRequests.id, c.req.param('id')),
+              gt(deviceLinkRequests.expiresAt, new Date()),
+              isNull(deviceLinkRequests.consumedAt),
+              isNull(deviceLinkRequests.approvedAt),
+            ),
+          )
+          .returning({ id: deviceLinkRequests.id });
+
+        if (updated.length === 0) throw new ContextoError('not_found', 'That link request has expired.');
+        return c.json({ ok: true });
+      })
+
+      /**
+       * Step 4, from the desktop app, polling. Issues the token exactly once.
+       *
+       * The whole claim is one conditional UPDATE that requires the request to
+       * be unexpired, unconsumed AND already approved. Two racing polls both
+       * attempt the same write and Postgres matches the row for only one of
+       * them, so a second token cannot be minted from one approval. Checking
+       * those conditions in JavaScript and then writing would leave a window
+       * between the read and the write where both callers believe they won.
+       */
+      .post('/link/:id/claim', async (c) => {
+        const requestId = c.req.param('id');
+        const [claimed] = await ctx.db
+          .update(deviceLinkRequests)
+          .set({ consumedAt: new Date() })
+          .where(
+            and(
+              eq(deviceLinkRequests.id, requestId),
+              gt(deviceLinkRequests.expiresAt, new Date()),
+              isNull(deviceLinkRequests.consumedAt),
+              isNotNull(deviceLinkRequests.approvedAt),
+              isNotNull(deviceLinkRequests.userId),
+            ),
+          )
+          .returning({ userId: deviceLinkRequests.userId, deviceName: deviceLinkRequests.deviceName });
+
+        if (!claimed?.userId) {
+          // Nothing was claimable. Distinguish "keep polling" from "give up"
+          // without revealing anything about ids that were never ours.
+          const [pending] = await ctx.db
+            .select({ id: deviceLinkRequests.id })
+            .from(deviceLinkRequests)
+            .where(
+              and(
+                eq(deviceLinkRequests.id, requestId),
+                gt(deviceLinkRequests.expiresAt, new Date()),
+                isNull(deviceLinkRequests.consumedAt),
+              ),
+            )
+            .limit(1);
+
+          if (pending) return c.json({ status: 'pending' as const });
+          throw new ContextoError('not_found', 'That link request has expired.');
+        }
+
+        const token = randomBytes(32).toString('base64url');
+        const [created] = await ctx.db
+          .insert(devices)
+          .values({ userId: claimed.userId, name: claimed.deviceName, tokenHash: hashDeviceToken(token) })
+          .returning({ id: devices.id });
+
+        if (!created) throw new ContextoError('internal_error', 'Could not register this device.');
+        return c.json({ status: 'linked' as const, token, deviceId: created.id });
+      })
+
+      /** Linked devices, for Settings. */
+      .get('/', auth, async (c) => {
+        const rows = await ctx.db
+          .select({
+            id: devices.id,
+            name: devices.name,
+            lastSeenAt: devices.lastSeenAt,
+            createdAt: devices.createdAt,
+          })
+          .from(devices)
+          .where(and(eq(devices.userId, c.get('userId')), isNull(devices.revokedAt)))
+          .orderBy(desc(devices.createdAt));
+
+        return c.json(rows);
+      })
+
+      .post('/:id/revoke', auth, async (c) => {
+        await ctx.db
+          .update(devices)
+          .set({ revokedAt: new Date() })
+          .where(and(eq(devices.id, c.req.param('id')), eq(devices.userId, c.get('userId'))));
+        return c.json({ ok: true });
+      })
+
+      /**
+       * A portal map, pushed up by a linked device.
+       *
+       * Stored whole and opaque. We have seen one real Veracross response and
+       * it was empty because term has not started; modelling courses and
+       * assignments now would be modelling a guess.
+       */
+      .post(
+        '/portal-snapshot',
+        device,
+        zValidator(
+          'json',
+          z.object({
+            portalId: z.string().regex(/^[a-z0-9-]+$/),
+            origin: z.url(),
+            redacted: z.boolean(),
+            capturedAt: z.iso.datetime(),
+            map: z.unknown(),
+          }),
+        ),
+        async (c) => {
+          const body = c.req.valid('json');
+          const [saved] = await ctx.db
+            .insert(portalSnapshots)
+            .values({
+              userId: c.get('userId'),
+              deviceId: c.get('deviceId'),
+              portalId: body.portalId,
+              origin: body.origin,
+              redacted: body.redacted,
+              capturedAt: new Date(body.capturedAt),
+              map: body.map,
+            })
+            .returning({ id: portalSnapshots.id });
+
+          if (!saved) throw new ContextoError('internal_error', 'Could not store the portal snapshot.');
+          return c.json({ ok: true, snapshotId: saved.id });
+        },
+      )
+  );
+}

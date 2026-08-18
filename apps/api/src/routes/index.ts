@@ -9,6 +9,7 @@ import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { createAgentRoutes } from './agents.js';
 import { createChannelRoutes } from './channels.js';
+import { createDeviceRoutes } from './devices.js';
 import { createGoogleRoutes } from './google.js';
 
 /**
@@ -78,6 +79,7 @@ export function createRoutes(ctx: AppContext) {
       .route('/agents', createAgentRoutes(ctx))
       .route('/google', createGoogleRoutes(ctx))
       .route('/channels', createChannelRoutes(ctx))
+      .route('/devices', createDeviceRoutes(ctx))
 
       /** Which BYOK keys this student has stored. Never includes key material. */
       .get('/credentials', auth, async (c) => {
