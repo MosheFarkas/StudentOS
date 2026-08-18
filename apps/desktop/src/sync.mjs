@@ -1,0 +1,98 @@
+import { spawn } from 'node:child_process';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { hostname, homedir, platform } from 'node:os';
+import { dirname, join } from 'node:path';
+
+/**
+ * Talking to the server.
+ *
+ * The droplet cannot dial in -- a student's laptop is behind NAT with no
+ * public address -- so every exchange starts here and goes outward. The app
+ * links once, keeps a token, and pushes portal maps up. The agent then answers
+ * from what has already arrived, which is why it can still say what is due at
+ * midnight with the laptop shut.
+ */
+
+const CONFIG_DIR = {
+  darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent'),
+  win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent'),
+}[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent'));
+
+export function configPath() {
+  return join(CONFIG_DIR(), 'config.json');
+}
+
+export function readConfig() {
+  try {
+    return JSON.parse(readFileSync(configPath(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+export function writeConfig(config) {
+  const path = configPath();
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(config, null, 2));
+  // The device token is a standing credential for this student's account.
+  // Owner-only, so another account on a shared family machine cannot read it.
+  chmodSync(path, 0o600);
+}
+
+function openInBrowser(url) {
+  const [command, args] =
+    platform() === 'darwin' ? ['open', [url]]
+    : platform() === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+    : ['xdg-open', [url]];
+  spawn(command, args, { stdio: 'ignore', detached: true }).unref();
+}
+
+async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
+  const response = await fetch(new URL(path, baseUrl), {
+    method,
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const text = await response.text();
+  const parsed = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(parsed.message ?? `${method} ${path} failed with ${response.status}`);
+  }
+  return parsed;
+}
+
+/**
+ * Link this machine to a student's account.
+ *
+ * The token is never shown to the student and never typed by them. They only
+ * ever click Approve inside a session they already had.
+ */
+export async function link({ apiBase, webBase, deviceName = hostname(), pollMs = 2000, timeoutMs = 600_000 }) {
+  const { requestId } = await api(apiBase, '/api/devices/link/start', { body: { deviceName } });
+  const approvalUrl = new URL(`/link/${requestId}`, webBase).toString();
+
+  console.log(`\n  Approve this computer at:\n    ${approvalUrl}\n`);
+  openInBrowser(approvalUrl);
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await api(apiBase, `/api/devices/link/${requestId}/claim`);
+    if (result.status === 'linked') {
+      writeConfig({ ...readConfig(), apiBase, token: result.token, deviceId: result.deviceId, deviceName });
+      return { deviceId: result.deviceId, deviceName };
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+  throw new Error('Timed out waiting for approval.');
+}
+
+/** Push a portal map to the server. */
+export async function pushSnapshot({ apiBase, token }, { portalId, origin, map, redacted }) {
+  return api(apiBase, '/api/devices/portal-snapshot', {
+    token,
+    body: { portalId, origin, redacted, capturedAt: map.exploredAt, map },
+  });
+}

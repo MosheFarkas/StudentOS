@@ -14,3 +14,8 @@ pnpm-debug.log*
 
 coverage/
 .pgdata/
+
+# Output of the desktop app's `record` and `explore` commands. These are
+# captures from a real student's portal, not source.
+*-endpoints.json
+*-map.json

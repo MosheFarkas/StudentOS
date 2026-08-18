@@ -1,0 +1,17 @@
+{
+  "name": "@contexto/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "record": "node src/index.mjs record",
+    "explore": "node src/index.mjs explore",
+    "link": "node src/index.mjs link",
+    "sync": "node src/index.mjs sync",
+    "start": "electron ."
+  },
+  "main": "src/main.mjs",
+  "devDependencies": {
+    "electron": "^38.0.0"
+  }
+}

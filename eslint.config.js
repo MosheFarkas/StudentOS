@@ -29,6 +29,15 @@ export default tseslint.config(
     },
   },
 
+  {
+    // An Electron preload running with sandbox: true is loaded as CommonJS --
+    // ESM preloads are not supported there. Dropping the sandbox to satisfy a
+    // lint rule would trade a real security boundary for a stylistic one.
+    files: ['**/preload.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+
   // Must stay last: turns off stylistic rules that would fight Prettier.
   prettier,
 );

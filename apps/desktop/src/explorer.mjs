@@ -1,0 +1,183 @@
+/**
+ * Letting the agent walk a portal itself.
+ *
+ * The alternative -- a human records traffic once and someone hand-writes an
+ * adapter -- produces a map that is stale the first time the vendor ships a
+ * redesign. Portals are uniform enough to explore instead: Veracross renders
+ * every panel as /component/<Name>/<id>/load_data, and its PortalLinks
+ * component returns the navigation tree, so the site describes itself.
+ *
+ * What comes back is a map of page -> components -> response shape. That map
+ * IS the adapter, and it can be rebuilt on demand rather than maintained.
+ *
+ * Two rules bound the walk, and both are enforced here rather than in whatever
+ * prompt is driving it. A model talked into wandering must still be unable to.
+ *
+ *   ORIGIN LOCK. Only the portal's own origin is ever navigated to or recorded.
+ *   This browser profile holds a school session; an agent that could be steered
+ *   to another origin is a confused deputy. It also drops the third-party
+ *   telemetry (Sentry and friends) that would otherwise pollute the map.
+ *
+ *   PAGE BUDGET. Exploration stops at a fixed number of pages. A crawl with no
+ *   ceiling is a crawl that hammers a school's server on a bad link cycle.
+ */
+
+import { summarizeShape } from './recorder.mjs';
+
+const DEFAULT_BUDGET = 40;
+
+/** Same-origin check. Sub-domains do not count -- a portal is one origin. */
+export function isInScope(candidate, origin) {
+  try {
+    return new URL(candidate, origin).origin === new URL(origin).origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Links a page offers, normalised and filtered to the portal itself. */
+export function inScopeLinks(hrefs, origin, seen = new Set()) {
+  const out = [];
+  for (const href of hrefs) {
+    if (!isInScope(href, origin)) continue;
+    const url = new URL(href, origin);
+    url.hash = '';
+    const normalised = url.toString();
+    if (seen.has(normalised)) continue;
+    seen.add(normalised);
+    out.push(normalised);
+  }
+  return out;
+}
+
+/**
+ * Load one page and report what it fetched for itself.
+ *
+ * @param {import('./browser.mjs').PortalBrowser} browser
+ * @param {string} sessionId
+ * @param {string} url
+ */
+export async function readPage(browser, sessionId, url, { origin, raw = false, settleMs = 2500 } = {}) {
+  if (!isInScope(url, origin)) throw new Error(`Refusing to navigate outside ${origin}: ${url}`);
+
+  const cdp = browser.cdp;
+  // Registering listeners is not enough -- CDP sends no Network events at all
+  // until the domain is enabled, so without this every page reports zero
+  // components and the map comes back structurally correct and empty.
+  // Idempotent, so it is safe to call per page.
+  await cdp.send('Network.enable', {}, sessionId);
+  const inflight = new Map();
+  const methods = new Map();
+  const components = [];
+
+  const offRequest = cdp.on(
+    'Network.requestWillBeSent',
+    (p) => methods.set(p.requestId, p.request.method),
+    sessionId,
+  );
+  const offResponse = cdp.on(
+    'Network.responseReceived',
+    (p) => {
+      if (!/json/i.test(p.response.mimeType)) return;
+      // Origin lock applies to what we RECORD as well as where we navigate,
+      // so third-party telemetry never enters the map.
+      if (!isInScope(p.response.url, origin)) return;
+      inflight.set(p.requestId, { url: p.response.url, status: p.response.status, method: methods.get(p.requestId) ?? 'GET' });
+    },
+    sessionId,
+  );
+  const offFinished = cdp.on(
+    'Network.loadingFinished',
+    async (p) => {
+      const meta = inflight.get(p.requestId);
+      if (!meta) return;
+      inflight.delete(p.requestId);
+      try {
+        const { body, base64Encoded } = await cdp.send('Network.getResponseBody', { requestId: p.requestId }, sessionId);
+        const text = base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body;
+        const parsed = JSON.parse(text);
+        components.push({ ...meta, shape: summarizeShape(parsed, { raw }), empty: isEmpty(parsed) });
+      } catch {
+        components.push({ ...meta, shape: null, empty: null });
+      }
+    },
+    sessionId,
+  );
+
+  await browser.navigate(url, sessionId);
+  // Components load after the load event, so give the XHRs a moment to land.
+  await new Promise((r) => setTimeout(r, settleMs));
+
+  const { result } = await cdp.send(
+    'Runtime.evaluate',
+    {
+      expression: `JSON.stringify({
+        title: document.title,
+        text: document.body ? document.body.innerText.slice(0, 4000) : '',
+        links: Array.from(document.querySelectorAll('a[href]')).map(a => a.href).slice(0, 300)
+      })`,
+      returnByValue: true,
+    },
+    sessionId,
+  );
+
+  offRequest();
+  offResponse();
+  offFinished();
+
+  const page = JSON.parse(result.value);
+  return { url, title: page.title, text: page.text, links: page.links, components };
+}
+
+/** True when a payload carries structure but no rows -- an out-of-term portal. */
+export function isEmpty(value) {
+  if (Array.isArray(value)) return value.length === 0;
+  if (value && typeof value === 'object') {
+    const values = Object.values(value);
+    return values.length > 0 && values.every((v) => isEmpty(v));
+  }
+  return false;
+}
+
+/**
+ * Walk the portal breadth-first from a seed and build a map of it.
+ *
+ * @param {import('./browser.mjs').PortalBrowser} browser
+ * @param {string} sessionId
+ * @param {{ origin: string, seed: string, budget?: number, raw?: boolean, onPage?: Function }} options
+ */
+export async function explore(browser, sessionId, { origin, seed, budget = DEFAULT_BUDGET, raw = false, onPage }) {
+  const seen = new Set();
+  const queue = inScopeLinks([seed], origin, seen);
+  const pages = [];
+  const skipped = [];
+
+  while (queue.length > 0 && pages.length < budget) {
+    const url = queue.shift();
+    let page;
+    try {
+      page = await readPage(browser, sessionId, url, { origin, raw });
+    } catch (error) {
+      skipped.push({ url, reason: error.message });
+      continue;
+    }
+    pages.push({ url: page.url, title: page.title, components: page.components });
+    onPage?.(page);
+    for (const link of inScopeLinks(page.links, origin, seen)) queue.push(link);
+  }
+
+  return {
+    origin,
+    exploredAt: new Date().toISOString(),
+    redacted: !raw,
+    // A truncated crawl that reports itself as complete is worse than no crawl,
+    // because everything downstream treats the gap as "this portal has no
+    // grades page" rather than "we stopped early".
+    complete: queue.length === 0,
+    pagesVisited: pages.length,
+    pagesRemaining: queue.length,
+    budget,
+    pages,
+    skipped,
+  };
+}

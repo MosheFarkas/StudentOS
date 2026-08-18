@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      No remote origins at all. This window drives school logins; a CDN font
+      would be an outbound request from a process holding a device token.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    />
+    <title>ContextoAgent</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main id="app"><p class="muted">Loading…</p></main>
+    <script src="app.js"></script>
+  </body>
+</html>
