@@ -55,10 +55,44 @@ model talked into wandering must still be unable to. See `src/explorer.mjs`.
 Since Chrome 136 refuses debugging on the default profile, this physically
 cannot reach the Chrome holding the student's Gmail and Drive.
 
-## Known issues
+## Signing and notarizing
 
-**Not signed or notarized.** The DMG will be refused by macOS on another
-machine until it is signed with an Apple Developer identity.
+Without this the DMG runs only on the machine that built it — macOS refuses an
+unsigned app everywhere else, and "right-click → Open" does not get a student
+past it reliably.
+
+You need a paid Apple Developer account, a **Developer ID Application**
+certificate (not "Apple Distribution" — that one is for the App Store and will
+not work here), and an App Store Connect API key.
+
+```sh
+# The certificate must be in the login keychain. Confirm it is:
+security find-identity -v -p codesigning | grep "Developer ID Application"
+
+export APPLE_API_KEY=~/private_keys/AuthKey_XXXXXXXXXX.p8
+export APPLE_API_KEY_ID=XXXXXXXXXX      # the key id
+export APPLE_API_ISSUER=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+
+pnpm --filter @contexto/desktop dist
+```
+
+The config turns notarization on only when those are present, so a build
+without them still works and says so rather than failing.
+
+Notarization uploads the app to Apple and waits — usually a few minutes, and
+occasionally much longer. Check the result:
+
+```sh
+spctl -a -vvv -t install release/mac-arm64/ContextoAgent.app   # expect "accepted"
+codesign -dv --entitlements - release/mac-arm64/ContextoAgent.app
+```
+
+The entitlements in `build/entitlements.mac.plist` are what V8 needs under the
+hardened runtime — it compiles JavaScript to machine code at runtime, which is
+the exact behaviour the hardened runtime exists to block. None of them grant
+access to a student's files or devices.
+
+## Known issues
 
 **Electron's own postinstall fails silently on Node 24.** `extract-zip` opens
 the first archive entry and exits 0, leaving no binary; the download itself is

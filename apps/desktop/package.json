@@ -9,7 +9,7 @@
     "link": "node src/index.mjs link",
     "sync": "node src/index.mjs sync",
     "start": "electron .",
-    "dist": "electron-builder --mac",
+    "dist": "electron-builder --mac --config electron-builder.config.cjs",
     "postinstall": "node scripts/ensure-electron.mjs"
   },
   "main": "src/main.mjs",
@@ -17,31 +17,5 @@
     "electron": "^38.0.0",
     "electron-builder": "^25.1.8"
   },
-  "description": "Reads school portals that have no API, using logins the student completes themselves.",
-  "build": {
-    "appId": "ai.contextoagent.desktop",
-    "productName": "ContextoAgent",
-    "directories": {
-      "output": "release",
-      "buildResources": "build"
-    },
-    "files": [
-      "src/**/*",
-      "!src/**/*.test.mjs",
-      "package.json"
-    ],
-    "mac": {
-      "category": "public.app-category.education",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ],
-      "hardenedRuntime": true
-    }
-  }
+  "description": "Reads school portals that have no API, using logins the student completes themselves."
 }
