@@ -5,6 +5,7 @@ import { ContextoError } from '@contexto/shared';
 import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
+import { DbPortalSnapshots } from './portal-snapshots.js';
 
 /**
  * Run one agent turn and persist both sides of it.
@@ -54,6 +55,7 @@ export async function runTurnForAgent(
       youtube: ctx.youtube,
       youtubeTranscripts: ctx.youtubeTranscripts,
       ...(ctx.residential ? { residentialFetch: ctx.residential.fetch } : {}),
+      portals: new DbPortalSnapshots(ctx.db),
       ...(signal ? { signal } : {}),
     },
   );

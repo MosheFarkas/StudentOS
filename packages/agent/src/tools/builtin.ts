@@ -28,6 +28,7 @@ import {
   sendMail,
   trashMail,
 } from './google/gmail.js';
+import { readSchoolPortal } from './portal.js';
 import { readWebLink } from './web/read-link.js';
 import { readYoutubeVideo } from './web/youtube.js';
 
@@ -56,6 +57,7 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   trashMail,
   readWebLink,
   readYoutubeVideo,
+  readSchoolPortal,
 ] as unknown as Tool<never, unknown>[];
 
 /**

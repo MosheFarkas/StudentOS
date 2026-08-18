@@ -54,7 +54,34 @@ export interface ToolContext {
    * which is why it is a plain fetch rather than a per-site interface.
    */
   residentialFetch?: typeof globalThis.fetch;
+  /**
+   * The most recent map of a school portal, pushed up by a linked desktop
+   * companion. Absent when the student has linked no device -- which a tool
+   * must report as "not connected yet", not as an error.
+   */
+  portals?: PortalSnapshotSource;
   signal?: AbortSignal;
+}
+
+/** One page of a portal, and the JSON its own front-end fetched to render it. */
+export interface PortalPage {
+  url: string;
+  title: string;
+  components: { url: string; status: number; method: string; shape: unknown; empty: boolean | null }[];
+}
+
+export interface PortalSnapshot {
+  portalId: string;
+  origin: string;
+  capturedAt: string;
+  /** True when only shapes were captured, so there are no values to read. */
+  redacted: boolean;
+  pages: PortalPage[];
+}
+
+export interface PortalSnapshotSource {
+  /** Latest snapshot per portal, most recently captured first. */
+  latest(userId: string): Promise<PortalSnapshot[]>;
 }
 
 /**

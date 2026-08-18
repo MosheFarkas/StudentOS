@@ -1,7 +1,7 @@
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
-import type { GoogleTokenProvider, ToolContext } from './tools/types.js';
+import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
 import type { AudioTranscriber } from './tools/transcribe.js';
 import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './tools/web/youtube.js';
 import type { ToolRegistry } from './tools/registry.js';
@@ -44,6 +44,8 @@ export interface AgentRunInput {
   youtubeTranscripts?: YoutubeTranscriptSource;
   /** Supplied when a residential proxy is configured. */
   residentialFetch?: typeof globalThis.fetch;
+  /** Portal snapshots pushed up by the student's linked desktop companion. */
+  portals?: PortalSnapshotSource;
   signal?: AbortSignal;
 }
 
@@ -89,6 +91,7 @@ export async function runAgentTurn(
     ...(input.youtube ? { youtube: input.youtube } : {}),
     ...(input.youtubeTranscripts ? { youtubeTranscripts: input.youtubeTranscripts } : {}),
     ...(input.residentialFetch ? { residentialFetch: input.residentialFetch } : {}),
+    ...(input.portals ? { portals: input.portals } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,
