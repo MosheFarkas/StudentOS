@@ -14,6 +14,28 @@ import { DeviceUnlinked, pushSnapshot, readConfig, writeConfig } from './sync.mj
 /** Login windows currently open, keyed by portal. Not persisted. */
 const openLogins = new Map();
 
+/** Syncs currently running, keyed by portal. */
+const inFlight = new Map();
+
+/**
+ * Run `start` for `key`, or join the run already going.
+ *
+ * Chrome refuses to open two instances on one profile directory, and every
+ * portal has exactly one profile. So a scheduled sync overlapping a student
+ * pressing "Sync now" -- or the sync fired right after a login finishing --
+ * would fail on a profile lock and be recorded as if the portal were broken.
+ *
+ * Joining rather than refusing, because the caller wanted a fresh read and
+ * one is already happening; its result is the answer they asked for.
+ */
+export function coalesce(map, key, start) {
+  const running = map.get(key);
+  if (running) return running;
+  const promise = start().finally(() => map.delete(key));
+  map.set(key, promise);
+  return promise;
+}
+
 export function listPortals() {
   return readConfig().portals ?? [];
 }
@@ -99,7 +121,11 @@ export async function finishLogin(portalId) {
  * Values, not shapes -- this feeds the student's own agent, which cannot
  * answer "what is due Friday" from `string<date>`.
  */
-export async function syncPortal(portalId, { budget = 40 } = {}) {
+export function syncPortal(portalId, options = {}) {
+  return coalesce(inFlight, portalId, () => runSync(portalId, options));
+}
+
+async function runSync(portalId, { budget = 40 } = {}) {
   const config = readConfig();
   if (!config.token) throw new Error('This computer is not linked yet.');
   const portal = (config.portals ?? []).find((p) => p.id === portalId);

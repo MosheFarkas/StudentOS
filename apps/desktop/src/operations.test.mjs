@@ -51,3 +51,35 @@ describe('forgetDevice', () => {
     }
   });
 });
+
+describe('coalesce', () => {
+  it('joins a run already in flight rather than starting a second', async () => {
+    // Two Chrome instances on one profile directory is a hard failure, and it
+    // would be recorded as the portal being broken.
+    const { coalesce } = await import('./operations.mjs');
+    const map = new Map();
+    let starts = 0;
+    const slow = () => { starts += 1; return new Promise((r) => setTimeout(() => r('done'), 30)); };
+
+    const [a, b] = await Promise.all([coalesce(map, 'veracross', slow), coalesce(map, 'veracross', slow)]);
+    expect(starts).toBe(1);
+    expect([a, b]).toEqual(['done', 'done']);
+  });
+
+  it('does not block a different portal', async () => {
+    const { coalesce } = await import('./operations.mjs');
+    const map = new Map();
+    let starts = 0;
+    const slow = () => { starts += 1; return new Promise((r) => setTimeout(r, 10)); };
+    await Promise.all([coalesce(map, 'veracross', slow), coalesce(map, 'mozaik', slow)]);
+    expect(starts).toBe(2);
+  });
+
+  it('releases the slot after a failure, so a retry is possible', async () => {
+    const { coalesce } = await import('./operations.mjs');
+    const map = new Map();
+    await expect(coalesce(map, 'x', () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+    expect(map.size).toBe(0);
+    await expect(coalesce(map, 'x', () => Promise.resolve('ok'))).resolves.toBe('ok');
+  });
+});

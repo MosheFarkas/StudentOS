@@ -169,10 +169,33 @@ function addPortalPanel() {
   ]);
 }
 
+/**
+ * Opening at login is what makes this a sync utility rather than something
+ * you have to remember to run. Offered rather than assumed -- an app that
+ * quietly adds itself to startup is one people uninstall.
+ */
+function startupPanel(openAtLogin) {
+  const box = el('input', { type: 'checkbox', id: 'open-at-login' });
+  if (openAtLogin) box.setAttribute('checked', 'checked');
+  box.addEventListener('change', () => {
+    void call(() => window.contexto.setOpenAtLogin(box.checked), 'startup');
+  });
+
+  return el('div', { class: 'panel' }, [
+    el('div', { class: 'row' }, [
+      box,
+      el('label', {
+        for: 'open-at-login',
+        text: 'Open at login and keep coursework up to date in the background',
+      }),
+    ]),
+  ]);
+}
+
 async function render() {
   const result = await window.contexto.status();
   if (!result.ok) return app.replaceChildren(el('p', { text: result.error }));
-  const { linked, deviceName, portals } = result.value;
+  const { linked, deviceName, portals, openAtLogin } = result.value;
 
   if (!linked) {
     return app.replaceChildren(
@@ -209,6 +232,7 @@ async function render() {
         ? el('div', { class: 'panel' }, [el('h2', { text: 'Portals' }), ...portals.map(portalRow)])
         : null,
       addPortalPanel(),
+      startupPanel(openAtLogin),
     ]),
   );
 }

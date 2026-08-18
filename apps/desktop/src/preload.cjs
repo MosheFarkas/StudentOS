@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('contexto', {
   beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
   finishLogin: (id) => ipcRenderer.invoke('finishLogin', id),
   syncPortal: (id) => ipcRenderer.invoke('syncPortal', id),
+  setOpenAtLogin: (value) => ipcRenderer.invoke('setOpenAtLogin', value),
   onPortalsChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });

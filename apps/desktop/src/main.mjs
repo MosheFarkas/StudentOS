@@ -131,7 +131,16 @@ function handle(channel, fn) {
   });
 }
 
-handle('status', () => status());
+handle('status', () => ({
+  ...status(),
+  // Electron-specific, so it is read here rather than from the config file --
+  // the operating system is the source of truth for this, not us.
+  openAtLogin: app.getLoginItemSettings().openAtLogin,
+}));
+handle('setOpenAtLogin', (value) => {
+  app.setLoginItemSettings({ openAtLogin: Boolean(value), openAsHidden: true });
+  return app.getLoginItemSettings().openAtLogin;
+});
 handle('link', () => link({ apiBase: API_BASE, webBase: WEB_BASE }));
 handle('addPortal', (portal) => addPortal(portal));
 handle('removePortal', (id) => removePortal(id));
