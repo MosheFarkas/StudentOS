@@ -1,0 +1,57 @@
+{
+  "origin": "https://quotes.toscrape.com",
+  "exploredAt": "2026-08-18T23:08:02.372Z",
+  "redacted": false,
+  "complete": false,
+  "needsLogin": false,
+  "pagesVisited": 2,
+  "pagesRemaining": 46,
+  "budget": 2,
+  "pages": [
+    {
+      "url": "https://quotes.toscrape.com/scroll",
+      "title": "Quotes to Scrape",
+      "components": [
+        {
+          "url": "https://quotes.toscrape.com/api/quotes?page=1",
+          "status": 200,
+          "method": "GET",
+          "shape": {
+            "has_next": true,
+            "page": 1,
+            "quotes": [
+              {
+                "author": {
+                  "goodreads_link": "/author/show/9810.Albert_Einstein",
+                  "name": "Albert Einstein",
+                  "slug": "Albert-Einstein"
+                },
+                "tags": [
+                  "change",
+                  "…4 items"
+                ],
+                "text": "“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”"
+              },
+              "…10 items"
+            ],
+            "tag": "null",
+            "top_ten_tags": [
+              [
+                "love",
+                "…2 items"
+              ],
+              "…10 items"
+            ]
+          },
+          "empty": false
+        }
+      ]
+    },
+    {
+      "url": "https://quotes.toscrape.com/",
+      "title": "Quotes to Scrape",
+      "components": []
+    }
+  ],
+  "skipped": []
+}
