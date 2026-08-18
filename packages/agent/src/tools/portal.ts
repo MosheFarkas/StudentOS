@@ -112,13 +112,27 @@ export const readSchoolPortal: Tool<z.infer<typeof readPortalInput>, unknown> = 
                   'student to re-sync without the shapes-only option.',
               }
             : {}),
-          ...(kept.length === 0
+          /*
+           * An expired session and an out-of-term portal produce identical
+           * data -- nothing -- so the distinction has to be carried, not
+           * inferred. Told the wrong one, the model sends a student to
+           * re-authenticate in August, or tells them in October that term has
+           * not started.
+           */
+          ...(snapshot.needsLogin
             ? {
                 warning:
-                  'Every page in this snapshot came back empty. That usually means the school ' +
-                  'year has not started, or the login expired and needs redoing on that computer.',
+                  'The portal asked that computer to sign in again, so this snapshot has no ' +
+                  'data in it. Tell the student to open the ContextoAgent app and sign in to ' +
+                  'the portal again. Do NOT tell them they have no coursework.',
               }
-            : {}),
+            : kept.length === 0
+              ? {
+                  warning:
+                    'Every page came back empty, but the sign-in was still valid — so there is ' +
+                    'genuinely nothing in the portal yet. Usually the school year has not started.',
+                }
+              : {}),
           pages: kept,
           ...(dropped > 0 ? { pagesOmitted: dropped } : {}),
         };

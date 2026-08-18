@@ -32,6 +32,7 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
       origin: row.origin,
       redacted: row.redacted,
       capturedAt: row.capturedAt.toISOString(),
+      needsLogin: Boolean((row.map as { needsLogin?: boolean })?.needsLogin),
       // The map is stored opaque, so shape it here rather than trusting it.
       pages: Array.isArray((row.map as { pages?: unknown })?.pages)
         ? ((row.map as { pages: PortalSnapshot['pages'] }).pages ?? [])

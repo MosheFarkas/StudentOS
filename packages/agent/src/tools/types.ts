@@ -76,6 +76,8 @@ export interface PortalSnapshot {
   capturedAt: string;
   /** True when only shapes were captured, so there are no values to read. */
   redacted: boolean;
+  /** The portal asked for a sign-in, so this snapshot holds nothing usable. */
+  needsLogin?: boolean;
   pages: PortalPage[];
 }
 

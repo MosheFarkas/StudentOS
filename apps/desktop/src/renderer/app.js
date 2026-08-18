@@ -91,12 +91,18 @@ function portalRow(portal) {
     portal.lastError && !syncing
       ? el('div', { class: 'notice', text: `Last sync failed: ${portal.lastError}` })
       : null,
-    result && result.withData === 0
+    result && result.needsLogin
+      ? el('div', {
+          class: 'notice',
+          text: 'The portal asked for a sign-in, so the saved session has expired. Sign in again.',
+        })
+      : null,
+    result && !result.needsLogin && result.withData === 0
       ? el('div', {
           class: 'notice',
           text:
-            'Everything came back empty. That usually means the school year has not started, ' +
-            'or the sign-in expired and needs doing again.',
+            'Everything came back empty, but the session is still good — so there is genuinely ' +
+            'nothing there yet. Usually that means term has not started.',
         })
       : null,
     result && !result.complete

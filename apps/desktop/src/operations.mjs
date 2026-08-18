@@ -123,9 +123,18 @@ export async function syncPortal(portalId, { budget = 40 } = {}) {
       components: components.length,
       withData: withData.length,
       complete: map.complete,
+      needsLogin: map.needsLogin,
       syncedAt: new Date().toISOString(),
     };
-    updatePortal(portalId, { lastSyncedAt: result.syncedAt, lastResult: result });
+    // Clearing loggedInAt puts the portal back to offering "Sign in", which is
+    // the only action that helps. Leaving it set would show a Sync button that
+    // is guaranteed to fail the same way.
+    updatePortal(portalId, {
+      lastSyncedAt: result.syncedAt,
+      lastResult: result,
+      lastError: null,
+      ...(map.needsLogin ? { loggedInAt: null } : {}),
+    });
     return result;
   } catch (error) {
     // A browser left running holds a lock on the profile directory, so the

@@ -114,7 +114,11 @@ export async function readPage(browser, sessionId, url, { origin, raw = false, s
       expression: `JSON.stringify({
         title: document.title,
         text: document.body ? document.body.innerText.slice(0, 4000) : '',
-        links: Array.from(document.querySelectorAll('a[href]')).map(a => a.href).slice(0, 300)
+        links: Array.from(document.querySelectorAll('a[href]')).map(a => a.href).slice(0, 300),
+        // Where we ACTUALLY ended up, which is not necessarily where we asked
+        // to go -- an expired session answers with a redirect to SSO.
+        finalUrl: location.href,
+        hasPasswordField: Boolean(document.querySelector('input[type=password]'))
       })`,
       returnByValue: true,
     },
@@ -126,7 +130,32 @@ export async function readPage(browser, sessionId, url, { origin, raw = false, s
   offFinished();
 
   const page = JSON.parse(result.value);
-  return { url, title: page.title, text: page.text, links: page.links, components };
+  return {
+    url,
+    finalUrl: page.finalUrl,
+    title: page.title,
+    text: page.text,
+    links: page.links,
+    hasPasswordField: page.hasPasswordField,
+    components,
+  };
+}
+
+/**
+ * Did the portal bounce us to a login?
+ *
+ * Worth separating from "the portal is empty", because the two look identical
+ * in the data -- every component returns nothing either way -- and the fixes
+ * are completely different. Telling a student in August that their session
+ * expired sends them to re-authenticate for no reason; telling them in
+ * October that term has not started is simply wrong.
+ *
+ * Two signals, because portals do it both ways: most redirect to an SSO
+ * origin, some render a login form in place at the same address.
+ */
+export function looksLikeLogin(page, origin) {
+  if (page.finalUrl && !isInScope(page.finalUrl, origin)) return true;
+  return Boolean(page.hasPasswordField);
 }
 
 /** True when a payload carries structure but no rows -- an out-of-term portal. */
@@ -152,6 +181,8 @@ export async function explore(browser, sessionId, { origin, seed, budget = DEFAU
   const pages = [];
   const skipped = [];
 
+  let needsLogin = false;
+
   while (queue.length > 0 && pages.length < budget) {
     const url = queue.shift();
     let page;
@@ -160,6 +191,14 @@ export async function explore(browser, sessionId, { origin, seed, budget = DEFAU
     } catch (error) {
       skipped.push({ url, reason: error.message });
       continue;
+    }
+
+    // Checked on the first page only. Once bounced to a login, every
+    // subsequent page is the same login, and crawling forty of them wastes
+    // the budget and the school's bandwidth to learn nothing new.
+    if (pages.length === 0 && looksLikeLogin(page, origin)) {
+      needsLogin = true;
+      break;
     }
     pages.push({ url: page.url, title: page.title, components: page.components });
     onPage?.(page);
@@ -173,7 +212,9 @@ export async function explore(browser, sessionId, { origin, seed, budget = DEFAU
     // A truncated crawl that reports itself as complete is worse than no crawl,
     // because everything downstream treats the gap as "this portal has no
     // grades page" rather than "we stopped early".
-    complete: queue.length === 0,
+    complete: queue.length === 0 && !needsLogin,
+    /** The session expired. Distinct from a portal that is merely empty. */
+    needsLogin,
     pagesVisited: pages.length,
     pagesRemaining: queue.length,
     budget,

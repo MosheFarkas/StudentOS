@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { explore, inScopeLinks, isEmpty, isInScope, readPage } from './explorer.mjs';
+import { explore, inScopeLinks, isEmpty, isInScope, looksLikeLogin, readPage } from './explorer.mjs';
 
 const PORTAL = 'https://portals.veracross.com/lcc/student';
 
@@ -91,6 +91,28 @@ describe('readPage', () => {
     };
     await readPage(browser, 'S', PORTAL, { origin: PORTAL, settleMs: 0 });
     expect(sent).toContain('Network.enable');
+  });
+});
+
+describe('looksLikeLogin', () => {
+  // An expired session and an out-of-term portal both yield no data. Only this
+  // tells them apart, and getting it wrong sends a student to re-authenticate
+  // in August or tells them in October that term has not started.
+  it('spots a redirect to an SSO origin', () => {
+    expect(looksLikeLogin({ finalUrl: 'https://accounts.veracross.com/lcc/login' }, PORTAL)).toBe(true);
+  });
+
+  it('spots a login form rendered in place', () => {
+    expect(looksLikeLogin({ finalUrl: PORTAL, hasPasswordField: true }, PORTAL)).toBe(true);
+  });
+
+  it('does not mistake a working page for a login', () => {
+    expect(looksLikeLogin({ finalUrl: `${PORTAL}/grades`, hasPasswordField: false }, PORTAL)).toBe(false);
+  });
+
+  it('treats a missing final url as not-a-login rather than guessing', () => {
+    // Better to sync an empty snapshot than to wrongly clear a good session.
+    expect(looksLikeLogin({}, PORTAL)).toBe(false);
   });
 });
 

@@ -78,6 +78,15 @@ describe('readSchoolPortal', () => {
     expect(result.portals[0]?.warning).toMatch(/only the SHAPE/);
   });
 
+  it('tells the student to sign in again when the session expired', async () => {
+    const result = (await readSchoolPortal.execute({}, ctxWith([
+      snapshot({ needsLogin: true, pages: [page('A', [component({ courses: [] }, true)])] }),
+    ]))) as { portals: { warning?: string }[] };
+    expect(result.portals[0]?.warning).toMatch(/sign in/i);
+    // The failure that matters: an expired login read as "no coursework".
+    expect(result.portals[0]?.warning).not.toMatch(/year has not started/);
+  });
+
   it('explains an all-empty portal instead of saying there is no coursework', async () => {
     const result = (await readSchoolPortal.execute({}, ctxWith([
       snapshot({ pages: [page('A', [component({ courses: [] }, true)])] }),
