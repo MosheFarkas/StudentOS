@@ -18,6 +18,7 @@ export type Route =
   | { name: 'agents' }
   | { name: 'chat'; agentId: string }
   | { name: 'settings' }
+  | { name: 'link'; requestId: string }
   | { name: 'notFound' };
 
 export function parseRoute(pathname: string): Route {
@@ -25,6 +26,12 @@ export function parseRoute(pathname: string): Route {
 
   if (segments.length === 0) return { name: 'agents' };
   if (segments[0] === 'settings' && segments.length === 1) return { name: 'settings' };
+
+  // Opened by the desktop app in the student's browser, so this arrives from
+  // outside the SPA and must survive a cold load.
+  if (segments[0] === 'link' && segments.length === 2 && segments[1]) {
+    return { name: 'link', requestId: safeDecode(segments[1]) };
+  }
 
   if (segments[0] === 'agents') {
     if (segments.length === 1) return { name: 'agents' };
@@ -61,6 +68,8 @@ export function routeToPath(route: Route): string {
       return `/agents/${encodeURIComponent(route.agentId)}`;
     case 'settings':
       return '/settings';
+    case 'link':
+      return `/link/${encodeURIComponent(route.requestId)}`;
     default:
       return '/';
   }

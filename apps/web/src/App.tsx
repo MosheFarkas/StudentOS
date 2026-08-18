@@ -4,6 +4,7 @@ import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
+import { LinkDevice } from './screens/LinkDevice.js';
 import { Settings } from './screens/Settings.js';
 
 export function App() {
@@ -81,6 +82,8 @@ export function App() {
       )}
 
       {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}
+
+      {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
 
       {route.name === 'notFound' && (
         <div className="panel">

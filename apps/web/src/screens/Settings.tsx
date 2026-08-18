@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { DeviceConnections } from './DeviceConnections.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 
@@ -57,6 +58,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
       )}
 
       <GoogleConnections />
+
+      <DeviceConnections />
 
       <TelegramConnection />
     </>

@@ -707,3 +707,23 @@ main:has(.preview-pane) .workspace {
     z-index: 10;
   }
 }
+
+/* Linked desktop companions. */
+.device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.device-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.device-list li:last-child {
+  border-bottom: none;
+}
