@@ -9,7 +9,8 @@
     "link": "node src/index.mjs link",
     "sync": "node src/index.mjs sync",
     "start": "electron .",
-    "dist": "electron-builder --mac"
+    "dist": "electron-builder --mac",
+    "postinstall": "node scripts/ensure-electron.mjs"
   },
   "main": "src/main.mjs",
   "devDependencies": {
