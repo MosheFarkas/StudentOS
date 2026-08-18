@@ -19,3 +19,10 @@ coverage/
 # captures from a real student's portal, not source.
 *-endpoints.json
 *-map.json
+
+# electron-builder output
+release/
+
+# ...but the desktop app's build resources ARE source: electron-builder reads
+# the icon from here at package time.
+!apps/desktop/build/
