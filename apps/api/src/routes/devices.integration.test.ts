@@ -4,6 +4,8 @@ import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
 import type { AppContext } from '../context.js';
+import { and, desc, eq } from 'drizzle-orm';
+import { portalSnapshots } from '@contexto/db';
 import { createUser, reset, testDb, TEST_DATABASE_URL } from '../test-support/harness.js';
 
 /**
@@ -16,9 +18,10 @@ import { createUser, reset, testDb, TEST_DATABASE_URL } from '../test-support/ha
  */
 
 let app: Hono;
+let db: Awaited<ReturnType<typeof testDb>>;
 
 beforeAll(async () => {
-  const db = await testDb();
+  db = await testDb();
   const env = {
     NODE_ENV: 'test' as const,
     PORT: 0,
@@ -161,5 +164,52 @@ describe('cross-user isolation', () => {
 
     const res = await app.request('/api/devices', as(bob.token));
     expect(JSON.stringify(await res.json())).not.toContain('Alice');
+  });
+});
+
+describe('snapshot retention', () => {
+  const push = (token: string, portalId: string, day: number) =>
+    app.request('/api/devices/portal-snapshot',
+      json({ portalId, origin: 'https://portals.veracross.com', redacted: false,
+             capturedAt: new Date(Date.UTC(2026, 8, day)).toISOString(),
+             map: { day } }, token));
+
+  const rowsFor = (userId: string, portalId: string) =>
+    db.select({ map: portalSnapshots.map, capturedAt: portalSnapshots.capturedAt })
+      .from(portalSnapshots)
+      .where(and(eq(portalSnapshots.userId, userId), eq(portalSnapshots.portalId, portalId)))
+      .orderBy(desc(portalSnapshots.capturedAt));
+
+  it('keeps only the newest few, and the newest is among them', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    for (let day = 1; day <= 8; day += 1) await push(device.token, 'veracross', day);
+
+    const rows = await rowsFor(alice.id, 'veracross');
+    expect(rows).toHaveLength(5);
+    // Newest kept, oldest gone -- the failure mode is pruning the wrong end.
+    expect((rows[0]?.map as { day: number }).day).toBe(8);
+    expect(rows.map((r) => (r.map as { day: number }).day)).toEqual([8, 7, 6, 5, 4]);
+  });
+
+  it('does not prune a different portal belonging to the same student', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    await push(device.token, 'mozaik', 1);
+    for (let day = 1; day <= 8; day += 1) await push(device.token, 'veracross', day);
+
+    expect(await rowsFor(alice.id, 'mozaik')).toHaveLength(1);
+  });
+
+  it("does not prune another student's snapshots", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const aliceDevice = await linkDevice(alice.token);
+    const bobDevice = await linkDevice(bob.token);
+
+    await push(bobDevice.token, 'veracross', 1);
+    for (let day = 1; day <= 8; day += 1) await push(aliceDevice.token, 'veracross', day);
+
+    expect(await rowsFor(bob.id, 'veracross')).toHaveLength(1);
   });
 });

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { and, desc, eq, gt, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { deviceLinkRequests, devices, portalSnapshots } from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
@@ -10,6 +10,9 @@ import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { hashDeviceToken, requireDevice, type DeviceVariables } from '../middleware/device.js';
 
 const LINK_TTL_MS = 10 * 60 * 1000;
+
+/** History kept per portal. Only the newest is ever read. */
+const SNAPSHOTS_KEPT = 5;
 
 /**
  * Linking a desktop companion, and receiving what it finds.
@@ -197,6 +200,42 @@ export function createDeviceRoutes(ctx: AppContext) {
             .returning({ id: portalSnapshots.id });
 
           if (!saved) throw new ContextoError('internal_error', 'Could not store the portal snapshot.');
+
+          /*
+           * Keep a short history and drop the rest.
+           *
+           * A device syncs every six hours, so an unbounded table grows by
+           * about 1,500 rows per portal per student per year, each holding a
+           * whole portal as JSONB. Nothing reads past the newest -- the agent
+           * asks for the latest per portal -- so the older rows are pure
+           * storage cost. A few are kept because "it worked yesterday" is the
+           * first question when a sync starts coming back empty.
+           *
+           * Pruned inline rather than on a schedule: this is the only place
+           * rows are created, so it cannot fall behind, and there is no cron
+           * to forget to deploy.
+           */
+          await ctx.db.delete(portalSnapshots).where(
+            and(
+              eq(portalSnapshots.userId, c.get('userId')),
+              eq(portalSnapshots.portalId, body.portalId),
+              notInArray(
+                portalSnapshots.id,
+                ctx.db
+                  .select({ id: portalSnapshots.id })
+                  .from(portalSnapshots)
+                  .where(
+                    and(
+                      eq(portalSnapshots.userId, c.get('userId')),
+                      eq(portalSnapshots.portalId, body.portalId),
+                    ),
+                  )
+                  .orderBy(desc(portalSnapshots.capturedAt))
+                  .limit(SNAPSHOTS_KEPT),
+              ),
+            ),
+          );
+
           return c.json({ ok: true, snapshotId: saved.id });
         },
       )
