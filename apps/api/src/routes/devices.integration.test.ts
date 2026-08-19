@@ -426,7 +426,8 @@ describe('refreshing a session from a device', () => {
     const alice = await createUser();
     const device = await linkDevice(alice.token);
     const res = await app.request('/api/devices/session', {
-      method: 'POST', headers: { Authorization: `Bearer ${device.token}` },
+      method: 'POST',
+      headers: { Authorization: `Bearer ${device.token}` },
     });
     const { sessionToken } = (await res.json()) as { sessionToken: string };
     expect((await app.request('/api/agents', as(sessionToken))).status).toBe(200);
@@ -437,14 +438,16 @@ describe('refreshing a session from a device', () => {
     const device = await linkDevice(alice.token);
     await app.request(`/api/devices/${device.deviceId}/revoke`, json({}, alice.token));
     const res = await app.request('/api/devices/session', {
-      method: 'POST', headers: { Authorization: `Bearer ${device.token}` },
+      method: 'POST',
+      headers: { Authorization: `Bearer ${device.token}` },
     });
     expect(res.status).toBe(401);
   });
 
   it('refuses a made-up device token', async () => {
     const res = await app.request('/api/devices/session', {
-      method: 'POST', headers: { Authorization: 'Bearer nonsense' },
+      method: 'POST',
+      headers: { Authorization: 'Bearer nonsense' },
     });
     expect(res.status).toBe(401);
   });
