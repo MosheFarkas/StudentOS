@@ -39,7 +39,11 @@ function portalRow(portal) {
   const detail = !portal.loggedInAt
     ? 'Not signed in yet'
     : result
-      ? `${result.withData} of ${result.components} components had data · synced ${ago(portal.lastSyncedAt)}`
+      ? `${
+          result.withData === 0
+            ? 'connected, nothing published yet'
+            : `${result.withData} of ${result.components} data sources have content`
+        } · synced ${ago(portal.lastSyncedAt)}`
       : 'Signed in, never synced';
 
   // The address is discovered after signing in, not taken from what was typed,
@@ -90,15 +94,15 @@ function portalRow(portal) {
     result && result.needsLogin
       ? el('div', {
           class: 'notice',
-          text: 'The portal asked for a sign-in, so the saved session has expired. Sign in again.',
+          text: 'That site asked for a sign-in, so the saved session has expired. Sign in again.',
         })
       : null,
     result && !result.needsLogin && result.withData === 0
       ? el('div', {
           class: 'notice',
           text:
-            'Everything came back empty, but the session is still good — so there is genuinely ' +
-            'nothing there yet. Usually that means term has not started.',
+            'Connected, but the site is not publishing anything yet. The session is still good — ' +
+            'there is genuinely nothing there to read.',
         })
       : null,
     result && !result.complete
@@ -143,8 +147,8 @@ async function beginLogin(portal) {
                   'Being signed in elsewhere does not count.\n\n' +
                   'Open it again and sign in inside that window, all the way through Google, ' +
                   'until you can see your courses.'
-              : 'The portal still asks for a password after signing in. It may have rejected ' +
-                  'the login, or it signs you out again straight away.',
+              : 'The site still asks for a password after signing in. It may have rejected the ' +
+                  'login, or it signs you out again straight away.',
           );
           return;
         }
@@ -156,17 +160,17 @@ async function beginLogin(portal) {
 }
 
 function addPortalPanel() {
-  const name = el('input', { placeholder: 'Veracross', 'aria-label': 'Portal name' });
+  const name = el('input', { placeholder: 'Veracross', 'aria-label': 'Site name' });
   const url = el('input', {
     placeholder: 'https://portals.veracross.com/lcc/student',
-    'aria-label': 'Portal address',
+    'aria-label': 'Site address',
   });
 
   return el('div', { class: 'panel' }, [
-    el('h2', { text: 'Add a portal' }),
+    el('h2', { text: 'Add a site' }),
     el('p', {
       class: 'muted small',
-      text: 'The address you normally land on after signing in. Copy it from your browser.',
+      text: 'The page you normally land on after signing in — not the sign-in page itself. Copy it from your browser.',
     }),
     el('div', { class: 'row' }, [name, url]),
     el('div', { class: 'row', style: 'margin-top:.6rem' }, [
@@ -202,7 +206,7 @@ function startupPanel(openAtLogin) {
       box,
       el('label', {
         for: 'open-at-login',
-        text: 'Open at login and keep coursework up to date in the background',
+        text: 'Open at login and keep these sites up to date in the background',
       }),
     ]),
   ]);
@@ -219,7 +223,7 @@ async function render() {
         el('h1', { text: 'ContextoAgent' }),
         el('p', {
           class: 'muted',
-          text: 'Reads the school portals that have no API, using the logins you complete yourself.',
+          text: 'Reads sites that need a login — school portals, course pages, anything behind a sign-in — using the logins you complete yourself.',
         }),
         el('div', { class: 'panel' }, [
           el('h2', { text: 'Link this computer' }),
@@ -227,7 +231,7 @@ async function render() {
             class: 'muted small',
             text:
               'Opens your browser so you can approve it from your account. ' +
-              'Nothing is read until you add a portal and sign in.',
+              'Nothing is read until you add a site and sign in.',
           }),
           el('button', {
             class: 'primary',
@@ -245,7 +249,7 @@ async function render() {
       el('h1', { text: 'ContextoAgent' }),
       el('p', { class: 'muted small', text: `Linked as ${deviceName ?? 'this computer'}` }),
       portals.length > 0
-        ? el('div', { class: 'panel' }, [el('h2', { text: 'Portals' }), ...portals.map(portalRow)])
+        ? el('div', { class: 'panel' }, [el('h2', { text: 'Sites' }), ...portals.map(portalRow)])
         : null,
       addPortalPanel(),
       startupPanel(openAtLogin),

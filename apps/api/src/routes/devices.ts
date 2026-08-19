@@ -192,6 +192,37 @@ export function createDeviceRoutes(ctx: AppContext) {
         return c.json(rows);
       })
 
+      /**
+       * Sites a linked computer has captured, for the web app.
+       *
+       * Read-only and metadata only -- what is connected and how fresh it is.
+       * The contents belong to the agent, not to a settings screen.
+       */
+      .get('/sites', auth, async (c) => {
+        const rows = await ctx.db
+          .selectDistinctOn([portalSnapshots.portalId], {
+            portalId: portalSnapshots.portalId,
+            origin: portalSnapshots.origin,
+            capturedAt: portalSnapshots.capturedAt,
+            map: portalSnapshots.map,
+          })
+          .from(portalSnapshots)
+          .where(eq(portalSnapshots.userId, c.get('userId')))
+          .orderBy(portalSnapshots.portalId, desc(portalSnapshots.capturedAt));
+
+        return c.json(
+          rows.map((row) => ({
+            portalId: row.portalId,
+            origin: row.origin,
+            capturedAt: row.capturedAt,
+            needsLogin: Boolean((row.map as { needsLogin?: boolean })?.needsLogin),
+            pages: Array.isArray((row.map as { pages?: unknown[] })?.pages)
+              ? (row.map as { pages: unknown[] }).pages.length
+              : 0,
+          })),
+        );
+      })
+
       .post('/:id/revoke', auth, async (c) => {
         await ctx.db
           .update(devices)

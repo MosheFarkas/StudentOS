@@ -166,13 +166,15 @@ button:disabled {
   cursor: default;
 }
 
-button.primary {
+button.primary,
+a.button.primary {
   background: var(--violet);
   border-color: var(--violet);
   color: #fff;
 }
 
-button.primary:hover:not(:disabled) {
+button.primary:hover:not(:disabled),
+a.button.primary:hover {
   background: var(--violet-dark);
   border-color: var(--violet-dark);
 }
@@ -726,4 +728,16 @@ main:has(.preview-pane) .workspace {
 
 .device-list li:last-child {
   border-bottom: none;
+}
+
+/* A link styled as a button — the desktop download is a real navigation, so it
+   has to stay an anchor rather than a button with an onClick. */
+a.button {
+  display: inline-block;
+  text-decoration: none;
+  font: inherit;
+  padding: 0.45rem 0.9rem;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  color: var(--ink);
 }

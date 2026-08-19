@@ -27,17 +27,59 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
  */
 const STALE_AFTER_MS = 60 * 60 * 1000;
 
-let window = null;
+let appWindow = null; // the hosted web app
+let sitesWindow = null; // the native panel for signing into sites
 let tray = null;
 let syncing = false;
 
-function showWindow() {
-  if (window && !window.isDestroyed()) {
-    window.show();
-    window.focus();
+/**
+ * The main window is the real web app, not a rebuild of it.
+ *
+ * Everything a student does with their agent already exists at
+ * contextoagent.ai and works; shipping a second implementation of it would
+ * mean two things to keep in step. Verified that Google's sign-in renders
+ * inside an Electron window, so hosting it costs nothing in access.
+ *
+ * What this app adds is the one thing a web page fundamentally cannot do:
+ * hold a login for another site. That lives in its own window.
+ */
+function showAppWindow() {
+  if (appWindow && !appWindow.isDestroyed()) {
+    appWindow.show();
+    appWindow.focus();
+    return;
+  }
+  appWindow = new BrowserWindow({
+    width: 1100,
+    height: 820,
+    title: 'ContextoAgent',
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  void appWindow.loadURL(WEB_BASE);
+  // Sign-in and any outbound link belong in the student's own browser, where
+  // there is an address bar to check.
+  appWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  appWindow.on('closed', () => {
+    appWindow = null;
+  });
+}
+
+function showSitesWindow() {
+  if (sitesWindow && !sitesWindow.isDestroyed()) {
+    sitesWindow.show();
+    sitesWindow.focus();
     return;
   }
   createWindow();
+}
+
+/** Whichever window makes sense: linking and sites first, otherwise the app. */
+function showWindow() {
+  if (!status().linked) showSitesWindow();
+  else showAppWindow();
 }
 
 /**
@@ -75,7 +117,8 @@ function refreshTrayMenu() {
         enabled: false,
       },
       { type: 'separator' },
-      { label: 'Open ContextoAgent', click: () => showWindow() },
+      { label: 'Open ContextoAgent', click: () => showAppWindow() },
+      { label: 'Connected sites…', click: () => showSitesWindow() },
       {
         label: syncing ? 'Syncing…' : 'Sync now',
         // Nothing to sync without a linked account or a signed-in portal, and
@@ -90,10 +133,10 @@ function refreshTrayMenu() {
 }
 
 function createWindow() {
-  window = new BrowserWindow({
-    width: 720,
-    height: 620,
-    title: 'ContextoAgent',
+  const window = new BrowserWindow({
+    width: 760,
+    height: 660,
+    title: 'Connected sites',
     webPreferences: {
       // This process drives a browser holding school logins and holds a token
       // that speaks for the student's account. The renderer gets none of that:
@@ -106,6 +149,9 @@ function createWindow() {
   });
 
   void window.loadFile(join(here, 'renderer', 'index.html'));
+  window.on('closed', () => {
+    sitesWindow = null;
+  });
 
   // A link in this UI is a real web page; it belongs in the student's own
   // browser, not in a chromeless window with no address bar to check.
@@ -113,6 +159,8 @@ function createWindow() {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+
+  sitesWindow = window;
 }
 
 /** Wrap a handler so a thrown error reaches the renderer as a message. */
@@ -182,18 +230,18 @@ async function syncAll({ onlyStale = false } = {}) {
 
 /** Keep the window and the menu bar showing the same thing. */
 function notifyChanged() {
-  if (window && !window.isDestroyed()) window.webContents.send('portals-changed');
+  if (sitesWindow && !sitesWindow.isDestroyed()) sitesWindow.webContents.send('portals-changed');
   refreshTrayMenu();
 }
 
 void app.whenReady().then(() => {
-  createWindow();
+  showWindow();
   buildTray();
   void syncAll({ onlyStale: true });
   setInterval(() => void syncAll(), SYNC_INTERVAL_MS);
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) showWindow();
   });
 });
 
