@@ -42,6 +42,10 @@ function portalRow(portal) {
       ? `${result.withData} of ${result.components} components had data · synced ${ago(portal.lastSyncedAt)}`
       : 'Signed in, never synced';
 
+  // The address is discovered after signing in, not taken from what was typed,
+  // so showing it is how a student can tell it found the right place.
+  const address = portal.loggedInAt ? portal.origin : null;
+
   const actions = !portal.loggedInAt
     ? [
         el('button', {
@@ -76,6 +80,7 @@ function portalRow(portal) {
       el('div', {}, [
         el('div', { text: portal.name }),
         el('div', { class: 'muted small', text: detail }),
+        address ? el('div', { class: 'muted small', text: address }) : null,
       ]),
       el('div', { class: 'row' }, actions),
     ]),
@@ -122,7 +127,19 @@ async function beginLogin(portal) {
       class: 'primary',
       text: "I'm signed in",
       onclick: async () => {
-        await call(() => window.contexto.finishLogin(portal.id), `finish:${portal.id}`);
+        const finished = await call(
+          () => window.contexto.finishLogin(portal.id),
+          `finish:${portal.id}`,
+        );
+        // Syncing after a sign-in that did not take just records an empty
+        // portal, which reads to the student as "there is nothing here".
+        if (finished.ok && finished.value?.needsLogin) {
+          alert(
+            'That sign-in did not stick — the portal still asks for a password. ' +
+              'Try again, and make sure you reach a page showing your courses before coming back.',
+          );
+          return;
+        }
         await call(() => window.contexto.syncPortal(portal.id), `sync:${portal.id}`);
       },
     }),

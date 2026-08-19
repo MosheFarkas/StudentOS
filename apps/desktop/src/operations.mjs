@@ -109,14 +109,78 @@ export async function beginLogin(portalId) {
   return { alreadyOpen: false };
 }
 
+/**
+ * Find out where the portal actually lives, once there is a session.
+ *
+ * A student pastes the address they know, and the address they know is
+ * usually the sign-in page -- which is the one page guaranteed NOT to be the
+ * portal. Veracross signs you in at accounts.veracross.com and then sends you
+ * to portals.veracross.com, a different origin, so locking to what was typed
+ * meant the crawl could never reach anything.
+ *
+ * So the origin is discovered rather than declared: after logging in, follow
+ * the redirects once and record where they end. Every later sync is locked to
+ * that resolved origin, so this is the one moment a redirect is allowed to
+ * decide where we go -- immediately after a student signed in, not during an
+ * unattended background sync.
+ */
+export async function resolvePortalAddress(portalId) {
+  const portal = listPortals().find((p) => p.id === portalId);
+  if (!portal) throw new Error(`No portal called ${portalId}`);
+
+  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
+  try {
+    await browser.launch();
+    const { sessionId } = await browser.openPage(portal.url);
+    // Redirect chains after SSO are often several hops and partly client-side.
+    await new Promise((r) => setTimeout(r, 3000));
+    const { result } = await browser.cdp.send(
+      'Runtime.evaluate',
+      {
+        expression: `JSON.stringify({
+          url: location.href,
+          hasPassword: Boolean(document.querySelector('input[type=password]'))
+        })`,
+        returnByValue: true,
+      },
+      sessionId,
+    );
+    const landed = JSON.parse(result.value);
+    await browser.close();
+
+    if (landed.hasPassword) return { needsLogin: true };
+    return { needsLogin: false, url: landed.url, origin: new URL(landed.url).origin };
+  } catch (error) {
+    await browser.close().catch(() => {});
+    throw error;
+  }
+}
+
 /** Close the login window gracefully, which is what persists the session. */
 export async function finishLogin(portalId) {
   const browser = openLogins.get(portalId);
   if (!browser) return { closed: false };
   openLogins.delete(portalId);
   await browser.close();
-  updatePortal(portalId, { loggedInAt: new Date().toISOString() });
-  return { closed: true };
+
+  const landed = await resolvePortalAddress(portalId);
+  if (landed.needsLogin) {
+    // Still at a sign-in page, so the login did not take. Saying so now beats
+    // a sync that reports an empty portal for a reason the student cannot see.
+    updatePortal(portalId, {
+      loggedInAt: null,
+      lastError: 'That sign-in did not stick — the portal still asks for a password.',
+    });
+    return { closed: true, needsLogin: true };
+  }
+
+  updatePortal(portalId, {
+    loggedInAt: new Date().toISOString(),
+    lastError: null,
+    url: landed.url,
+    origin: landed.origin,
+  });
+  return { closed: true, needsLogin: false, origin: landed.origin };
 }
 
 /**
