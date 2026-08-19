@@ -131,41 +131,51 @@ export async function resolvePortalAddress(portalId) {
   const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
   try {
     await browser.launch();
-    const { sessionId } = await browser.openPage(portal.url);
-    // Redirect chains after SSO are often several hops and partly client-side.
-    await new Promise((r) => setTimeout(r, 3000));
-    const { result } = await browser.cdp.send(
-      'Runtime.evaluate',
-      {
-        expression: `JSON.stringify({
-          url: location.href,
-          hasPassword: Boolean(document.querySelector('input[type=password]'))
-        })`,
-        returnByValue: true,
-      },
-      sessionId,
-    );
-    const landed = JSON.parse(result.value);
+    const { sessionId } = await browser.openPage('about:blank');
+
+    const look = async (url) => {
+      await browser.navigate(url, sessionId);
+      // Redirect chains after SSO are several hops and partly client-side.
+      await new Promise((r) => setTimeout(r, 3000));
+      const { result } = await browser.cdp.send(
+        'Runtime.evaluate',
+        {
+          expression: `JSON.stringify({
+            url: location.href,
+            hasPassword: Boolean(document.querySelector('input[type=password]'))
+          })`,
+          returnByValue: true,
+        },
+        sessionId,
+      );
+      return JSON.parse(result.value);
+    };
 
     /*
-     * Count what the profile holds, so a failure can say WHY.
+     * Only where the pasted address ends up, deliberately.
      *
-     * "Signed in" and "signed in somewhere this app can see" are different
-     * things, and they are indistinguishable from the outside. The window the
-     * app opens is a separate Chrome profile: signed out of everything, and
-     * identical on screen to the student's normal browser. Signing into the
-     * wrong one leaves this profile with the single cookie that loading a
-     * login page sets, which is precisely what a never-started login looks
-     * like -- so the count is the evidence that tells them apart.
+     * Falling back to the origin root when the seed shows a password field
+     * looks like an improvement and is a trap: a root that serves a public
+     * page has no password field either, so a signed-OUT profile resolves as
+     * signed in and the next sync captures a public page as if it were the
+     * student's coursework. Tested, and it did exactly that.
+     *
+     * A portal that keeps rendering its login form to an authenticated
+     * visitor is therefore read as signed out. That is the safe direction:
+     * asking someone to sign in again costs a minute, while claiming success
+     * on a page holding none of their data is silently wrong.
      */
+    const landed = await look(portal.url);
+
     const { cookies } = await browser.cdp.send('Storage.getCookies');
     const evidence = {
       cookies: cookies.length,
       google: cookies.some((c) => /google\./.test(c.domain)),
     };
+    const signedOut = landed.hasPassword;
     await browser.close();
 
-    if (landed.hasPassword) return { needsLogin: true, ...evidence };
+    if (signedOut) return { needsLogin: true, ...evidence };
     return { needsLogin: false, url: landed.url, origin: new URL(landed.url).origin, ...evidence };
   } catch (error) {
     await browser.close().catch(() => {});
