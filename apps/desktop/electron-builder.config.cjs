@@ -27,7 +27,37 @@ if (!canNotarize) {
   );
 }
 
+const { execFileSync } = require('node:child_process');
+const { join } = require('node:path');
+
+/**
+ * Ad-hoc sign the bundle when there is no real identity.
+ *
+ * Left alone, the app keeps only the linker's signature: identifier
+ * "Electron", no resource seal. macOS calls a quarantined copy of that
+ * DAMAGED -- a dead end offering nothing but "Move to Trash". Ad-hoc signing
+ * produces a consistent signature under the right bundle id, which downgrades
+ * it to the ordinary "unidentified developer" refusal a student can get past
+ * in System Settings.
+ *
+ * Not a substitute for a Developer ID. It is the difference between a wall
+ * and a door with a warning on it.
+ *
+ * electron-builder cannot do this itself -- it treats identity "-" as a
+ * keychain name to look up and skips signing when it finds none -- so it
+ * happens here, after packing and before the DMG is built.
+ */
+function adHocSign(context) {
+  if (canNotarize) return;
+  const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  // --deep is deprecated for real identities but remains the practical way to
+  // seal an Electron bundle's many nested helpers with an ad-hoc signature.
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
+  console.log('[desktop] ad-hoc signed', appPath);
+}
+
 module.exports = {
+  afterPack: adHocSign,
   appId: 'ai.contextoagent.desktop',
   productName: 'ContextoAgent',
   directories: { output: 'release', buildResources: 'build' },

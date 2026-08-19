@@ -74,6 +74,21 @@ is System Settings, and it is worth writing out for whoever you send this to:
 
 It is asked once per install, not every launch.
 
+### If it says "damaged and cannot be opened"
+
+That is a different message and there is no Open Anyway on it. It means the
+bundle's signature is inconsistent, which is what an unsigned Electron app
+looks like once it carries a download's quarantine flag: the linker's own
+signature, identifier "Electron", no resource seal.
+
+The build ad-hoc signs the bundle for exactly this reason -- see `adHocSign`
+in the builder config -- which turns that dead end into the ordinary refusal
+above. If you meet it anyway on an older download:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/ContextoAgent.app
+```
+
 Building it yourself avoids all of this: an app built locally never gets the
 quarantine flag that triggers the check, so `pnpm --filter @contexto/desktop
 dist` and running it from `release/` just works.
