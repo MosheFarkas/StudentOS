@@ -20,9 +20,19 @@ const CONFIG_DIR =
   }[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent'));
 
 export function configPath() {
-  return join(CONFIG_DIR(), 'config.json');
+  /*
+   * Overridable so tests never touch a real install.
+   *
+   * They did, twice, and both times it destroyed a working device token --
+   * the credential is not recoverable from the server, which stores only its
+   * hash, so the only repair is linking again. A test that can reach the
+   * student's own config is a test that will eventually break it.
+   */
+  const override = process.env['CONTEXTO_CONFIG_DIR'];
+  return join(override || CONFIG_DIR(), 'config.json');
 }
 
+/** Where portal browser profiles live, alongside the config. */
 export function readConfig() {
   try {
     return JSON.parse(readFileSync(configPath(), 'utf8'));

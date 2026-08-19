@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readConfig } from './sync.mjs';
+import { configPath, readConfig } from './sync.mjs';
 
 describe('readConfig', () => {
   it('returns an empty object rather than throwing when unlinked', () => {
@@ -129,6 +129,32 @@ describe('when the thing answering is not our API', () => {
       expect(error.message).toBe('That portal snapshot is too large to store.');
     } finally {
       restore();
+    }
+  });
+});
+
+describe('configPath', () => {
+  it('can be pointed somewhere else, so tests never touch a real install', () => {
+    // Losing a device token is not recoverable -- the server keeps only its
+    // hash -- so a test able to reach the student's own config is a test that
+    // will eventually destroy one.
+    const before = process.env['CONTEXTO_CONFIG_DIR'];
+    try {
+      process.env['CONTEXTO_CONFIG_DIR'] = '/tmp/ctx-test-suite';
+      expect(configPath()).toBe('/tmp/ctx-test-suite/config.json');
+    } finally {
+      if (before === undefined) delete process.env['CONTEXTO_CONFIG_DIR'];
+      else process.env['CONTEXTO_CONFIG_DIR'] = before;
+    }
+  });
+
+  it('defaults to the real location when nothing is set', () => {
+    const before = process.env['CONTEXTO_CONFIG_DIR'];
+    delete process.env['CONTEXTO_CONFIG_DIR'];
+    try {
+      expect(configPath()).toMatch(/ContextoAgent|contexto-agent/);
+    } finally {
+      if (before !== undefined) process.env['CONTEXTO_CONFIG_DIR'] = before;
     }
   });
 });
