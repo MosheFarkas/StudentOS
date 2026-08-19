@@ -6,20 +6,11 @@
  * come from a school's server, so neither is markup this app should evaluate.
  */
 
+import { el } from './dom.mjs';
+
 const app = document.getElementById('app');
 const busy = new Set();
 
-function el(tag, props = {}, children = []) {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (key === 'class') node.className = value;
-    else if (key === 'text') node.textContent = value;
-    else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
-    else node.setAttribute(key, value);
-  }
-  for (const child of [].concat(children)) if (child) node.append(child);
-  return node;
-}
 
 /** Every call returns {ok, value|error}; this surfaces the message, not a crash. */
 async function call(fn, key) {
