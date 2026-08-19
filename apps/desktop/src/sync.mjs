@@ -153,8 +153,16 @@ export async function link({
         token: result.token,
         deviceId: result.deviceId,
         deviceName,
+        /*
+         * The web session that came back with the approval.
+         *
+         * Kept so the app stays signed in across restarts. The student already
+         * answered "who are you" in the browser to approve this; asking again
+         * inside the app would be asking the same question twice.
+         */
+        sessionToken: result.sessionToken ?? null,
       });
-      return { deviceId: result.deviceId, deviceName };
+      return { deviceId: result.deviceId, deviceName, sessionToken: result.sessionToken ?? null };
     }
     await new Promise((r) => setTimeout(r, pollMs));
   }

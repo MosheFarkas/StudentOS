@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -155,6 +155,58 @@ describe('configPath', () => {
       expect(configPath()).toMatch(/ContextoAgent|contexto-agent/);
     } finally {
       if (before !== undefined) process.env['CONTEXTO_CONFIG_DIR'] = before;
+    }
+  });
+});
+
+describe('link', () => {
+  it('persists the session that came back with the approval', async () => {
+    // This is what makes the app signed in after linking. It shipped once
+    // without it: an exact-string edit silently matched nothing, and syntax
+    // and lint both pass on unchanged code.
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-link-'));
+    const beforeDir = process.env['CONTEXTO_CONFIG_DIR'];
+    const beforeFetch = globalThis.fetch;
+    process.env['CONTEXTO_CONFIG_DIR'] = dir;
+
+    globalThis.fetch = async (url) => {
+      const path = String(url);
+      if (path.endsWith('/link/start')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ requestId: 'r1', expiresAt: null }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: 'linked',
+            token: 'DEV',
+            deviceId: 'd1',
+            sessionToken: 'SESSION-XYZ',
+          }),
+      };
+    };
+
+    try {
+      const { link, readConfig } = await import(`./sync.mjs?link-test`);
+      const result = await link({
+        apiBase: 'https://x.test',
+        webBase: 'https://x.test',
+        deviceName: 'Test',
+        pollMs: 1,
+      });
+      expect(result.sessionToken).toBe('SESSION-XYZ');
+      expect(readConfig().sessionToken).toBe('SESSION-XYZ');
+      expect(readConfig().token).toBe('DEV');
+    } finally {
+      globalThis.fetch = beforeFetch;
+      if (beforeDir === undefined) delete process.env['CONTEXTO_CONFIG_DIR'];
+      else process.env['CONTEXTO_CONFIG_DIR'] = beforeDir;
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
