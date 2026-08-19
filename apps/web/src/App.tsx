@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { api } from './lib/api.js';
+import { MAC_DOWNLOAD } from './lib/download.js';
 import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
 import { Agents } from './screens/Agents.js';
@@ -45,6 +46,18 @@ export function App() {
             <button className="primary" onClick={() => void signInWithGoogle()}>
               Continue with Google
             </button>
+
+            {/*
+              Secondary on purpose. Signing in is what a new visitor needs
+              first -- the app is useless before there is an account to link
+              it to -- so the download sits below rather than competing.
+            */}
+            <a className="button" href={MAC_DOWNLOAD}>
+              Download for macOS
+            </a>
+            <p className="muted small">
+              The app reads sites that need a login, like your school portal. Apple Silicon.
+            </p>
           </div>
         </div>
       </main>

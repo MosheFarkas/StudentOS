@@ -584,6 +584,19 @@ dd {
   margin-top: 1.25rem;
 }
 
+/* Sign in and download stack as equals in width, not in weight -- the primary
+   colour is what separates them. */
+.signin .panel button,
+.signin .panel a.button {
+  display: block;
+  width: 100%;
+  margin-top: 0.6rem;
+}
+
+.signin .panel p.small {
+  margin: 0.5rem 0 0;
+}
+
 /* ---------- file preview ---------- */
 
 main:has(.preview-pane) {

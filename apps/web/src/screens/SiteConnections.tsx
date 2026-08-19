@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { MAC_DOWNLOAD } from '../lib/download.js';
 
 interface Site {
   portalId: string;
@@ -8,8 +9,6 @@ interface Site {
   needsLogin: boolean;
   pages: number;
 }
-
-const DOWNLOAD = '/downloads/ContextoAgent-arm64.dmg';
 
 function ago(value: string): string {
   const hours = Math.round((Date.now() - new Date(value).getTime()) / 3_600_000);
@@ -78,7 +77,7 @@ export function SiteConnections() {
       </div>
 
       <div className="row" style={{ marginTop: '0.75rem' }}>
-        <a className="button primary" href={DOWNLOAD}>
+        <a className="button primary" href={MAC_DOWNLOAD}>
           Download for Mac
         </a>
         <span className="muted small">Apple Silicon</span>
