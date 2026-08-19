@@ -146,27 +146,10 @@ export async function resolvePortalAddress(portalId) {
       sessionId,
     );
     const landed = JSON.parse(result.value);
-
-    /*
-     * Count what the profile holds, so a failure can say WHY.
-     *
-     * "Signed in" and "signed in somewhere this app can see" are different
-     * things, and they are indistinguishable from the outside. The window the
-     * app opens is a separate Chrome profile: signed out of everything, and
-     * identical on screen to the student's normal browser. Signing into the
-     * wrong one leaves this profile with the single cookie that loading a
-     * login page sets, which is precisely what a never-started login looks
-     * like -- so the count is the evidence that tells them apart.
-     */
-    const { cookies } = await browser.cdp.send('Storage.getCookies');
-    const evidence = {
-      cookies: cookies.length,
-      google: cookies.some((c) => /google\./.test(c.domain)),
-    };
     await browser.close();
 
-    if (landed.hasPassword) return { needsLogin: true, ...evidence };
-    return { needsLogin: false, url: landed.url, origin: new URL(landed.url).origin, ...evidence };
+    if (landed.hasPassword) return { needsLogin: true };
+    return { needsLogin: false, url: landed.url, origin: new URL(landed.url).origin };
   } catch (error) {
     await browser.close().catch(() => {});
     throw error;

@@ -134,17 +134,9 @@ async function beginLogin(portal) {
         // Syncing after a sign-in that did not take just records an empty
         // portal, which reads to the student as "there is nothing here".
         if (finished.ok && finished.value?.needsLogin) {
-          const { cookies = 0, google = false } = finished.value;
           alert(
-            cookies <= 2 && !google
-              ? 'No sign-in happened in the window ContextoAgent opened.\n\n' +
-                  'That window is a separate Chrome profile — it looks exactly like your ' +
-                  'normal browser but is signed out of everything, including Google. ' +
-                  'Being signed in elsewhere does not count.\n\n' +
-                  'Open it again and sign in inside that window, all the way through Google, ' +
-                  'until you can see your courses.'
-              : 'The portal still asks for a password after signing in. It may have rejected ' +
-                  'the login, or it signs you out again straight away.',
+            'That sign-in did not stick — the portal still asks for a password. ' +
+              'Try again, and make sure you reach a page showing your courses before coming back.',
           );
           return;
         }
