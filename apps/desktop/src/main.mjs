@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, shell, Tray } from 'electron';
-import { link } from './sync.mjs';
+import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
+import { link, readConfig } from './sync.mjs';
 import {
   addPortal,
   beginLogin,
@@ -223,7 +223,28 @@ function notifyChanged() {
   refreshTrayMenu();
 }
 
+/**
+ * Carry the session the link gave us into every request the page makes.
+ *
+ * A bearer header rather than a cookie: Better Auth signs its session cookie,
+ * so writing one from here would mean reproducing that signature and keeping
+ * it right forever. The bearer plugin is already enabled for exactly this,
+ * and reads the same session.
+ *
+ * Scoped to our own origin -- an Authorization header is a credential, and it
+ * has no business travelling anywhere else.
+ */
+function attachSession() {
+  const origin = new URL(WEB_BASE).origin;
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const token = readConfig().sessionToken;
+    if (!token || !details.url.startsWith(origin)) return callback({});
+    callback({ requestHeaders: { ...details.requestHeaders, Authorization: `Bearer ${token}` } });
+  });
+}
+
 void app.whenReady().then(() => {
+  attachSession();
   showWindow();
   buildTray();
   void syncAll({ onlyStale: true });

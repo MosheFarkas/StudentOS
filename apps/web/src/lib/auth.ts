@@ -25,7 +25,13 @@ export const { useSession, signIn, signOut, linkSocial } = authClient;
 export function signInWithGoogle() {
   return signIn.social({
     provider: 'google',
-    callbackURL: window.location.origin,
+    /*
+     * Back to the page they were on, not the front door. A student who first
+     * meets this app by clicking "Link this computer" is sent to Google from
+     * /link/<id>; returning them to / would strand them on the agent list
+     * while the desktop app sits polling for an approval that never comes.
+     */
+    callbackURL: window.location.href,
   });
 }
 
@@ -42,6 +48,7 @@ export function connectGoogleScopes(scopes: string[]) {
   return linkSocial({
     provider: 'google',
     scopes,
-    callbackURL: window.location.origin,
+    // Back to Settings, where they pressed Connect.
+    callbackURL: window.location.href,
   });
 }

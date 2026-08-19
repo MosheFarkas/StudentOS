@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { api } from './lib/api.js';
+import { desktop } from './lib/desktop.js';
 import { MAC_DOWNLOAD } from './lib/download.js';
 import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
@@ -51,12 +52,17 @@ export function App() {
           {/*
             Outside the panel and below it, deliberately. Signing in is what a
             new visitor needs first; the app is useless until there is an
-            account to link it to.
+            account to link it to. Hidden inside the desktop app, where
+            offering the download would be offering them what they are using.
           */}
-          <p className="muted download-label">Download ContextoAgent desktop app</p>
-          <a className="button blue" href={MAC_DOWNLOAD}>
-            Download for macOS
-          </a>
+          {!desktop() && (
+            <>
+              <p className="muted download-label">Download ContextoAgent desktop app</p>
+              <a className="button blue" href={MAC_DOWNLOAD}>
+                Download for macOS
+              </a>
+            </>
+          )}
         </div>
       </main>
     );

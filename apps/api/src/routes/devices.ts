@@ -173,7 +173,29 @@ export function createDeviceRoutes(ctx: AppContext) {
           .returning({ id: devices.id });
 
         if (!created) throw new ContextoError('internal_error', 'Could not register this device.');
-        return c.json({ status: 'linked' as const, token, deviceId: created.id });
+
+        /*
+         * A session for the app, minted here rather than asked for again.
+         *
+         * The student just proved who they are, in a browser, to approve this
+         * exact request. Sending them through Google a second time inside the
+         * app would be asking the same question twice -- and the answer is
+         * already on the row we just consumed.
+         *
+         * It travels as a bearer token, which is why the bearer plugin exists
+         * in auth.ts. The device token and this session are separate on
+         * purpose: revoking the device stops it syncing, and signing out
+         * elsewhere ends the session, without either implying the other.
+         */
+        const authContext = await ctx.auth.$context;
+        const session = await authContext.internalAdapter.createSession(claimed.userId, undefined);
+
+        return c.json({
+          status: 'linked' as const,
+          token,
+          deviceId: created.id,
+          sessionToken: session.token,
+        });
       })
 
       /** Linked devices, for Settings. */

@@ -371,3 +371,52 @@ describe('the unauthenticated link endpoint', () => {
     expect(left.map((r) => r.name)).not.toContain('Long gone');
   });
 });
+
+describe('the session handed to a linked app', () => {
+  it('works as a signed-in session, so the app does not ask again', async () => {
+    const alice = await createUser();
+    const { requestId } = await startLink();
+    await app.request(`/api/devices/link/${requestId}/approve`, json({}, alice.token));
+    const claimed = (await (
+      await app.request(`/api/devices/link/${requestId}/claim`, { method: 'POST' })
+    ).json()) as { sessionToken: string };
+
+    expect(claimed.sessionToken).toEqual(expect.any(String));
+    // A route that needs a browser session, reached with it.
+    const res = await app.request('/api/agents', as(claimed.sessionToken));
+    expect(res.status).toBe(200);
+  });
+
+  it('is a different credential from the device token', async () => {
+    const alice = await createUser();
+    const { requestId } = await startLink();
+    await app.request(`/api/devices/link/${requestId}/approve`, json({}, alice.token));
+    const claimed = (await (
+      await app.request(`/api/devices/link/${requestId}/claim`, { method: 'POST' })
+    ).json()) as { token: string; sessionToken: string };
+
+    expect(claimed.token).not.toBe(claimed.sessionToken);
+    // The device token still must not act as a session.
+    expect((await app.request('/api/agents', as(claimed.token))).status).toBe(401);
+  });
+
+  it('belongs to the student who approved it', async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const { requestId } = await startLink();
+    await app.request(`/api/devices/link/${requestId}/approve`, json({}, bob.token));
+    const claimed = (await (
+      await app.request(`/api/devices/link/${requestId}/claim`, { method: 'POST' })
+    ).json()) as { sessionToken: string };
+
+    const devices = (await (
+      await app.request('/api/devices', as(claimed.sessionToken))
+    ).json()) as { name: string }[];
+    // Bob approved it, so the session is Bob's and lists Bob's devices.
+    expect(devices).toHaveLength(1);
+    const alicesDevices = (await (
+      await app.request('/api/devices', as(alice.token))
+    ).json()) as unknown[];
+    expect(alicesDevices).toHaveLength(0);
+  });
+});
