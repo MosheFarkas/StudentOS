@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 import { CdpConnection } from './cdp.mjs';
@@ -97,7 +97,15 @@ export class PortalBrowser {
 
   async launch() {
     const browser = findBrowser();
-    mkdirSync(this.profileDir, { recursive: true });
+    /*
+     * Owner-only. This directory holds a Chrome profile carrying the
+     * student's school session; on a shared Mac the default 0755 would let
+     * every other account on the machine read it. Chrome encrypts the cookie
+     * store against the login keychain, so this is defence in depth rather
+     * than the only thing standing there -- but it costs nothing.
+     */
+    mkdirSync(this.profileDir, { recursive: true, mode: 0o700 });
+    chmodSync(this.profileDir, 0o700);
 
     const driving = this.mode === 'drive';
     const args = launchArgs({

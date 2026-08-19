@@ -167,3 +167,45 @@ describe('explore', () => {
     ).rejects.toThrow(/Refusing to navigate outside/);
   });
 });
+
+describe('origin lock, adversarially', () => {
+  const PORT = 'https://portals.veracross.com/lcc/student';
+
+  // Each of these resolves somewhere other than the portal in a real browser,
+  // while looking like it might not. The lock compares resolved origins, which
+  // is why they all fail closed; a prefix or suffix string check would let
+  // several of them through.
+  it.each([
+    ['protocol-relative', '//evil.test/x'],
+    ['backslashes', '\\\\evil.test/x'],
+    ['mixed slashes', '/\\\\evil.test'],
+    ['reversed slashes', '\\\\/evil.test'],
+    ['plain other origin', 'https://evil.test'],
+    ['scheme downgrade', 'http://portals.veracross.com/x'],
+    ['uppercase other origin', 'HTTPS://EVIL.TEST'],
+    ['leading tab', '\thttps://evil.test'],
+    ['leading newline', '\nhttps://evil.test'],
+    ['leading carriage return', '\rhttps://evil.test'],
+    ['leading space', ' https://evil.test'],
+    ['domain suffixed', 'https://portals.veracross.com.evil.test/x'],
+    ['portal name in the path', 'https://evil.test/https://portals.veracross.com'],
+    ['portal name as userinfo', 'https://portals.veracross.com@evil.test/x'],
+    ['javascript scheme', 'javascript:alert(1)'],
+    ['data scheme', 'data:text/html,x'],
+    ['file scheme', 'file:///etc/passwd'],
+    ['different port', 'https://portals.veracross.com:8443/x'],
+    ['subdomain', 'https://sub.portals.veracross.com/x'],
+  ])('refuses %s', (_label, candidate) => {
+    expect(isInScope(candidate, PORT)).toBe(false);
+  });
+
+  it.each([
+    ['absolute path', '/lcc/student/grades'],
+    ['bare relative', 'grades'],
+    ['dot relative', './x'],
+    ['parent relative', '../student/x'],
+    ['same origin absolute', 'https://portals.veracross.com/y'],
+  ])('allows %s', (_label, candidate) => {
+    expect(isInScope(candidate, PORT)).toBe(true);
+  });
+});

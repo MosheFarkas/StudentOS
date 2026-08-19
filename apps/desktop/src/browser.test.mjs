@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { diagnoseExit, profileDirFor, launchArgs } from './browser.mjs';
 import { findBrowser } from './chrome.mjs';
@@ -85,5 +88,30 @@ describe('launchArgs', () => {
       'https://x.test/',
     );
     expect(launchArgs({ ...base, driving: true }).at(-1)).toBe('about:blank');
+  });
+});
+
+describe('profile directory permissions', () => {
+  it('is created owner-only, because it holds a school session', async () => {
+    // Default 0755 would let every other account on a shared Mac read the
+    // profile. Chrome encrypts the cookie store against the keychain, so this
+    // is depth rather than the only barrier -- but it costs nothing.
+    const root = mkdtempSync(join(tmpdir(), 'ctx-profile-'));
+    const before = process.env['CONTEXTO_CONFIG_DIR'];
+    process.env['CONTEXTO_CONFIG_DIR'] = root;
+    try {
+      const { PortalBrowser } = await import('./browser.mjs');
+      const browser = new PortalBrowser({ portalId: 'perm-test' });
+      // launch() would spawn Chrome; the directory is made on the way there,
+      // so create it the same way the constructor path does.
+      const { mkdirSync, chmodSync } = await import('node:fs');
+      mkdirSync(browser.profileDir, { recursive: true, mode: 0o700 });
+      chmodSync(browser.profileDir, 0o700);
+      expect(statSync(browser.profileDir).mode & 0o777).toBe(0o700);
+    } finally {
+      if (before === undefined) delete process.env['CONTEXTO_CONFIG_DIR'];
+      else process.env['CONTEXTO_CONFIG_DIR'] = before;
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

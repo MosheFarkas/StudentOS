@@ -345,7 +345,27 @@ export function createDeviceRoutes(ctx: AppContext) {
           'json',
           z.object({
             portalId: z.string().regex(/^[a-z0-9-]+$/),
-            origin: z.url(),
+            /*
+             * http(s) only. z.url() checks URL syntax, not scheme, so it
+             * happily accepts javascript: and data: -- and this value comes
+             * from a machine we do not control and is shown back to the
+             * student as the name of a site. Nothing renders it as a link
+             * today; this is so that staying true never depends on nobody
+             * ever doing so.
+             */
+            origin: z.url().refine(
+              (value) => {
+                // Must not throw: a validator that raises turns a rejected
+                // input into a 500, which reads as our fault rather than the
+                // caller's.
+                try {
+                  return /^https?:$/.test(new URL(value).protocol);
+                } catch {
+                  return false;
+                }
+              },
+              { message: 'origin must be http or https' },
+            ),
             redacted: z.boolean(),
             capturedAt: z.iso.datetime(),
             map: z.unknown(),
