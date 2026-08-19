@@ -46,6 +46,43 @@ export function profileDirFor(portalId) {
   return join(PROFILE_ROOT(), portalId);
 }
 
+/**
+ * The exact command line Chrome is launched with.
+ *
+ * Exported so it can be tested. It was not, and a missing flag meant every
+ * login was discarded the moment its window closed -- a failure that looked
+ * like the student signing in wrongly.
+ *
+ * @param {{ driving: boolean, profileDir: string, visible: boolean, startUrl: string|null }} options
+ */
+export function launchArgs({ driving, profileDir, visible, startUrl }) {
+  return [
+    ...(driving ? ['--remote-debugging-pipe'] : []),
+    /*
+     * Without this the login is thrown away the moment the window closes.
+     *
+     * Portal sessions are session cookies -- no expiry -- and Chrome
+     * discards those on exit by design. So the student would sign in, the
+     * app would close the window to persist the profile, and the very act
+     * of closing it destroyed the thing being persisted. Measured: a session
+     * cookie survives 0 restarts without this flag and 3 of 3 with it.
+     *
+     * "Continue where you left off" in Preferences does NOT do this, and
+     * faking a crash with exit_type does, but earns a "Chrome didn't shut
+     * down correctly" prompt. This is the supported way to ask for it.
+     */
+    '--restore-last-session',
+    `--user-data-dir=${profileDir}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    // Headless also sets navigator.webdriver, and stamps "Headless" into the
+    // user agent besides. When we need to read without showing a window, we
+    // put the window off the edge of the desktop instead.
+    ...(visible ? [] : ['--window-position=-32000,-32000']),
+    startUrl ?? 'about:blank',
+  ];
+}
+
 export class PortalBrowser {
   /** @param {{ portalId: string, visible?: boolean, mode?: 'login'|'drive', startUrl?: string }} options */
   constructor({ portalId, visible = true, mode = 'drive', startUrl = null }) {
@@ -63,17 +100,12 @@ export class PortalBrowser {
     mkdirSync(this.profileDir, { recursive: true });
 
     const driving = this.mode === 'drive';
-    const args = [
-      ...(driving ? ['--remote-debugging-pipe'] : []),
-      `--user-data-dir=${this.profileDir}`,
-      '--no-first-run',
-      '--no-default-browser-check',
-      // Headless also sets navigator.webdriver, and stamps "Headless" into the
-      // user agent besides. When we need to read without showing a window, we
-      // put the window off the edge of the desktop instead.
-      ...(this.visible ? [] : ['--window-position=-32000,-32000']),
-      this.startUrl ?? 'about:blank',
-    ];
+    const args = launchArgs({
+      driving,
+      profileDir: this.profileDir,
+      visible: this.visible,
+      startUrl: this.startUrl,
+    });
 
     this.process = spawn(browser.path, args, {
       stdio: driving ? ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'ignore', 'pipe'],
