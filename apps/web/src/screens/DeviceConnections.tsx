@@ -54,10 +54,7 @@ export function DeviceConnections() {
       </div>
 
       {devices.length === 0 ? (
-        <p className="muted">
-          No computers linked. The desktop app reads school portals that have no API — Veracross,
-          Mozaïk — using the login you complete yourself on that machine.
-        </p>
+        <p className="muted">No devices connected — connect with the desktop app.</p>
       ) : (
         <ul className="device-list">
           {devices.map((device) => (
