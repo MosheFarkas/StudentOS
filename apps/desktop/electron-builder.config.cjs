@@ -36,7 +36,10 @@ module.exports = {
   files: ['src/**/*', '!src/**/*.test.mjs', 'package.json'],
   mac: {
     category: 'public.app-category.education',
-    target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
+    // Apple Silicon only for now. Adding 'x64' back builds an Intel DMG too,
+    // at the cost of a second ~110MB download and a second unpacked app that
+    // is easy to launch by mistake -- they are indistinguishable in Spotlight.
+    target: [{ target: 'dmg', arch: ['arm64'] }],
     // The hardened runtime exists to satisfy notarization, and it constrains
     // what V8 may do. Enabling it on a build that is not being notarized adds
     // the constraints and buys nothing.
