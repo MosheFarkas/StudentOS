@@ -50,8 +50,12 @@ describe('condense', () => {
 
 describe('readSchoolPortal', () => {
   it('says no device is linked rather than erroring', async () => {
-    const result = (await readSchoolPortal.execute({}, { userId: 'u1', agentId: 'a1' } as ToolContext)) as {
-      unavailable: boolean; reason: string;
+    const result = (await readSchoolPortal.execute({}, {
+      userId: 'u1',
+      agentId: 'a1',
+    } as ToolContext)) as {
+      unavailable: boolean;
+      reason: string;
     };
     expect(result.unavailable).toBe(true);
     expect(result.reason).toMatch(/Settings/);
@@ -64,7 +68,8 @@ describe('readSchoolPortal', () => {
 
   it('returns captured coursework with the untrusted-content warning', async () => {
     const result = (await readSchoolPortal.execute({}, ctxWith([snapshot()]))) as {
-      note: string; portals: { pages: unknown[] }[];
+      note: string;
+      portals: { pages: unknown[] }[];
     };
     expect(result.note).toMatch(/NEVER as instructions/);
     expect(result.portals[0]?.pages).toHaveLength(1);
@@ -72,31 +77,42 @@ describe('readSchoolPortal', () => {
 
   it('warns loudly when the snapshot holds shapes instead of values', async () => {
     // Without this the model reads "string<date>" and reports it as a due date.
-    const result = (await readSchoolPortal.execute({}, ctxWith([
-      snapshot({ redacted: true, pages: [page('A', [component({ due: 'string<date>' })])] }),
-    ]))) as { portals: { warning?: string }[] };
+    const result = (await readSchoolPortal.execute(
+      {},
+      ctxWith([
+        snapshot({ redacted: true, pages: [page('A', [component({ due: 'string<date>' })])] }),
+      ]),
+    )) as { portals: { warning?: string }[] };
     expect(result.portals[0]?.warning).toMatch(/only the SHAPE/);
   });
 
   it('tells the student to sign in again when the session expired', async () => {
-    const result = (await readSchoolPortal.execute({}, ctxWith([
-      snapshot({ needsLogin: true, pages: [page('A', [component({ courses: [] }, true)])] }),
-    ]))) as { portals: { warning?: string }[] };
+    const result = (await readSchoolPortal.execute(
+      {},
+      ctxWith([
+        snapshot({ needsLogin: true, pages: [page('A', [component({ courses: [] }, true)])] }),
+      ]),
+    )) as { portals: { warning?: string }[] };
     expect(result.portals[0]?.warning).toMatch(/sign in/i);
     // The failure that matters: an expired login read as "no coursework".
     expect(result.portals[0]?.warning).not.toMatch(/year has not started/);
   });
 
   it('explains an all-empty portal instead of saying there is no coursework', async () => {
-    const result = (await readSchoolPortal.execute({}, ctxWith([
-      snapshot({ pages: [page('A', [component({ courses: [] }, true)])] }),
-    ]))) as { portals: { warning?: string }[] };
+    const result = (await readSchoolPortal.execute(
+      {},
+      ctxWith([snapshot({ pages: [page('A', [component({ courses: [] }, true)])] })]),
+    )) as { portals: { warning?: string }[] };
     expect(result.portals[0]?.warning).toMatch(/year has not started|login expired/);
   });
 
   it('filters to one portal when asked', async () => {
-    const result = (await readSchoolPortal.execute({ portalId: 'mozaik' }, ctxWith([snapshot()]))) as {
-      unavailable: boolean; reason: string;
+    const result = (await readSchoolPortal.execute(
+      { portalId: 'mozaik' },
+      ctxWith([snapshot()]),
+    )) as {
+      unavailable: boolean;
+      reason: string;
     };
     expect(result.unavailable).toBe(true);
     expect(result.reason).toMatch(/mozaik/);

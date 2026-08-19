@@ -59,13 +59,16 @@ export function createDeviceRoutes(ctx: AppContext) {
           // Requests are dead ten minutes after they are made and nothing
           // else ever deletes them. Swept here, at the only place they are
           // created, so the table stays roughly one window deep.
-          await ctx.db.delete(deviceLinkRequests).where(lt(deviceLinkRequests.expiresAt, new Date()));
+          await ctx.db
+            .delete(deviceLinkRequests)
+            .where(lt(deviceLinkRequests.expiresAt, new Date()));
           const [request] = await ctx.db
             .insert(deviceLinkRequests)
             .values({ deviceName, expiresAt: new Date(Date.now() + LINK_TTL_MS) })
             .returning({ id: deviceLinkRequests.id, expiresAt: deviceLinkRequests.expiresAt });
 
-          if (!request) throw new ContextoError('internal_error', 'Could not start device linking.');
+          if (!request)
+            throw new ContextoError('internal_error', 'Could not start device linking.');
           return c.json({ requestId: request.id, expiresAt: request.expiresAt });
         },
       )
@@ -73,7 +76,10 @@ export function createDeviceRoutes(ctx: AppContext) {
       /** Step 2, from the browser: what am I being asked to approve? */
       .get('/link/:id', auth, async (c) => {
         const [request] = await ctx.db
-          .select({ deviceName: deviceLinkRequests.deviceName, approvedAt: deviceLinkRequests.approvedAt })
+          .select({
+            deviceName: deviceLinkRequests.deviceName,
+            approvedAt: deviceLinkRequests.approvedAt,
+          })
           .from(deviceLinkRequests)
           .where(
             and(
@@ -103,7 +109,8 @@ export function createDeviceRoutes(ctx: AppContext) {
           )
           .returning({ id: deviceLinkRequests.id });
 
-        if (updated.length === 0) throw new ContextoError('not_found', 'That link request has expired.');
+        if (updated.length === 0)
+          throw new ContextoError('not_found', 'That link request has expired.');
         return c.json({ ok: true });
       })
 
@@ -131,7 +138,10 @@ export function createDeviceRoutes(ctx: AppContext) {
               isNotNull(deviceLinkRequests.userId),
             ),
           )
-          .returning({ userId: deviceLinkRequests.userId, deviceName: deviceLinkRequests.deviceName });
+          .returning({
+            userId: deviceLinkRequests.userId,
+            deviceName: deviceLinkRequests.deviceName,
+          });
 
         if (!claimed?.userId) {
           // Nothing was claimable. Distinguish "keep polling" from "give up"
@@ -155,7 +165,11 @@ export function createDeviceRoutes(ctx: AppContext) {
         const token = randomBytes(32).toString('base64url');
         const [created] = await ctx.db
           .insert(devices)
-          .values({ userId: claimed.userId, name: claimed.deviceName, tokenHash: hashDeviceToken(token) })
+          .values({
+            userId: claimed.userId,
+            name: claimed.deviceName,
+            tokenHash: hashDeviceToken(token),
+          })
           .returning({ id: devices.id });
 
         if (!created) throw new ContextoError('internal_error', 'Could not register this device.');
@@ -200,7 +214,10 @@ export function createDeviceRoutes(ctx: AppContext) {
         bodyLimit({
           maxSize: MAX_SNAPSHOT_BYTES,
           onError: () => {
-            throw new ContextoError('validation_failed', 'That portal snapshot is too large to store.');
+            throw new ContextoError(
+              'validation_failed',
+              'That portal snapshot is too large to store.',
+            );
           },
         }),
         device,
@@ -229,7 +246,8 @@ export function createDeviceRoutes(ctx: AppContext) {
             })
             .returning({ id: portalSnapshots.id });
 
-          if (!saved) throw new ContextoError('internal_error', 'Could not store the portal snapshot.');
+          if (!saved)
+            throw new ContextoError('internal_error', 'Could not store the portal snapshot.');
 
           /*
            * Keep a short history and drop the rest.

@@ -35,7 +35,10 @@ beforeAll(async () => {
     GOOGLE_CLIENT_SECRET: 'test-client-secret',
   };
   const ctx = {
-    env, db, auth: createAuth(db, env as never), telegram: undefined,
+    env,
+    db,
+    auth: createAuth(db, env as never),
+    telegram: undefined,
   } as unknown as AppContext;
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });
@@ -48,7 +51,10 @@ beforeEach(async () => {
 const as = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
 const json = (body: unknown, token?: string) => ({
   method: 'POST',
-  headers: { 'content-type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  headers: {
+    'content-type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  },
   body: JSON.stringify(body),
 });
 
@@ -99,17 +105,28 @@ describe('linking', () => {
   });
 
   it('refuses to claim an unknown request', async () => {
-    const res = await app.request(
-      '/api/devices/link/00000000-0000-4000-8000-000000000000/claim', { method: 'POST' });
+    const res = await app.request('/api/devices/link/00000000-0000-4000-8000-000000000000/claim', {
+      method: 'POST',
+    });
     expect(res.status).toBe(404);
   });
 });
 
 describe('device token', () => {
   it('rejects a made-up device token', async () => {
-    const res = await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com',
-             redacted: true, capturedAt: new Date().toISOString(), map: {} }, 'not-a-token'));
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: {},
+        },
+        'not-a-token',
+      ),
+    );
     expect(res.status).toBe(401);
   });
 
@@ -125,9 +142,19 @@ describe('device token', () => {
     const alice = await createUser();
     const device = await linkDevice(alice.token);
     await app.request(`/api/devices/${device.deviceId}/revoke`, json({}, alice.token));
-    const res = await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com',
-             redacted: true, capturedAt: new Date().toISOString(), map: {} }, device.token));
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: {},
+        },
+        device.token,
+      ),
+    );
     expect(res.status).toBe(401);
   });
 });
@@ -141,9 +168,19 @@ describe('cross-user isolation', () => {
     await app.request(`/api/devices/${device.deviceId}/revoke`, json({}, bob.token));
 
     // Bob's revoke must not have taken effect.
-    const res = await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com',
-             redacted: true, capturedAt: new Date().toISOString(), map: {} }, device.token));
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: {},
+        },
+        device.token,
+      ),
+    );
     expect(res.status).toBe(200);
   });
 
@@ -161,10 +198,19 @@ describe('cross-user isolation', () => {
     const bob = await createUser();
     const device = await linkDevice(alice.token);
 
-    await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com',
-             redacted: true, capturedAt: new Date().toISOString(),
-             map: { pages: [{ url: 'x', title: 'Alice grades' }] } }, device.token));
+    await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: { pages: [{ url: 'x', title: 'Alice grades' }] },
+        },
+        device.token,
+      ),
+    );
 
     const res = await app.request('/api/devices', as(bob.token));
     expect(JSON.stringify(await res.json())).not.toContain('Alice');
@@ -173,13 +219,23 @@ describe('cross-user isolation', () => {
 
 describe('snapshot retention', () => {
   const push = (token: string, portalId: string, day: number) =>
-    app.request('/api/devices/portal-snapshot',
-      json({ portalId, origin: 'https://portals.veracross.com', redacted: false,
-             capturedAt: new Date(Date.UTC(2026, 8, day)).toISOString(),
-             map: { day } }, token));
+    app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId,
+          origin: 'https://portals.veracross.com',
+          redacted: false,
+          capturedAt: new Date(Date.UTC(2026, 8, day)).toISOString(),
+          map: { day },
+        },
+        token,
+      ),
+    );
 
   const rowsFor = (userId: string, portalId: string) =>
-    db.select({ map: portalSnapshots.map, capturedAt: portalSnapshots.capturedAt })
+    db
+      .select({ map: portalSnapshots.map, capturedAt: portalSnapshots.capturedAt })
       .from(portalSnapshots)
       .where(and(eq(portalSnapshots.userId, userId), eq(portalSnapshots.portalId, portalId)))
       .orderBy(desc(portalSnapshots.capturedAt));
@@ -225,19 +281,49 @@ describe('snapshot size', () => {
     // The device runs on a machine we do not control, so this bound has to
     // hold against a runaway crawl, not just an honest large portal.
     const huge = { pages: [{ url: 'x', title: 'x', blob: 'y'.repeat(9 * 1024 * 1024) }] };
-    const res = await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com', redacted: false,
-             capturedAt: new Date().toISOString(), map: huge }, device.token));
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: false,
+          capturedAt: new Date().toISOString(),
+          map: huge,
+        },
+        device.token,
+      ),
+    );
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 
   it('accepts a large but realistic portal', async () => {
     const alice = await createUser();
     const device = await linkDevice(alice.token);
-    const realistic = { pages: Array.from({ length: 40 }, (_, i) => ({ url: `p${i}`, title: `Page ${i}`, components: [{ shape: { rows: Array.from({ length: 50 }, (_, r) => ({ id: r, title: 'Assignment' })) } }] })) };
-    const res = await app.request('/api/devices/portal-snapshot',
-      json({ portalId: 'veracross', origin: 'https://portals.veracross.com', redacted: false,
-             capturedAt: new Date().toISOString(), map: realistic }, device.token));
+    const realistic = {
+      pages: Array.from({ length: 40 }, (_, i) => ({
+        url: `p${i}`,
+        title: `Page ${i}`,
+        components: [
+          {
+            shape: { rows: Array.from({ length: 50 }, (_, r) => ({ id: r, title: 'Assignment' })) },
+          },
+        ],
+      })),
+    };
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: false,
+          capturedAt: new Date().toISOString(),
+          map: realistic,
+        },
+        device.token,
+      ),
+    );
     expect(res.status).toBe(200);
   });
 });

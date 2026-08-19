@@ -45,7 +45,7 @@ due Friday" from `string<date>`.
 `--remote-debugging-pipe` sets `navigator.webdriver = true` while
 `--remote-debugging-port` leaves it false — but the port is an unauthenticated
 TCP listener any local process can use to drive an authenticated school portal.
-So login runs with *no* debugging transport at all, and only afterwards does
+So login runs with _no_ debugging transport at all, and only afterwards does
 drive mode reopen the same profile over the pipe. See the header of
 `src/browser.mjs`.
 

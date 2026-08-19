@@ -67,7 +67,13 @@ export interface ToolContext {
 export interface PortalPage {
   url: string;
   title: string;
-  components: { url: string; status: number; method: string; shape: unknown; empty: boolean | null }[];
+  components: {
+    url: string;
+    status: number;
+    method: string;
+    shape: unknown;
+    empty: boolean | null;
+  }[];
 }
 
 export interface PortalSnapshot {

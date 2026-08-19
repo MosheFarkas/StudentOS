@@ -14,13 +14,17 @@ describe('summarizeShape', () => {
 
   it('never emits a source string value when redacting', () => {
     const secret = 'Failed — parent conference requested';
-    const serialized = JSON.stringify(summarizeShape({ comment: secret, nested: [{ comment: secret }] }));
+    const serialized = JSON.stringify(
+      summarizeShape({ comment: secret, nested: [{ comment: secret }] }),
+    );
     expect(serialized).not.toContain('parent conference');
     expect(serialized).not.toContain('Failed');
   });
 
   it('marks dates so an adapter author can spot due-date fields', () => {
-    expect(summarizeShape({ dueDate: '2026-09-14T23:59:00Z' })).toEqual({ dueDate: 'string<date>' });
+    expect(summarizeShape({ dueDate: '2026-09-14T23:59:00Z' })).toEqual({
+      dueDate: 'string<date>',
+    });
   });
 
   it('bands string length so ids are distinguishable from prose', () => {
@@ -30,7 +34,10 @@ describe('summarizeShape', () => {
   });
 
   it('collapses arrays to one sample plus a count', () => {
-    expect(summarizeShape([{ id: 1 }, { id: 2 }, { id: 3 }])).toEqual([{ id: 'number' }, '…3 items']);
+    expect(summarizeShape([{ id: 1 }, { id: 2 }, { id: 3 }])).toEqual([
+      { id: 'number' },
+      '…3 items',
+    ]);
   });
 
   it('passes values through when raw is explicitly requested', () => {

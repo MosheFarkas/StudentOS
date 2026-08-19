@@ -67,8 +67,11 @@ async function record([portalId, startUrl, ...flags]) {
 
   console.log(`\nRecorded ${report.endpoints.length} JSON endpoint(s) -> ${out}`);
   for (const endpoint of report.endpoints.slice(0, 30)) {
-    console.log(`  ${String(endpoint.hits).padStart(3)}x  ${endpoint.status}  ${endpoint.method} ${endpoint.url}`);
-    if (endpoint.queryParams.length) console.log(`         params: ${endpoint.queryParams.join(', ')}`);
+    console.log(
+      `  ${String(endpoint.hits).padStart(3)}x  ${endpoint.status}  ${endpoint.method} ${endpoint.url}`,
+    );
+    if (endpoint.queryParams.length)
+      console.log(`         params: ${endpoint.queryParams.join(', ')}`);
   }
 
   // Closing gracefully is what persists the session. Killing the process would
@@ -99,7 +102,10 @@ async function exploreCommand([portalId, startUrl, ...flags]) {
 
   console.log(`Exploring ${origin} (budget ${budget} pages)\n`);
   const map = await explore(browser, sessionId, {
-    origin, seed: startUrl, budget, raw,
+    origin,
+    seed: startUrl,
+    budget,
+    raw,
     onPage: (page) =>
       console.log(`  ${page.url}\n    ${page.title} — ${page.components.length} component(s)`),
   });
@@ -109,8 +115,11 @@ async function exploreCommand([portalId, startUrl, ...flags]) {
   const components = map.pages.flatMap((p) => p.components);
   const withData = components.filter((c) => c.empty === false);
   console.log(`\nVisited ${map.pagesVisited} page(s), found ${components.length} component(s).`);
-  console.log(`${withData.length} returned data; ${components.length - withData.length} were empty.`);
-  if (!map.complete) console.log(`Stopped at the budget — ${map.pagesRemaining} page(s) unvisited.`);
+  console.log(
+    `${withData.length} returned data; ${components.length - withData.length} were empty.`,
+  );
+  if (!map.complete)
+    console.log(`Stopped at the budget — ${map.pagesRemaining} page(s) unvisited.`);
   console.log(`Map -> ${out}`);
 
   if (components.length > 0 && withData.length === 0) {
@@ -155,7 +164,12 @@ async function syncCommand([portalId, startUrl, ...flags]) {
   const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
   await browser.launch();
   const { sessionId } = await browser.openPage('about:blank');
-  const map = await explore(browser, sessionId, { origin, seed: startUrl, budget, raw: !shapesOnly });
+  const map = await explore(browser, sessionId, {
+    origin,
+    seed: startUrl,
+    budget,
+    raw: !shapesOnly,
+  });
   await browser.close();
 
   const { snapshotId } = await pushSnapshot(
@@ -163,8 +177,11 @@ async function syncCommand([portalId, startUrl, ...flags]) {
     { portalId, origin, map, redacted: map.redacted },
   );
   const components = map.pages.flatMap((p) => p.components);
-  console.log(`Synced ${map.pagesVisited} page(s), ${components.length} component(s) -> snapshot ${snapshotId}`);
-  if (!map.complete) console.log(`Stopped at the budget — ${map.pagesRemaining} page(s) unvisited.`);
+  console.log(
+    `Synced ${map.pagesVisited} page(s), ${components.length} component(s) -> snapshot ${snapshotId}`,
+  );
+  if (!map.complete)
+    console.log(`Stopped at the budget — ${map.pagesRemaining} page(s) unvisited.`);
 }
 
 const [command, ...rest] = process.argv.slice(2);

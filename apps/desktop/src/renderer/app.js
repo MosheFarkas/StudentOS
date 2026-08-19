@@ -11,7 +11,6 @@ import { el } from './dom.mjs';
 const app = document.getElementById('app');
 const busy = new Set();
 
-
 /** Every call returns {ok, value|error}; this surfaces the message, not a crash. */
 async function call(fn, key) {
   busy.add(key);
@@ -56,7 +55,8 @@ function portalRow(portal) {
           class: 'primary',
           text: syncing ? 'Syncing…' : 'Sync now',
           disabled: syncing ? 'true' : null,
-          onclick: () => void call(() => window.contexto.syncPortal(portal.id), `sync:${portal.id}`),
+          onclick: () =>
+            void call(() => window.contexto.syncPortal(portal.id), `sync:${portal.id}`),
         }),
       ];
 

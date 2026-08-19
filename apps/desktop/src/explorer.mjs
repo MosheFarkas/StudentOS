@@ -57,7 +57,12 @@ export function inScopeLinks(hrefs, origin, seen = new Set()) {
  * @param {string} sessionId
  * @param {string} url
  */
-export async function readPage(browser, sessionId, url, { origin, raw = false, settleMs = 2500 } = {}) {
+export async function readPage(
+  browser,
+  sessionId,
+  url,
+  { origin, raw = false, settleMs = 2500 } = {},
+) {
   if (!isInScope(url, origin)) throw new Error(`Refusing to navigate outside ${origin}: ${url}`);
 
   const cdp = browser.cdp;
@@ -82,7 +87,11 @@ export async function readPage(browser, sessionId, url, { origin, raw = false, s
       // Origin lock applies to what we RECORD as well as where we navigate,
       // so third-party telemetry never enters the map.
       if (!isInScope(p.response.url, origin)) return;
-      inflight.set(p.requestId, { url: p.response.url, status: p.response.status, method: methods.get(p.requestId) ?? 'GET' });
+      inflight.set(p.requestId, {
+        url: p.response.url,
+        status: p.response.status,
+        method: methods.get(p.requestId) ?? 'GET',
+      });
     },
     sessionId,
   );
@@ -93,10 +102,18 @@ export async function readPage(browser, sessionId, url, { origin, raw = false, s
       if (!meta) return;
       inflight.delete(p.requestId);
       try {
-        const { body, base64Encoded } = await cdp.send('Network.getResponseBody', { requestId: p.requestId }, sessionId);
+        const { body, base64Encoded } = await cdp.send(
+          'Network.getResponseBody',
+          { requestId: p.requestId },
+          sessionId,
+        );
         const text = base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body;
         const parsed = JSON.parse(text);
-        components.push({ ...meta, shape: summarizeShape(parsed, { raw }), empty: isEmpty(parsed) });
+        components.push({
+          ...meta,
+          shape: summarizeShape(parsed, { raw }),
+          empty: isEmpty(parsed),
+        });
       } catch {
         components.push({ ...meta, shape: null, empty: null });
       }
@@ -175,7 +192,11 @@ export function isEmpty(value) {
  * @param {string} sessionId
  * @param {{ origin: string, seed: string, budget?: number, raw?: boolean, onPage?: Function }} options
  */
-export async function explore(browser, sessionId, { origin, seed, budget = DEFAULT_BUDGET, raw = false, onPage }) {
+export async function explore(
+  browser,
+  sessionId,
+  { origin, seed, budget = DEFAULT_BUDGET, raw = false, onPage },
+) {
   const seen = new Set();
   const queue = inScopeLinks([seed], origin, seen);
   const pages = [];

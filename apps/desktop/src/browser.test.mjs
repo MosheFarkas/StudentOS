@@ -27,9 +27,9 @@ describe('diagnoseExit', () => {
   });
 
   it('explains a profile already in use', () => {
-    expect(diagnoseExit(21, 'Failed to create a ProcessSingleton for your profile directory')).toMatch(
-      /already open/i,
-    );
+    expect(
+      diagnoseExit(21, 'Failed to create a ProcessSingleton for your profile directory'),
+    ).toMatch(/already open/i);
   });
 
   it('falls back to the exit code with captured stderr', () => {

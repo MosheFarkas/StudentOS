@@ -13,10 +13,11 @@ import { dirname, join } from 'node:path';
  * midnight with the laptop shut.
  */
 
-const CONFIG_DIR = {
-  darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent'),
-  win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent'),
-}[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent'));
+const CONFIG_DIR =
+  {
+    darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent'),
+    win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent'),
+  }[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent'));
 
 export function configPath() {
   return join(CONFIG_DIR(), 'config.json');
@@ -41,9 +42,11 @@ export function writeConfig(config) {
 
 function openInBrowser(url) {
   const [command, args] =
-    platform() === 'darwin' ? ['open', [url]]
-    : platform() === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-    : ['xdg-open', [url]];
+    platform() === 'darwin'
+      ? ['open', [url]]
+      : platform() === 'win32'
+        ? ['cmd', ['/c', 'start', '', url]]
+        : ['xdg-open', [url]];
   spawn(command, args, { stdio: 'ignore', detached: true }).unref();
 }
 
@@ -99,9 +102,9 @@ async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
     throw new Error(
       response.status === 404
         ? `${new URL(path, baseUrl).origin} has no device-linking API. ` +
-          'Is CONTEXTO_API pointing at the right server, and is it up to date?'
+            'Is CONTEXTO_API pointing at the right server, and is it up to date?'
         : `${new URL(path, baseUrl).origin} answered ${response.status} with something that ` +
-          'was not JSON. It may be a proxy or sign-in page rather than the API.',
+            'was not JSON. It may be a proxy or sign-in page rather than the API.',
     );
   }
 
@@ -117,7 +120,13 @@ async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
  * The token is never shown to the student and never typed by them. They only
  * ever click Approve inside a session they already had.
  */
-export async function link({ apiBase, webBase, deviceName = hostname(), pollMs = 2000, timeoutMs = 600_000 }) {
+export async function link({
+  apiBase,
+  webBase,
+  deviceName = hostname(),
+  pollMs = 2000,
+  timeoutMs = 600_000,
+}) {
   const { requestId } = await api(apiBase, '/api/devices/link/start', { body: { deviceName } });
   const approvalUrl = new URL(`/link/${requestId}`, webBase).toString();
 
@@ -128,7 +137,13 @@ export async function link({ apiBase, webBase, deviceName = hostname(), pollMs =
   while (Date.now() < deadline) {
     const result = await api(apiBase, `/api/devices/link/${requestId}/claim`);
     if (result.status === 'linked') {
-      writeConfig({ ...readConfig(), apiBase, token: result.token, deviceId: result.deviceId, deviceName });
+      writeConfig({
+        ...readConfig(),
+        apiBase,
+        token: result.token,
+        deviceId: result.deviceId,
+        deviceName,
+      });
       return { deviceId: result.deviceId, deviceName };
     }
     await new Promise((r) => setTimeout(r, pollMs));

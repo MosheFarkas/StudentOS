@@ -51,7 +51,11 @@ export function status() {
 
 /** A stable, filesystem-safe key derived from the portal's name. */
 export function portalIdFor(name, existing = []) {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'portal';
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'portal';
   if (!existing.some((p) => p.id === base)) return base;
   let n = 2;
   while (existing.some((p) => p.id === `${base}-${n}`)) n += 1;

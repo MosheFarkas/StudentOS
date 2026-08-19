@@ -35,7 +35,8 @@ function electronDir() {
 /** Where Electron caches the archive it downloaded, per platform. */
 function cacheRoot() {
   if (platform() === 'darwin') return join(homedir(), 'Library', 'Caches', 'electron');
-  if (platform() === 'win32') return join(process.env['LOCALAPPDATA'] ?? homedir(), 'electron', 'Cache');
+  if (platform() === 'win32')
+    return join(process.env['LOCALAPPDATA'] ?? homedir(), 'electron', 'Cache');
   return join(homedir(), '.cache', 'electron');
 }
 
@@ -84,11 +85,17 @@ try {
 
   writeFileSync(
     join(pkg, 'path.txt'),
-    platform() === 'darwin' ? 'Electron.app/Contents/MacOS/Electron'
-      : platform() === 'win32' ? 'electron.exe'
-      : 'electron',
+    platform() === 'darwin'
+      ? 'Electron.app/Contents/MacOS/Electron'
+      : platform() === 'win32'
+        ? 'electron.exe'
+        : 'electron',
   );
-  console.log(existsSync(binary) ? '[desktop] Electron repaired.' : '[desktop] Extraction ran but the binary is still missing.');
+  console.log(
+    existsSync(binary)
+      ? '[desktop] Electron repaired.'
+      : '[desktop] Extraction ran but the binary is still missing.',
+  );
 } catch (error) {
   console.error(`[desktop] Could not extract Electron: ${error.message}`);
 }

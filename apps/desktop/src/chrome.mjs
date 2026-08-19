@@ -26,11 +26,35 @@ const CANDIDATES = {
     ['chromium', '/Applications/Chromium.app/Contents/MacOS/Chromium'],
   ],
   win32: [
-    ['chrome', join(process.env['PROGRAMFILES'] ?? 'C:\\Program Files', 'Google\\Chrome\\Application\\chrome.exe')],
-    ['chrome', join(process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)', 'Google\\Chrome\\Application\\chrome.exe')],
+    [
+      'chrome',
+      join(
+        process.env['PROGRAMFILES'] ?? 'C:\\Program Files',
+        'Google\\Chrome\\Application\\chrome.exe',
+      ),
+    ],
+    [
+      'chrome',
+      join(
+        process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)',
+        'Google\\Chrome\\Application\\chrome.exe',
+      ),
+    ],
     ['chrome', join(process.env['LOCALAPPDATA'] ?? '', 'Google\\Chrome\\Application\\chrome.exe')],
-    ['edge', join(process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)', 'Microsoft\\Edge\\Application\\msedge.exe')],
-    ['brave', join(process.env['PROGRAMFILES'] ?? 'C:\\Program Files', 'BraveSoftware\\Brave-Browser\\Application\\brave.exe')],
+    [
+      'edge',
+      join(
+        process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)',
+        'Microsoft\\Edge\\Application\\msedge.exe',
+      ),
+    ],
+    [
+      'brave',
+      join(
+        process.env['PROGRAMFILES'] ?? 'C:\\Program Files',
+        'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      ),
+    ],
   ],
   linux: [],
 };

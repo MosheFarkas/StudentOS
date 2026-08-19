@@ -39,7 +39,13 @@ describe('forgetDevice', () => {
     const { readConfig, writeConfig } = await import('./sync.mjs');
     const original = readConfig();
     try {
-      writeConfig({ token: 't', deviceId: 'd', deviceName: 'n', apiBase: 'https://x.test', portals: [{ id: 'veracross' }] });
+      writeConfig({
+        token: 't',
+        deviceId: 'd',
+        deviceName: 'n',
+        apiBase: 'https://x.test',
+        portals: [{ id: 'veracross' }],
+      });
       forgetDevice();
       const after = readConfig();
       expect(after.token).toBeUndefined();
@@ -59,9 +65,15 @@ describe('coalesce', () => {
     const { coalesce } = await import('./operations.mjs');
     const map = new Map();
     let starts = 0;
-    const slow = () => { starts += 1; return new Promise((r) => setTimeout(() => r('done'), 30)); };
+    const slow = () => {
+      starts += 1;
+      return new Promise((r) => setTimeout(() => r('done'), 30));
+    };
 
-    const [a, b] = await Promise.all([coalesce(map, 'veracross', slow), coalesce(map, 'veracross', slow)]);
+    const [a, b] = await Promise.all([
+      coalesce(map, 'veracross', slow),
+      coalesce(map, 'veracross', slow),
+    ]);
     expect(starts).toBe(1);
     expect([a, b]).toEqual(['done', 'done']);
   });
@@ -70,7 +82,10 @@ describe('coalesce', () => {
     const { coalesce } = await import('./operations.mjs');
     const map = new Map();
     let starts = 0;
-    const slow = () => { starts += 1; return new Promise((r) => setTimeout(r, 10)); };
+    const slow = () => {
+      starts += 1;
+      return new Promise((r) => setTimeout(r, 10));
+    };
     await Promise.all([coalesce(map, 'veracross', slow), coalesce(map, 'mozaik', slow)]);
     expect(starts).toBe(2);
   });
@@ -78,7 +93,9 @@ describe('coalesce', () => {
   it('releases the slot after a failure, so a retry is possible', async () => {
     const { coalesce } = await import('./operations.mjs');
     const map = new Map();
-    await expect(coalesce(map, 'x', () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
+    await expect(coalesce(map, 'x', () => Promise.reject(new Error('boom')))).rejects.toThrow(
+      'boom',
+    );
     expect(map.size).toBe(0);
     await expect(coalesce(map, 'x', () => Promise.resolve('ok'))).resolves.toBe('ok');
   });

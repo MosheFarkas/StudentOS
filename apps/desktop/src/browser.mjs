@@ -35,10 +35,11 @@ import { findBrowser } from './chrome.mjs';
  *    profile only ever holds a school-portal session.
  */
 
-const PROFILE_ROOT = {
-  darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent', 'portals'),
-  win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent', 'portals'),
-}[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent', 'portals'));
+const PROFILE_ROOT =
+  {
+    darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent', 'portals'),
+    win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent', 'portals'),
+  }[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent', 'portals'));
 
 export function profileDirFor(portalId) {
   if (!/^[a-z0-9-]+$/.test(portalId)) throw new Error(`Invalid portal id: ${portalId}`);
@@ -86,9 +87,7 @@ export class PortalBrowser {
     this.process.stderr?.on('data', (chunk) => (stderr += chunk.toString()));
 
     const exited = new Promise((_, reject) => {
-      this.process.once('exit', (code) =>
-        reject(new Error(diagnoseExit(code, stderr, browser))),
-      );
+      this.process.once('exit', (code) => reject(new Error(diagnoseExit(code, stderr, browser))));
     });
 
     this.browserBrand = browser.brand;
@@ -125,7 +124,14 @@ export class PortalBrowser {
   /** Navigate an attached page, resolving once its load event has fired. */
   async navigate(url, sessionId, { timeoutMs = 30_000 } = {}) {
     const loaded = new Promise((resolve) => {
-      const off = this.cdp.on('Page.loadEventFired', () => { off(); resolve(true); }, sessionId);
+      const off = this.cdp.on(
+        'Page.loadEventFired',
+        () => {
+          off();
+          resolve(true);
+        },
+        sessionId,
+      );
     });
     await this.cdp.send('Page.navigate', { url }, sessionId);
     return Promise.race([loaded, new Promise((r) => setTimeout(() => r(false), timeoutMs))]);

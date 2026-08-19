@@ -57,7 +57,8 @@ export class CdpConnection {
     // Events are keyed by method and session so a listener on one page does
     // not receive another page's traffic.
     for (const key of [`${message.sessionId ?? ''}:${message.method}`, `*:${message.method}`]) {
-      for (const handler of this.#listeners.get(key) ?? []) handler(message.params ?? {}, message.sessionId);
+      for (const handler of this.#listeners.get(key) ?? [])
+        handler(message.params ?? {}, message.sessionId);
     }
   }
 
@@ -73,7 +74,9 @@ export class CdpConnection {
     const id = ++this.#nextId;
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
-      this.#write.write(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0');
+      this.#write.write(
+        JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }) + '\0',
+      );
     });
   }
 

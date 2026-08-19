@@ -37,7 +37,12 @@ beforeAll(async () => {
     GOOGLE_CLIENT_ID: 'test-client-id',
     GOOGLE_CLIENT_SECRET: 'test-client-secret',
   };
-  const ctx = { env, db, auth: createAuth(db, env as never), telegram: undefined } as unknown as AppContext;
+  const ctx = {
+    env,
+    db,
+    auth: createAuth(db, env as never),
+    telegram: undefined,
+  } as unknown as AppContext;
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });
 
@@ -65,13 +70,19 @@ async function linkedDevice(userToken: string) {
 }
 
 async function pushRealMap(deviceToken: string) {
-  return app.request('/api/devices/portal-snapshot', post({
-    portalId: 'veracross',
-    origin: realMap.origin,
-    redacted: realMap.redacted,
-    capturedAt: realMap.exploredAt,
-    map: realMap,
-  }, deviceToken));
+  return app.request(
+    '/api/devices/portal-snapshot',
+    post(
+      {
+        portalId: 'veracross',
+        origin: realMap.origin,
+        redacted: realMap.redacted,
+        capturedAt: realMap.exploredAt,
+        map: realMap,
+      },
+      deviceToken,
+    ),
+  );
 }
 
 describe('a real crawl, end to end', () => {
@@ -81,7 +92,9 @@ describe('a real crawl, end to end', () => {
     expect((await pushRealMap(device.token)).status).toBe(200);
 
     const ctx = {
-      userId: alice.id, agentId: 'a1', portals: new DbPortalSnapshots(db),
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
     } as unknown as ToolContext;
     const result = (await readSchoolPortal.execute({}, ctx)) as {
       note: string;
@@ -103,14 +116,42 @@ describe('a real crawl, end to end', () => {
     const alice = await createUser();
     const device = await linkedDevice(alice.token);
     await pushRealMap(device.token);
-    await app.request('/api/devices/portal-snapshot', post({
-      portalId: 'veracross', origin: realMap.origin, redacted: false,
-      capturedAt: new Date(Date.now() + 60_000).toISOString(),
-      map: { ...realMap, pages: [{ url: 'u', title: 'Newer', components: [
-        { url: 'c', status: 200, method: 'GET', empty: false, shape: { marker: 'SECOND-SYNC' } }] }] },
-    }, device.token));
+    await app.request(
+      '/api/devices/portal-snapshot',
+      post(
+        {
+          portalId: 'veracross',
+          origin: realMap.origin,
+          redacted: false,
+          capturedAt: new Date(Date.now() + 60_000).toISOString(),
+          map: {
+            ...realMap,
+            pages: [
+              {
+                url: 'u',
+                title: 'Newer',
+                components: [
+                  {
+                    url: 'c',
+                    status: 200,
+                    method: 'GET',
+                    empty: false,
+                    shape: { marker: 'SECOND-SYNC' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        device.token,
+      ),
+    );
 
-    const ctx = { userId: alice.id, agentId: 'a1', portals: new DbPortalSnapshots(db) } as unknown as ToolContext;
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
     const result = (await readSchoolPortal.execute({}, ctx)) as { portals: { pages: unknown[] }[] };
     expect(JSON.stringify(result.portals[0]?.pages)).toContain('SECOND-SYNC');
     expect(JSON.stringify(result.portals[0]?.pages)).not.toContain('Einstein');
@@ -122,7 +163,11 @@ describe('a real crawl, end to end', () => {
     const device = await linkedDevice(alice.token);
     await pushRealMap(device.token);
 
-    const bobCtx = { userId: bob.id, agentId: 'a2', portals: new DbPortalSnapshots(db) } as unknown as ToolContext;
+    const bobCtx = {
+      userId: bob.id,
+      agentId: 'a2',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
     const result = (await readSchoolPortal.execute({}, bobCtx)) as { unavailable?: boolean };
     expect(result.unavailable).toBe(true);
   });

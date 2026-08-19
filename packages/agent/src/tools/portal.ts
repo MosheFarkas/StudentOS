@@ -63,7 +63,7 @@ export function condense(pages: PortalPage[], budget = MAX_CHARS) {
 export const readSchoolPortal: Tool<z.infer<typeof readPortalInput>, unknown> = {
   id: 'portal_read',
   description:
-    'Read the student\'s school portal — Veracross, Mozaik, or similar — for coursework, ' +
+    "Read the student's school portal — Veracross, Mozaik, or similar — for coursework, " +
     'grades, announcements and calendar entries that are NOT in Google Classroom. Use this ' +
     'when the student asks about school information you cannot find in Classroom. The data ' +
     'comes from a snapshot taken by their own computer, so mention how recent it is when it ' +
@@ -79,9 +79,7 @@ export const readSchoolPortal: Tool<z.infer<typeof readPortalInput>, unknown> = 
     }
 
     const snapshots = await ctx.portals.latest(ctx.userId);
-    const wanted = portalId
-      ? snapshots.filter((s) => s.portalId === portalId)
-      : snapshots;
+    const wanted = portalId ? snapshots.filter((s) => s.portalId === portalId) : snapshots;
 
     if (wanted.length === 0) {
       return unavailable(

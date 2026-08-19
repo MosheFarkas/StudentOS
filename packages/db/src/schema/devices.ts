@@ -51,7 +51,10 @@ export const devices = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('devices_user_id_idx').on(t.userId), index('devices_token_hash_idx').on(t.tokenHash)],
+  (t) => [
+    index('devices_user_id_idx').on(t.userId),
+    index('devices_token_hash_idx').on(t.tokenHash),
+  ],
 );
 
 /**

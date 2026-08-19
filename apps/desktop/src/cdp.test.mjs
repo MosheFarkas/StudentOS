@@ -46,7 +46,10 @@ describe('CdpConnection', () => {
     const b = cdp.send('B');
     await new Promise((r) => setImmediate(r));
     fromBrowser.write(
-      JSON.stringify({ id: 1, result: { v: 'a' } }) + '\0' + JSON.stringify({ id: 2, result: { v: 'b' } }) + '\0',
+      JSON.stringify({ id: 1, result: { v: 'a' } }) +
+        '\0' +
+        JSON.stringify({ id: 2, result: { v: 'b' } }) +
+        '\0',
     );
     expect(await a).toEqual({ v: 'a' });
     expect(await b).toEqual({ v: 'b' });
@@ -71,7 +74,11 @@ describe('CdpConnection', () => {
     await new Promise((r) => setImmediate(r));
     expect(sent[0].sessionId).toBe('SESSION-A');
 
-    reply({ method: 'Network.responseReceived', sessionId: 'SESSION-A', params: { requestId: '1' } });
+    reply({
+      method: 'Network.responseReceived',
+      sessionId: 'SESSION-A',
+      params: { requestId: '1' },
+    });
     await new Promise((r) => setImmediate(r));
     expect(mine).toHaveLength(1);
     expect(theirs).toHaveLength(0);
