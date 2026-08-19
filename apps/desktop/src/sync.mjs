@@ -170,6 +170,27 @@ export async function link({
 }
 
 /**
+ * Is the session we are holding still good?
+ *
+ * Sessions expire. Asking is cheap and the alternative is an app that is
+ * silently signed out for good, because a stored-but-dead token looks exactly
+ * like a working one from here.
+ */
+export async function sessionValid({ apiBase, sessionToken }) {
+  if (!sessionToken) return false;
+  try {
+    const response = await fetch(new URL('/api/devices', apiBase), {
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    return response.ok;
+  } catch {
+    // Offline. Treat the session as good rather than throwing it away over a
+    // dropped connection -- it may well still work once there is a network.
+    return true;
+  }
+}
+
+/**
  * Get a web session using the device link we already have.
  *
  * Called when the app is linked but holds no usable session -- after the

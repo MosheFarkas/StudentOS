@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
-import { link, readConfig, refreshSession } from './sync.mjs';
+import { link, readConfig, refreshSession, sessionValid } from './sync.mjs';
 import {
   addPortal,
   beginLogin,
@@ -179,6 +179,36 @@ handle('link', async () => {
   setTimeout(() => showWindow(), 50);
   return device;
 });
+/**
+ * Sign in, from inside the app.
+ *
+ * Two ways, cheapest first. A device that is already linked needs no browser
+ * and no Google at all -- it can exchange its link for a session, which is
+ * the same question already answered at linking time.
+ *
+ * Only when that fails does a browser open, and it is the student's own
+ * browser rather than a window inside this app: it is where they are already
+ * signed in, and it has an address bar to check Google's page against.
+ */
+handle('signIn', async () => {
+  const config = readConfig();
+  const apiBase = config.apiBase ?? API_BASE;
+
+  if (config.token) {
+    try {
+      await refreshSession({ apiBase, token: config.token });
+      reloadApp();
+      return { via: 'device' };
+    } catch {
+      // Device revoked or offline; fall through to linking again.
+    }
+  }
+
+  const device = await link({ apiBase, webBase: WEB_BASE });
+  setTimeout(() => showWindow(), 50);
+  return { via: 'browser', device };
+});
+
 handle('addPortal', (portal) => addPortal(portal));
 handle('removePortal', (id) => removePortal(id));
 handle('beginLogin', (id) => beginLogin(id));
@@ -217,6 +247,17 @@ async function syncAll({ onlyStale = false } = {}) {
   refreshTrayMenu();
 }
 
+/**
+ * Reload the hosted app so a new session takes effect.
+ *
+ * The session travels as a request header, so pages already rendered keep
+ * using whatever they loaded with. Without this the student signs in
+ * successfully and stares at the signed-out screen.
+ */
+function reloadApp() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
+}
+
 /** Keep the window and the menu bar showing the same thing. */
 function notifyChanged() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('portals-changed');
@@ -252,9 +293,16 @@ function attachSession() {
  */
 async function ensureSession() {
   const config = readConfig();
-  if (!config.token || config.sessionToken) return;
+  if (!config.token) return;
+
+  const apiBase = config.apiBase ?? API_BASE;
+  // Checked, not merely present: a session that expired while the app was
+  // closed looks identical to a working one from here, and treating it as
+  // good is how an app ends up permanently signed out with no way back.
+  if (await sessionValid({ apiBase, sessionToken: config.sessionToken })) return;
+
   try {
-    await refreshSession({ apiBase: config.apiBase ?? API_BASE, token: config.token });
+    await refreshSession({ apiBase, token: config.token });
   } catch {
     // A revoked device or an offline start. The window still opens; the web
     // app will ask for a sign-in, which is the honest outcome either way.

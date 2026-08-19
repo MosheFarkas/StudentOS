@@ -16,6 +16,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('contextoDesktop', {
   version: 1,
   status: () => ipcRenderer.invoke('status'),
+  signIn: () => ipcRenderer.invoke('signIn'),
   listSites: () => ipcRenderer.invoke('status').then((r) => (r.ok ? r.value.portals : [])),
   addSite: (site) => ipcRenderer.invoke('addPortal', site),
   removeSite: (id) => ipcRenderer.invoke('removePortal', id),

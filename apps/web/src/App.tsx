@@ -44,9 +44,28 @@ export function App() {
           <p className="muted">An AI agent that knows your coursework.</p>
           <div className="panel">
             <p>Sign in with your educational Google account to get started.</p>
-            <button className="primary" onClick={() => void signInWithGoogle()}>
-              Continue with Google
-            </button>
+            {/*
+              Inside the desktop app, signing in does not go through Google
+              here. A linked computer can exchange its link for a session --
+              the same question already answered when it was linked -- and if
+              that fails the app opens the student's own browser, where they
+              are already signed in and can see the address bar.
+            */}
+            {desktop()?.signIn ? (
+              <button
+                className="primary"
+                onClick={async () => {
+                  const result = await desktop()?.signIn?.();
+                  if (result && !result.ok) alert(result.error ?? 'Could not sign in.');
+                }}
+              >
+                Continue with Google
+              </button>
+            ) : (
+              <button className="primary" onClick={() => void signInWithGoogle()}>
+                Continue with Google
+              </button>
+            )}
           </div>
 
           {/*

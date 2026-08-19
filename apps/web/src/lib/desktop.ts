@@ -18,6 +18,7 @@ export interface LocalSite {
 
 export interface DesktopBridge {
   version: number;
+  signIn?(): Promise<{ ok: boolean; value?: { via: string }; error?: string }>;
   listSites(): Promise<LocalSite[]>;
   addSite(site: { name: string; url: string }): Promise<{ ok: boolean; error?: string }>;
   removeSite(id: string): Promise<{ ok: boolean; error?: string }>;

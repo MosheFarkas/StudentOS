@@ -210,3 +210,53 @@ describe('link', () => {
     }
   });
 });
+
+describe('sessionValid', () => {
+  const withFetch = async (impl, fn) => {
+    const before = globalThis.fetch;
+    globalThis.fetch = impl;
+    try {
+      return await fn();
+    } finally {
+      globalThis.fetch = before;
+    }
+  };
+
+  it('says no when the stored session has expired', async () => {
+    // An expired token looks identical to a working one from here. Treating
+    // it as good is how an app ends up signed out for good with no way back.
+    const { sessionValid } = await import('./sync.mjs');
+    const ok = await withFetch(
+      async () => ({ ok: false, status: 401 }),
+      () => sessionValid({ apiBase: 'https://x.test', sessionToken: 'expired' }),
+    );
+    expect(ok).toBe(false);
+  });
+
+  it('says yes when it still works', async () => {
+    const { sessionValid } = await import('./sync.mjs');
+    const ok = await withFetch(
+      async () => ({ ok: true, status: 200 }),
+      () => sessionValid({ apiBase: 'https://x.test', sessionToken: 'good' }),
+    );
+    expect(ok).toBe(true);
+  });
+
+  it('says no when there is no session at all', async () => {
+    const { sessionValid } = await import('./sync.mjs');
+    expect(await sessionValid({ apiBase: 'https://x.test', sessionToken: null })).toBe(false);
+  });
+
+  it('keeps the session when the network is down rather than discarding it', async () => {
+    // Offline is not the same as signed out, and throwing the session away
+    // over a dropped connection means signing in again on a train.
+    const { sessionValid } = await import('./sync.mjs');
+    const ok = await withFetch(
+      async () => {
+        throw new Error('ENOTFOUND');
+      },
+      () => sessionValid({ apiBase: 'https://x.test', sessionToken: 'good' }),
+    );
+    expect(ok).toBe(true);
+  });
+});

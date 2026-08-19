@@ -11,6 +11,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('contexto', {
   status: () => ipcRenderer.invoke('status'),
   link: () => ipcRenderer.invoke('link'),
+  signIn: () => ipcRenderer.invoke('signIn'),
   addPortal: (portal) => ipcRenderer.invoke('addPortal', portal),
   removePortal: (id) => ipcRenderer.invoke('removePortal', id),
   beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
