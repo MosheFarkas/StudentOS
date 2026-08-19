@@ -812,3 +812,15 @@ a.button {
   border: 1px solid var(--line);
   color: var(--ink);
 }
+
+/* Adding a site, shown only inside the desktop app. */
+.add-site {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.add-site input {
+  flex: 1;
+  min-width: 0;
+}

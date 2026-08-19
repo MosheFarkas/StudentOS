@@ -27,59 +27,74 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
  */
 const STALE_AFTER_MS = 60 * 60 * 1000;
 
-let appWindow = null; // the hosted web app
-let sitesWindow = null; // the native panel for signing into sites
+let mainWindow = null;
 let tray = null;
 let syncing = false;
 
 /**
- * The main window is the real web app, not a rebuild of it.
+ * One window, two states.
  *
- * Everything a student does with their agent already exists at
- * contextoagent.ai and works; shipping a second implementation of it would
- * mean two things to keep in step. Verified that Google's sign-in renders
- * inside an Electron window, so hosting it costs nothing in access.
+ * Connect this device first; after that the app IS the web app -- the same
+ * pages a browser shows, because a second implementation of them would be two
+ * things to keep in step. What the desktop adds is handed to that page by a
+ * preload: inside the app the Sites section can add and sign into a site,
+ * because there is a real browser here to drive it.
  *
- * What this app adds is the one thing a web page fundamentally cannot do:
- * hold a login for another site. That lives in its own window.
+ * A preload is fixed when a window is created, so linking rebuilds the
+ * window rather than swapping its contents. That happens once.
  */
-function showAppWindow() {
-  if (appWindow && !appWindow.isDestroyed()) {
-    appWindow.show();
-    appWindow.focus();
-    return;
+function showWindow() {
+  const linked = status().linked;
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.showingApp === linked) {
+      mainWindow.show();
+      mainWindow.focus();
+      return;
+    }
+    mainWindow.destroy();
   }
-  appWindow = new BrowserWindow({
-    width: 1100,
-    height: 820,
+
+  mainWindow = new BrowserWindow({
+    width: linked ? 1100 : 760,
+    height: linked ? 820 : 660,
     title: 'ContextoAgent',
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: {
+      preload: join(here, linked ? 'web-preload.cjs' : 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
   });
-  void appWindow.loadURL(WEB_BASE);
-  // Sign-in and any outbound link belong in the student's own browser, where
-  // there is an address bar to check.
-  appWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.showingApp = linked;
+
+  if (linked) void mainWindow.loadURL(WEB_BASE);
+  else void mainWindow.loadFile(join(here, 'renderer', 'index.html'));
+
+  /*
+   * Sign-in has to stay inside this window.
+   *
+   * Google's OAuth redirect is how the app gets its session; sending it to the
+   * system browser would leave the session there and the app permanently
+   * signed out. Only genuinely third-party links go outside, where there is an
+   * address bar to check them against.
+   */
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const host = (() => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return '';
+      }
+    })();
+    if (url.startsWith(WEB_BASE) || host === 'accounts.google.com') return { action: 'allow' };
     void shell.openExternal(url);
     return { action: 'deny' };
   });
-  appWindow.on('closed', () => {
-    appWindow = null;
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
   });
-}
-
-function showSitesWindow() {
-  if (sitesWindow && !sitesWindow.isDestroyed()) {
-    sitesWindow.show();
-    sitesWindow.focus();
-    return;
-  }
-  createWindow();
-}
-
-/** Whichever window makes sense: linking and sites first, otherwise the app. */
-function showWindow() {
-  if (!status().linked) showSitesWindow();
-  else showAppWindow();
 }
 
 /**
@@ -117,8 +132,7 @@ function refreshTrayMenu() {
         enabled: false,
       },
       { type: 'separator' },
-      { label: 'Open ContextoAgent', click: () => showAppWindow() },
-      { label: 'Connected sites…', click: () => showSitesWindow() },
+      { label: 'Open ContextoAgent', click: () => showWindow() },
       {
         label: syncing ? 'Syncing…' : 'Sync now',
         // Nothing to sync without a linked account or a signed-in portal, and
@@ -130,37 +144,6 @@ function refreshTrayMenu() {
       { label: 'Quit ContextoAgent', click: () => app.quit() },
     ]),
   );
-}
-
-function createWindow() {
-  const window = new BrowserWindow({
-    width: 760,
-    height: 660,
-    title: 'Connected sites',
-    webPreferences: {
-      // This process drives a browser holding school logins and holds a token
-      // that speaks for the student's account. The renderer gets none of that:
-      // no Node, an isolated context, and only the calls named in preload.
-      preload: join(here, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
-
-  void window.loadFile(join(here, 'renderer', 'index.html'));
-  window.on('closed', () => {
-    sitesWindow = null;
-  });
-
-  // A link in this UI is a real web page; it belongs in the student's own
-  // browser, not in a chromeless window with no address bar to check.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  sitesWindow = window;
 }
 
 /** Wrap a handler so a thrown error reaches the renderer as a message. */
@@ -189,7 +172,13 @@ handle('setOpenAtLogin', (value) => {
   app.setLoginItemSettings({ openAtLogin: Boolean(value), openAsHidden: true });
   return app.getLoginItemSettings().openAtLogin;
 });
-handle('link', () => link({ apiBase: API_BASE, webBase: WEB_BASE }));
+handle('link', async () => {
+  const device = await link({ apiBase: API_BASE, webBase: WEB_BASE });
+  // Linking changes which preload the window needs, so the window is rebuilt.
+  // On the next tick, so this call's reply reaches the window that made it.
+  setTimeout(() => showWindow(), 50);
+  return device;
+});
 handle('addPortal', (portal) => addPortal(portal));
 handle('removePortal', (id) => removePortal(id));
 handle('beginLogin', (id) => beginLogin(id));
@@ -230,7 +219,7 @@ async function syncAll({ onlyStale = false } = {}) {
 
 /** Keep the window and the menu bar showing the same thing. */
 function notifyChanged() {
-  if (sitesWindow && !sitesWindow.isDestroyed()) sitesWindow.webContents.send('portals-changed');
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('portals-changed');
   refreshTrayMenu();
 }
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { desktop, type LocalSite } from '../lib/desktop.js';
 import { MAC_DOWNLOAD } from '../lib/download.js';
 import { Toggle } from './Toggle.js';
 
-interface Site {
+export interface ServerSite {
   portalId: string;
   origin: string;
   capturedAt: string;
@@ -12,74 +13,183 @@ interface Site {
   pages: number;
 }
 
-function describe(site: Site): string {
-  if (site.needsLogin) return 'needs signing in again';
-  if (site.pages === 0) return 'nothing published yet';
-  return `${site.pages} page${site.pages === 1 ? '' : 's'}`;
+export interface Row {
+  id: string;
+  label: string;
+  detail: string;
+  enabled: boolean;
+  signedIn: boolean;
+}
+
+export function merge(server: ServerSite[], local: LocalSite[]): Row[] {
+  const byId = new Map<string, Row>();
+
+  for (const site of server) {
+    byId.set(site.portalId, {
+      id: site.portalId,
+      label: site.origin.replace(/^https?:\/\//, ''),
+      detail: site.needsLogin
+        ? 'needs signing in again'
+        : site.pages === 0
+          ? 'nothing published yet'
+          : `${site.pages} page${site.pages === 1 ? '' : 's'}`,
+      enabled: site.enabled,
+      signedIn: !site.needsLogin,
+    });
+  }
+
+  // A site added in the app but never synced exists only on this machine, so
+  // the server list alone would show nothing and look broken.
+  for (const site of local) {
+    const existing = byId.get(site.id);
+    const signedIn = Boolean(site.loggedInAt);
+    if (existing) {
+      byId.set(site.id, { ...existing, signedIn: existing.signedIn && signedIn });
+      continue;
+    }
+    byId.set(site.id, {
+      id: site.id,
+      label: site.name,
+      detail: signedIn ? 'signed in, not synced yet' : 'not signed in yet',
+      enabled: true,
+      signedIn,
+    });
+  }
+
+  return [...byId.values()];
 }
 
 /**
- * Sites behind a login, as a part of Connections rather than a rival to it.
+ * Sites behind a login.
  *
- * Off and Remove are deliberately different actions: off keeps the pages and
- * the sign-in, so it costs nothing to undo, while remove deletes what the
- * server holds. Offering only one would make the cheap choice look expensive.
+ * The same component in both places. In the desktop app it can add and sign
+ * into a site, because there is a real browser on the machine to drive; in a
+ * browser tab it offers the download instead, because nothing else is
+ * possible there -- a page cannot sign into another site on your behalf.
  */
 export function SiteConnections() {
-  const [sites, setSites] = useState<Site[]>([]);
+  const bridge = desktop();
+  const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState<Row | null>(null);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
 
   async function load() {
     const res = await api.devices.sites.$get();
-    if (res.ok) setSites(await res.json());
+    const server: ServerSite[] = res.ok ? await res.json() : [];
+    const local = bridge ? await bridge.listSites() : [];
+    setRows(merge(server, local));
   }
 
   useEffect(() => {
     void load();
+    // The bridge is a window property, fixed for the lifetime of the page.
+    bridge?.onSitesChanged(() => void load());
   }, []);
 
-  async function setEnabled(site: Site, enabled: boolean) {
-    setBusy(site.portalId);
+  async function setEnabled(row: Row, enabled: boolean) {
+    setBusy(row.id);
     await api.devices.sites[':portalId'].enabled.$post({
-      param: { portalId: site.portalId },
+      param: { portalId: row.id },
       json: { enabled },
     });
     await load();
     setBusy(null);
   }
 
-  async function remove(site: Site) {
-    const name = site.origin.replace(/^https?:\/\//, '');
-    if (!confirm(`Remove ${name}? What it has read will be deleted.`)) return;
-    setBusy(site.portalId);
-    await api.devices.sites[':portalId'].$delete({ param: { portalId: site.portalId } });
+  async function remove(row: Row) {
+    if (!confirm(`Remove ${row.label}? What it has read will be deleted.`)) return;
+    setBusy(row.id);
+    await api.devices.sites[':portalId'].$delete({ param: { portalId: row.id } });
+    await bridge?.removeSite(row.id);
     await load();
     setBusy(null);
+  }
+
+  async function add() {
+    if (!bridge || !name.trim() || !url.trim()) return;
+    setBusy('add');
+    const added = await bridge.addSite({ name: name.trim(), url: url.trim() });
+    setBusy(null);
+    if (!added.ok) return alert(added.error ?? 'Could not add that site.');
+    setName('');
+    setUrl('');
+    await load();
+  }
+
+  async function startSignIn(row: Row) {
+    if (!bridge) return;
+    setBusy(row.id);
+    const started = await bridge.beginLogin(row.id);
+    setBusy(null);
+    if (!started.ok) return alert(started.error ?? 'Could not open a window.');
+    setSigningIn(row);
+  }
+
+  async function finishSignIn(row: Row) {
+    if (!bridge) return;
+    setBusy(row.id);
+    const done = await bridge.finishLogin(row.id);
+    if (done.ok && done.value?.needsLogin) {
+      setBusy(null);
+      setSigningIn(null);
+      await load();
+      return alert('That sign-in did not stick — the site still asks for a password.');
+    }
+    await bridge.syncSite(row.id);
+    setBusy(null);
+    setSigningIn(null);
+    await load();
+  }
+
+  if (signingIn) {
+    return (
+      <div className="subsection">
+        <h3>Signing in to {signingIn.label}</h3>
+        <p className="muted">
+          A browser window is open. Sign in there — it starts signed out of everything, including
+          Google — and keep going until you can see your account.
+        </p>
+        <div className="actions">
+          <button className="primary" onClick={() => void finishSignIn(signingIn)}>
+            I&rsquo;m signed in
+          </button>
+          <button onClick={() => setSigningIn(null)}>Cancel</button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="subsection">
       <h3>Sites that need a login</h3>
       <p className="muted">
-        Course portals and anything else behind a sign-in. Added in the desktop app.
+        Course portals and anything else behind a sign-in.
+        {!bridge && ' Added in the desktop app.'}
       </p>
 
-      {sites.length > 0 && (
+      {rows.length > 0 && (
         <ul className="device-list">
-          {sites.map((site) => (
-            <li key={site.portalId}>
+          {rows.map((row) => (
+            <li key={row.id}>
               <div className="site-name">
-                <strong>{site.origin.replace(/^https?:\/\//, '')}</strong>
-                <span className="muted"> — {describe(site)}</span>
+                <strong>{row.label}</strong>
+                <span className="muted"> — {row.detail}</span>
               </div>
               <div className="site-actions">
+                {bridge && !row.signedIn && (
+                  <button disabled={busy === row.id} onClick={() => void startSignIn(row)}>
+                    Sign in
+                  </button>
+                )}
                 <Toggle
-                  checked={site.enabled}
-                  disabled={busy === site.portalId}
-                  label={`Let your agent read ${site.origin}`}
-                  onChange={(next) => void setEnabled(site, next)}
+                  checked={row.enabled}
+                  disabled={busy === row.id}
+                  label={`Let your agent read ${row.label}`}
+                  onChange={(next) => void setEnabled(row, next)}
                 />
-                <button disabled={busy === site.portalId} onClick={() => void remove(site)}>
+                <button disabled={busy === row.id} onClick={() => void remove(row)}>
                   Remove
                 </button>
               </div>
@@ -88,10 +198,32 @@ export function SiteConnections() {
         </ul>
       )}
 
-      <p className="muted download-label">Download ContextoAgent desktop app</p>
-      <a className="button blue" href={MAC_DOWNLOAD}>
-        Download for macOS
-      </a>
+      {bridge ? (
+        <div className="add-site">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Veracross"
+            aria-label="Site name"
+          />
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://portals.veracross.com/lcc/student"
+            aria-label="Site address"
+          />
+          <button className="primary" disabled={busy === 'add'} onClick={() => void add()}>
+            Add
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="muted download-label">Download ContextoAgent desktop app</p>
+          <a className="button blue" href={MAC_DOWNLOAD}>
+            Download for macOS
+          </a>
+        </>
+      )}
     </div>
   );
 }
