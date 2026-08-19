@@ -1,4 +1,13 @@
-import { boolean, index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { user } from './auth.js';
 
 /**
@@ -88,4 +97,24 @@ export const portalSnapshots = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('portal_snapshots_user_portal_idx').on(t.userId, t.portalId, t.capturedAt)],
+);
+
+/**
+ * Sites a student has switched OFF.
+ *
+ * Exceptions only, the same shape as disabled integrations: no row means the
+ * agent may read it. Off is not the same as removed -- the captured pages stay
+ * put and the device keeps syncing, so turning it back on is instant and costs
+ * no re-login. Removing is the destructive one.
+ */
+export const disabledSites = pgTable(
+  'disabled_sites',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    portalId: text('portal_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.portalId] })],
 );

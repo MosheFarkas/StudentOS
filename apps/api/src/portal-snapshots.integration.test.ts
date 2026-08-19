@@ -172,3 +172,105 @@ describe('a real crawl, end to end', () => {
     expect(result.unavailable).toBe(true);
   });
 });
+
+describe('switching a site off', () => {
+  const off = (portalId: string, enabled: boolean, token: string) =>
+    app.request(`/api/devices/sites/${portalId}/enabled`, post({ enabled }, token));
+
+  it('hides it from the agent, and back again', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    // Off is not "hidden in settings" -- the agent must not see it at all.
+    await off('veracross', false, alice.token);
+    expect(
+      ((await readSchoolPortal.execute({}, ctx)) as { unavailable?: boolean }).unavailable,
+    ).toBe(true);
+
+    await off('veracross', true, alice.token);
+    const back = (await readSchoolPortal.execute({}, ctx)) as { portals?: unknown[] };
+    expect(back.portals).toHaveLength(1);
+  });
+
+  it('keeps the captured pages, so turning it back on costs no re-login', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+    await off('veracross', false, alice.token);
+
+    const listed = (await (
+      await app.request('/api/devices/sites', {
+        headers: { Authorization: `Bearer ${alice.token}` },
+      })
+    ).json()) as { portalId: string; enabled: boolean }[];
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.enabled).toBe(false);
+  });
+
+  it("does not let one student switch off another's site", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+
+    await off('veracross', false, bob.token);
+
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+    expect(
+      ((await readSchoolPortal.execute({}, ctx)) as { portals?: unknown[] }).portals,
+    ).toHaveLength(1);
+  });
+});
+
+describe('removing a site', () => {
+  it('deletes the captured pages', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+
+    await app.request('/api/devices/sites/veracross', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${alice.token}` },
+    });
+
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+    expect(
+      ((await readSchoolPortal.execute({}, ctx)) as { unavailable?: boolean }).unavailable,
+    ).toBe(true);
+  });
+
+  it("does not delete another student's site", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+
+    await app.request('/api/devices/sites/veracross', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${bob.token}` },
+    });
+
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+    expect(
+      ((await readSchoolPortal.execute({}, ctx)) as { portals?: unknown[] }).portals,
+    ).toHaveLength(1);
+  });
+});

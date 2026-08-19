@@ -1,6 +1,6 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, notInArray } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
-import { portalSnapshots } from '@contexto/db';
+import { disabledSites, portalSnapshots } from '@contexto/db';
 import type { PortalSnapshot, PortalSnapshotSource } from '@contexto/agent';
 
 /**
@@ -24,7 +24,24 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
         map: portalSnapshots.map,
       })
       .from(portalSnapshots)
-      .where(eq(portalSnapshots.userId, userId))
+      .where(
+        and(
+          eq(portalSnapshots.userId, userId),
+          /*
+           * A site switched off is invisible to the agent, not merely hidden
+           * in a settings screen. Filtering here rather than in the caller
+           * means every future reader inherits it -- the switch cannot be
+           * forgotten by whoever adds the next feature.
+           */
+          notInArray(
+            portalSnapshots.portalId,
+            this.db
+              .select({ portalId: disabledSites.portalId })
+              .from(disabledSites)
+              .where(eq(disabledSites.userId, userId)),
+          ),
+        ),
+      )
       .orderBy(portalSnapshots.portalId, desc(portalSnapshots.capturedAt));
 
     return rows.map((row) => ({

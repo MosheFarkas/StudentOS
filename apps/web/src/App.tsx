@@ -54,7 +54,7 @@ export function App() {
             account to link it to.
           */}
           <p className="muted download-label">Download ContextoAgent desktop app</p>
-          <a className="button" href={MAC_DOWNLOAD}>
+          <a className="button blue" href={MAC_DOWNLOAD}>
             Download for macOS
           </a>
         </div>

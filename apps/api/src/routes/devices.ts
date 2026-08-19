@@ -4,7 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
 import { and, desc, eq, gt, isNotNull, isNull, lt, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { deviceLinkRequests, devices, portalSnapshots } from '@contexto/db';
+import { deviceLinkRequests, devices, disabledSites, portalSnapshots } from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -210,17 +210,66 @@ export function createDeviceRoutes(ctx: AppContext) {
           .where(eq(portalSnapshots.userId, c.get('userId')))
           .orderBy(portalSnapshots.portalId, desc(portalSnapshots.capturedAt));
 
+        const off = new Set(
+          (
+            await ctx.db
+              .select({ portalId: disabledSites.portalId })
+              .from(disabledSites)
+              .where(eq(disabledSites.userId, c.get('userId')))
+          ).map((row) => row.portalId),
+        );
+
         return c.json(
           rows.map((row) => ({
             portalId: row.portalId,
             origin: row.origin,
             capturedAt: row.capturedAt,
+            enabled: !off.has(row.portalId),
             needsLogin: Boolean((row.map as { needsLogin?: boolean })?.needsLogin),
             pages: Array.isArray((row.map as { pages?: unknown[] })?.pages)
               ? (row.map as { pages: unknown[] }).pages.length
               : 0,
           })),
         );
+      })
+
+      /** Switch a site off or back on. Off keeps the pages; remove deletes them. */
+      .post(
+        '/sites/:portalId/enabled',
+        auth,
+        zValidator('json', z.object({ enabled: z.boolean() })),
+        async (c) => {
+          const userId = c.get('userId');
+          const portalId = c.req.param('portalId');
+
+          if (c.req.valid('json').enabled) {
+            await ctx.db
+              .delete(disabledSites)
+              .where(and(eq(disabledSites.userId, userId), eq(disabledSites.portalId, portalId)));
+          } else {
+            await ctx.db.insert(disabledSites).values({ userId, portalId }).onConflictDoNothing();
+          }
+          return c.json({ ok: true });
+        },
+      )
+
+      /**
+       * Forget a site entirely.
+       *
+       * Deletes the captured pages, not just the switch. The device may sync it
+       * again -- this removes what the server holds, which is the part a
+       * student is asking about when they say remove.
+       */
+      .delete('/sites/:portalId', auth, async (c) => {
+        const userId = c.get('userId');
+        const portalId = c.req.param('portalId');
+        await ctx.db
+          .delete(portalSnapshots)
+          .where(and(eq(portalSnapshots.userId, userId), eq(portalSnapshots.portalId, portalId)));
+        await ctx.db
+          .delete(disabledSites)
+          .where(and(eq(disabledSites.userId, userId), eq(disabledSites.portalId, portalId)));
+        return c.json({ ok: true });
       })
 
       .post('/:id/revoke', auth, async (c) => {

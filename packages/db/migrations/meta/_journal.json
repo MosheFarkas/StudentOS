@@ -50,6 +50,13 @@
       "when": 1787089024076,
       "tag": "0006_strange_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787166521249,
+      "tag": "0007_amazing_sway",
+      "breakpoints": true
     }
   ]
 }

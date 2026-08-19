@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { connectGoogleScopes } from '../lib/auth.js';
+import { SiteConnections } from './SiteConnections.js';
 import { Toggle } from './Toggle.js';
 
 type Group = 'calendar' | 'classroom' | 'drive' | 'gmail';
@@ -264,6 +265,10 @@ export function GoogleConnections() {
       )}
 
       {error && <p className="muted">{error}</p>}
+
+      {/* Part of Connections: it is another thing the agent can see, and the
+          only one a browser cannot set up for itself. */}
+      <SiteConnections />
     </div>
   );
 }

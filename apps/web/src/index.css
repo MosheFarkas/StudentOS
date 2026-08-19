@@ -604,16 +604,40 @@ dd {
      action rendered wider than the primary one reads as the main choice. */
   max-width: calc(24rem - 2.5rem - 2px);
   margin-top: 0.5rem;
-  /* The blue sampled from the mark, so the two actions read as the same
-     family without the download competing with the violet primary. */
+}
+
+/* The blue sampled from the mark. Its own modifier because the download button
+   appears both signed out and in Settings, and they must not drift apart. */
+a.button.blue {
   background: var(--blue);
   border-color: var(--blue);
   color: #fff;
 }
 
-.signin > a.button:hover {
+a.button.blue:hover {
   background: var(--blue-dark);
   border-color: var(--blue-dark);
+}
+
+/* A block within a panel -- sites live inside Connections. */
+.subsection {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.subsection h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.25rem;
+}
+
+.subsection .download-label {
+  margin: 1rem 0 0;
+}
+
+.subsection a.button {
+  display: inline-block;
+  margin-top: 0.4rem;
 }
 
 /* ---------- file preview ---------- */
