@@ -87,7 +87,7 @@ export function LinkDevice({ requestId }: { requestId: string }) {
         Once linked, this computer can read the school portals you sign into on it and send what it
         finds to your account. Only approve it if you started this yourself.
       </div>
-      <div className="row">
+      <div className="actions">
         <button className="primary" disabled={busy} onClick={() => void approve(state.deviceName)}>
           {busy ? 'Linking…' : 'Approve'}
         </button>

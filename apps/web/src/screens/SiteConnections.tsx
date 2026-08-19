@@ -68,11 +68,11 @@ export function SiteConnections() {
         <ul className="device-list">
           {sites.map((site) => (
             <li key={site.portalId}>
-              <div>
+              <div className="site-name">
                 <strong>{site.origin.replace(/^https?:\/\//, '')}</strong>
                 <span className="muted"> — {describe(site)}</span>
               </div>
-              <div className="row">
+              <div className="site-actions">
                 <Toggle
                   checked={site.enabled}
                   disabled={busy === site.portalId}

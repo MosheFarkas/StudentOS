@@ -619,6 +619,21 @@ a.button.blue:hover {
   border-color: var(--blue-dark);
 }
 
+/* The switch and Remove sit together on one line. Note this is NOT .row --
+   that class is a bordered column card in this app, which is what boxed these
+   in and stacked them. .actions already exists for plain button rows. */
+.site-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.site-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* A block within a panel -- sites live inside Connections. */
 .subsection {
   margin-top: 1.5rem;
