@@ -420,3 +420,32 @@ describe('the session handed to a linked app', () => {
     expect(alicesDevices).toHaveLength(0);
   });
 });
+
+describe('refreshing a session from a device', () => {
+  it('gives a linked device a usable session without re-linking', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    const res = await app.request('/api/devices/session', {
+      method: 'POST', headers: { Authorization: `Bearer ${device.token}` },
+    });
+    const { sessionToken } = (await res.json()) as { sessionToken: string };
+    expect((await app.request('/api/agents', as(sessionToken))).status).toBe(200);
+  });
+
+  it('stops working the moment the device is revoked', async () => {
+    const alice = await createUser();
+    const device = await linkDevice(alice.token);
+    await app.request(`/api/devices/${device.deviceId}/revoke`, json({}, alice.token));
+    const res = await app.request('/api/devices/session', {
+      method: 'POST', headers: { Authorization: `Bearer ${device.token}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses a made-up device token', async () => {
+    const res = await app.request('/api/devices/session', {
+      method: 'POST', headers: { Authorization: 'Bearer nonsense' },
+    });
+    expect(res.status).toBe(401);
+  });
+});

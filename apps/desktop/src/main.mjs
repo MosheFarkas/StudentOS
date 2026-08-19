@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
-import { link, readConfig } from './sync.mjs';
+import { link, readConfig, refreshSession } from './sync.mjs';
 import {
   addPortal,
   beginLogin,
@@ -243,8 +243,27 @@ function attachSession() {
   });
 }
 
-void app.whenReady().then(() => {
+/**
+ * A linked device with no session gets one before the window opens.
+ *
+ * Otherwise the app loads the web app signed out, and the only way back in
+ * looks like signing into Google again -- which is exactly the second
+ * question linking exists to avoid.
+ */
+async function ensureSession() {
+  const config = readConfig();
+  if (!config.token || config.sessionToken) return;
+  try {
+    await refreshSession({ apiBase: config.apiBase ?? API_BASE, token: config.token });
+  } catch {
+    // A revoked device or an offline start. The window still opens; the web
+    // app will ask for a sign-in, which is the honest outcome either way.
+  }
+}
+
+void app.whenReady().then(async () => {
   attachSession();
+  await ensureSession();
   showWindow();
   buildTray();
   void syncAll({ onlyStale: true });

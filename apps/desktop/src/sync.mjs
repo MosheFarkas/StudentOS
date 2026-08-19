@@ -169,6 +169,20 @@ export async function link({
   throw new Error('Timed out waiting for approval.');
 }
 
+/**
+ * Get a web session using the device link we already have.
+ *
+ * Called when the app is linked but holds no usable session -- after the
+ * session expired, or after an older build linked without asking for one.
+ * Better than sending the student back through linking to answer a question
+ * they already answered.
+ */
+export async function refreshSession({ apiBase, token }) {
+  const { sessionToken } = await api(apiBase, '/api/devices/session', { token });
+  writeConfig({ ...readConfig(), sessionToken });
+  return sessionToken;
+}
+
 /** Push a portal map to the server. */
 export async function pushSnapshot({ apiBase, token }, { portalId, origin, map, redacted }) {
   return api(apiBase, '/api/devices/portal-snapshot', {

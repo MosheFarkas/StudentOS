@@ -198,6 +198,24 @@ export function createDeviceRoutes(ctx: AppContext) {
         });
       })
 
+      /**
+       * A fresh session for a device that already has one approved.
+       *
+       * Sessions expire; device links do not. Without this the app would send
+       * a student back through linking every time their session aged out,
+       * which is a worse question than the one they already answered.
+       *
+       * The escalation is real and worth naming: a stolen device token can
+       * mint sessions for as long as the device is linked. It could already
+       * read everything that device syncs, and revoking the device ends both
+       * at once -- which is why revocation is one click in Settings.
+       */
+      .post('/session', device, async (c) => {
+        const authContext = await ctx.auth.$context;
+        const session = await authContext.internalAdapter.createSession(c.get('userId'), undefined);
+        return c.json({ sessionToken: session.token });
+      })
+
       /** Linked devices, for Settings. */
       .get('/', auth, async (c) => {
         const rows = await ctx.db
