@@ -584,17 +584,22 @@ dd {
   margin-top: 1.25rem;
 }
 
-/* Sign in and download stack as equals in width, not in weight -- the primary
-   colour is what separates them. */
-.signin .panel button,
-.signin .panel a.button {
+.signin .panel button {
   display: block;
   width: 100%;
-  margin-top: 0.6rem;
 }
 
-.signin .panel p.small {
-  margin: 0.5rem 0 0;
+/* The download sits under the panel and matches its width, so the column
+   still reads as one shape rather than two competing ones. */
+.signin .download-label {
+  margin: 1.5rem 0 0;
+}
+
+.signin > a.button {
+  display: block;
+  width: 100%;
+  max-width: 24rem;
+  margin-top: 0.5rem;
 }
 
 /* ---------- file preview ---------- */

@@ -46,19 +46,17 @@ export function App() {
             <button className="primary" onClick={() => void signInWithGoogle()}>
               Continue with Google
             </button>
-
-            {/*
-              Secondary on purpose. Signing in is what a new visitor needs
-              first -- the app is useless before there is an account to link
-              it to -- so the download sits below rather than competing.
-            */}
-            <a className="button" href={MAC_DOWNLOAD}>
-              Download for macOS
-            </a>
-            <p className="muted small">
-              The app reads sites that need a login, like your school portal. Apple Silicon.
-            </p>
           </div>
+
+          {/*
+            Outside the panel and below it, deliberately. Signing in is what a
+            new visitor needs first; the app is useless until there is an
+            account to link it to.
+          */}
+          <p className="muted download-label">Download ContextoAgent desktop app</p>
+          <a className="button" href={MAC_DOWNLOAD}>
+            Download for macOS
+          </a>
         </div>
       </main>
     );
