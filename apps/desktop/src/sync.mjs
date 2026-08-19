@@ -72,10 +72,39 @@ async function api(baseUrl, path, { method = 'POST', token, body } = {}) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const text = await response.text();
-  const parsed = text ? JSON.parse(text) : {};
-  if (response.status === 401 && token) {
-    throw new DeviceUnlinked(parsed.message ?? 'This computer is no longer linked.');
+
+  /*
+   * Not everything that answers is our API.
+   *
+   * A proxy error page, a 404 from a server that has never heard of these
+   * routes, a captive portal on school wifi -- all reply with HTML or plain
+   * text. Parsing that without a guard threw a raw
+   * "Unexpected non-whitespace character after JSON" at the student, which
+   * says nothing about what actually went wrong.
+   */
+  let parsed;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = null;
   }
+
+  if (response.status === 401 && token) {
+    throw new DeviceUnlinked(parsed?.message ?? 'This computer is no longer linked.');
+  }
+
+  if (parsed === null) {
+    // Naming the address matters: the usual cause is pointing at a server
+    // that does not have these routes yet, and the address is the clue.
+    throw new Error(
+      response.status === 404
+        ? `${new URL(path, baseUrl).origin} has no device-linking API. ` +
+          'Is CONTEXTO_API pointing at the right server, and is it up to date?'
+        : `${new URL(path, baseUrl).origin} answered ${response.status} with something that ` +
+          'was not JSON. It may be a proxy or sign-in page rather than the API.',
+    );
+  }
+
   if (!response.ok) {
     throw new Error(parsed.message ?? `${method} ${path} failed with ${response.status}`);
   }

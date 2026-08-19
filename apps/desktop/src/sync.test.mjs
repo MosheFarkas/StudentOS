@@ -27,6 +27,7 @@ describe('pushSnapshot', () => {
     return () => { globalThis.fetch = original; };
   };
 
+
   const snapshot = { portalId: 'veracross', origin: 'https://x.test', map: { exploredAt: '2026-09-01T00:00:00.000Z' }, redacted: false };
 
   it('raises DeviceUnlinked on 401 so the app can stop retrying', async () => {
@@ -45,6 +46,49 @@ describe('pushSnapshot', () => {
       const error = await pushSnapshot({ apiBase: 'https://x.test', token: 't' }, snapshot).catch((e) => e);
       expect(error).toBeInstanceOf(Error);
       expect(error).not.toBeInstanceOf(DeviceUnlinked);
+    } finally { restore(); }
+  });
+});
+
+describe('when the thing answering is not our API', () => {
+  const stubRaw = (status, text) => {
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: status < 400, status, text: async () => text });
+    return () => { globalThis.fetch = original; };
+  };
+
+  const snap = { portalId: 'veracross', origin: 'https://x.test', map: { exploredAt: '2026-09-01T00:00:00.000Z' }, redacted: false };
+
+  it('explains a 404 instead of failing to parse it', async () => {
+    // A server without these routes replies with HTML or plain text. Parsing
+    // that raised "Unexpected non-whitespace character after JSON", which
+    // told the student nothing.
+    const { pushSnapshot } = await import('./sync.mjs');
+    const restore = stubRaw(404, '404 Not Found');
+    try {
+      const error = await pushSnapshot({ apiBase: 'https://contextoagent.ai', token: 't' }, snap).catch((e) => e);
+      expect(error.message).toMatch(/no device-linking API/);
+      expect(error.message).toMatch(/contextoagent\.ai/);
+      expect(error.message).not.toMatch(/JSON/i);
+    } finally { restore(); }
+  });
+
+  it('explains an HTML page served with a 200', async () => {
+    // Captive portals on school wifi do exactly this.
+    const { pushSnapshot } = await import('./sync.mjs');
+    const restore = stubRaw(200, '<!doctype html><title>Sign in to WiFi</title>');
+    try {
+      const error = await pushSnapshot({ apiBase: 'https://x.test', token: 't' }, snap).catch((e) => e);
+      expect(error.message).toMatch(/not JSON|proxy or sign-in page/);
+    } finally { restore(); }
+  });
+
+  it('still reports a real API error message when there is one', async () => {
+    const { pushSnapshot } = await import('./sync.mjs');
+    const restore = stubRaw(400, JSON.stringify({ message: 'That portal snapshot is too large to store.' }));
+    try {
+      const error = await pushSnapshot({ apiBase: 'https://x.test', token: 't' }, snap).catch((e) => e);
+      expect(error.message).toBe('That portal snapshot is too large to store.');
     } finally { restore(); }
   });
 });
