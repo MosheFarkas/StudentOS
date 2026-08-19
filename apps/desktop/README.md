@@ -55,42 +55,44 @@ model talked into wandering must still be unable to. See `src/explorer.mjs`.
 Since Chrome 136 refuses debugging on the default profile, this physically
 cannot reach the Chrome holding the student's Gmail and Drive.
 
-## Signing and notarizing
+## Installing it (unsigned)
 
-Without this the DMG runs only on the machine that built it — macOS refuses an
-unsigned app everywhere else, and "right-click → Open" does not get a student
-past it reliably.
+This ships unsigned. Signing for distribution needs a paid Apple Developer
+membership -- a free Apple account only issues development certificates, which
+Gatekeeper does not accept on anyone else's Mac -- so every student approves
+the app by hand, once.
 
-You need a paid Apple Developer account, a **Developer ID Application**
-certificate (not "Apple Distribution" — that one is for the App Store and will
-not work here), and an App Store Connect API key.
+Since macOS 15 the old right-click -> Open shortcut no longer works. The route
+is System Settings, and it is worth writing out for whoever you send this to:
+
+1. Open the DMG and drag **ContextoAgent** to Applications.
+2. Open it. macOS refuses, saying Apple cannot check it for malicious
+   software. Click **Done** -- not "Move to Trash".
+3. Open **System Settings > Privacy & Security**, scroll to **Security**.
+   There is a line saying ContextoAgent was blocked. Click **Open Anyway**.
+4. Authenticate, then click **Open Anyway** once more.
+
+It is asked once per install, not every launch.
+
+Building it yourself avoids all of this: an app built locally never gets the
+quarantine flag that triggers the check, so `pnpm --filter @contexto/desktop
+dist` and running it from `release/` just works.
+
+### If you do enrol later
+
+Set these and the same command signs and notarizes -- the config switches
+itself on when it finds them, and stays quiet when it does not:
 
 ```sh
-# The certificate must be in the login keychain. Confirm it is:
-security find-identity -v -p codesigning | grep "Developer ID Application"
-
 export APPLE_API_KEY=~/private_keys/AuthKey_XXXXXXXXXX.p8
-export APPLE_API_KEY_ID=XXXXXXXXXX      # the key id
+export APPLE_API_KEY_ID=XXXXXXXXXX
 export APPLE_API_ISSUER=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
-
 pnpm --filter @contexto/desktop dist
-```
-
-The config turns notarization on only when those are present, so a build
-without them still works and says so rather than failing.
-
-Notarization uploads the app to Apple and waits — usually a few minutes, and
-occasionally much longer. Check the result:
-
-```sh
 spctl -a -vvv -t install release/mac-arm64/ContextoAgent.app   # expect "accepted"
-codesign -dv --entitlements - release/mac-arm64/ContextoAgent.app
 ```
 
-The entitlements in `build/entitlements.mac.plist` are what V8 needs under the
-hardened runtime — it compiles JavaScript to machine code at runtime, which is
-the exact behaviour the hardened runtime exists to block. None of them grant
-access to a student's files or devices.
+The certificate must be **Developer ID Application**. "Apple Distribution" is
+for the App Store and produces a build macOS still refuses.
 
 ## Known issues
 

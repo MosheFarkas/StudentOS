@@ -21,8 +21,9 @@ const canNotarize = hasApiKey || hasAppleId;
 
 if (!canNotarize) {
   console.log(
-    '[desktop] No Apple credentials in the environment — building unsigned.\n' +
-      '[desktop] The result runs on this machine but macOS will refuse it elsewhere.',
+    '[desktop] No Apple credentials — building unsigned.\n' +
+      '[desktop] Runs here. On any other Mac the student must approve it once in\n' +
+      '[desktop] System Settings > Privacy & Security. See README, "Installing it".',
   );
 }
 
@@ -36,9 +37,16 @@ module.exports = {
   mac: {
     category: 'public.app-category.education',
     target: [{ target: 'dmg', arch: ['arm64', 'x64'] }],
-    hardenedRuntime: true,
-    entitlements: 'build/entitlements.mac.plist',
-    entitlementsInherit: 'build/entitlements.mac.plist',
+    // The hardened runtime exists to satisfy notarization, and it constrains
+    // what V8 may do. Enabling it on a build that is not being notarized adds
+    // the constraints and buys nothing.
+    hardenedRuntime: canNotarize,
+    ...(canNotarize
+      ? {
+          entitlements: 'build/entitlements.mac.plist',
+          entitlementsInherit: 'build/entitlements.mac.plist',
+        }
+      : {}),
     notarize: canNotarize,
   },
 };
