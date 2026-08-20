@@ -37,11 +37,28 @@ export function setWorkingForAgent(agentId) {
   workingForAgent = agentId ?? null;
 }
 
+/**
+ * Whether a browser should be put on screen at all.
+ *
+ * Only work a conversation asked for has anywhere to appear. A scheduled
+ * refresh, a "Sync now" from the Sites list, or adding a site belongs in no
+ * chat -- and showing one anyway does not mean showing it harmlessly: the
+ * window draws it at the last bounds some conversation reported, because a
+ * panel going away deliberately never clears them. The student gets a browser
+ * over whatever they were looking at, for work they never asked for.
+ */
+export function showsInChat(session) {
+  return Boolean(session?.agentId);
+}
+
 async function openBrowser(portalId) {
   if (process.versions.electron) {
     const { SiteSession } = await import('./site-session.mjs');
     const session = new SiteSession({ portalId, agentId: workingForAgent });
     await session.launch();
+    // Nowhere to show it, so the window is never told it exists. It still
+    // runs, and still reads the portal; it just does so out of sight.
+    if (!showsInChat(session)) return session;
     onSessionOpen?.(session);
     const close = session.close.bind(session);
     session.close = async () => {

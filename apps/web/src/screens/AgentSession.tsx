@@ -14,7 +14,12 @@ import { useAgentSession } from '../lib/useAgentSession.js';
  * render another site. So this owns where it sits; the app owns what is in
  * it, which is also why bounds are pushed on every layout change.
  *
- * Clicking anywhere on it opens it. Nothing says so, because a browser that
+ * That native view is drawn over this page, not under it, which decides the
+ * whole layout: anything the student needs to see or press has to live
+ * outside the rectangle handed to it. Hence the bar. A close button placed on
+ * top of the frame is behind the site and might as well not exist.
+ *
+ * Clicking the page itself opens it. Nothing says so, because a browser that
  * grows when you press it does not need a label explaining that it will.
  *
  * It stays after the work finishes, without the aura. The page the agent
@@ -47,19 +52,11 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
 
   // A click lands on the site, not on this page, so the view forwards it.
   useEffect(() => {
-    bridge?.onSiteViewClick?.(() => setExpanded((open) => !open));
+    const stop = bridge?.onSiteViewClick?.(() => setExpanded((open) => !open));
+    return () => stop?.();
   }, [bridge]);
 
   useEffect(() => {
-    /*
-     * Never clears the bounds on the way out.
-     *
-     * A panel unmounting used to push null, which parks the browser
-     * off-screen -- and moving between conversations mounts the new panel
-     * before the old one tears down, so the null arrived last and left an
-     * empty box where the page should be. Whether a browser is on screen is
-     * the app's business, not a component's; this only ever says where.
-     */
     if (!showing) return;
     report();
     // A native view does not move with the document, so anything that changes
@@ -74,38 +71,60 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
     };
   }, [showing, expanded, bridge, report]);
 
+  useEffect(() => {
+    if (!showing) return;
+    /*
+     * Put the browser away when this panel goes -- leaving the conversation,
+     * or the work being cleared.
+     *
+     * This used to be left alone, because two panels were mounted at once
+     * while moving between conversations and the outgoing one's null landed
+     * last, blanking the incoming one. That only happened because work with
+     * no agent was shown in every chat; now that it is shown in none, one
+     * panel exists at a time and there is nothing to race with. Leaving the
+     * bounds behind is what let a browser sit over the Sites list, drawn
+     * where some conversation used to be.
+     *
+     * Kept apart from reporting so that expanding, which changes where the
+     * browser goes, does not blink it off and on along the way.
+     */
+    return () => void bridge?.setSiteViewBounds?.(null);
+  }, [showing, bridge]);
+
   if (!bridge || !showing) return null;
 
   return (
     <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>
+      {/*
+        Above the page rather than over it. The native view covers every pixel
+        of the frame, so this strip is the only place a control can be both
+        seen and pressed.
+      */}
+      <div className="agent-browser-bar">
+        {/* Closes the expansion only. The browser stays where it was. */}
+        <button
+          className="agent-browser-close"
+          onClick={() => setExpanded(false)}
+          aria-label="Close"
+        />
+        <span className="agent-browser-label">
+          {portalId}
+          {lit && (
+            <span className="dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          )}
+        </span>
+      </div>
+
       <div
         className="agent-browser-frame"
         ref={frame}
         onClick={() => setExpanded(!expanded)}
         role="presentation"
       />
-      {expanded && (
-        /* Closes the expansion only. The browser stays where it was. */
-        <button
-          className="agent-browser-close"
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded(false);
-          }}
-          aria-label="Close"
-        />
-      )}
-
-      <span className="agent-browser-label">
-        {portalId}
-        {lit && (
-          <span className="dots" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-          </span>
-        )}
-      </span>
     </div>
   );
 }

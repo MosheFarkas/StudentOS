@@ -46,6 +46,11 @@ export interface DesktopBridge {
   setSiteViewBounds?(
     bounds: { x: number; y: number; width: number; height: number } | null,
   ): Promise<unknown>;
+  /*
+   * These hand back a way to stop listening. An app built before they did
+   * returns nothing, which is why the callers treat it as optional -- the
+   * page is served to whatever version of the app is installed.
+   */
   onSiteSession?(
     fn: (payload: {
       active: boolean;
@@ -53,9 +58,9 @@ export interface DesktopBridge {
       portalId?: string;
       agentId?: string | null;
     }) => void,
-  ): void;
+  ): (() => void) | undefined;
   /** A click landed on the browser view. The site itself cannot send this. */
-  onSiteViewClick?(fn: () => void): void;
+  onSiteViewClick?(fn: () => void): (() => void) | undefined;
   /** What is on screen now. Asked on mount, so leaving a chat does not lose it. */
   getSiteSession?(): Promise<{
     ok: boolean;

@@ -990,6 +990,9 @@ a.button {
   margin: 0.75rem 0;
   border-radius: 12px;
   overflow: hidden;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 400ms ease;
 }
 
 .agent-browser.expanded {
@@ -997,35 +1000,51 @@ a.button {
   inset: 3rem;
   z-index: 60;
   margin: 0;
-  box-shadow: 0 30px 90px rgba(10, 16, 69, 0.35);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 30px 90px rgba(10, 16, 69, 0.35);
 }
 
 /*
- * The page itself, resting. No border and no glow: nothing is happening to it,
- * and decoration on a finished thing would be saying otherwise.
+ * The strip the controls live on.
+ *
+ * It exists because the browser is a native view drawn over this page: inside
+ * the frame, a button is behind the site and a label is invisible. Everything
+ * the student can see or press is up here, clear of it.
  */
+.agent-browser-bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.4rem;
+  padding: 0 0.6rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--wash);
+}
+
+/* The page itself. The native browser is positioned to fill exactly this. */
 .agent-browser-frame {
   height: 16rem;
-  border-radius: 12px;
   cursor: pointer;
   background: #fff;
-  box-shadow: inset 0 0 0 1px var(--line);
-  transition: box-shadow 400ms ease;
 }
 
 .agent-browser.expanded .agent-browser-frame {
-  height: 100%;
+  height: calc(100% - 2.4rem);
 }
 
 /*
  * The aura, only while the agent is actually working.
  *
- * An inner glow rather than a border, so the colour bleeds over the page
- * instead of framing it -- the site stays the subject and the colour says
- * something is acting on it. Cyan, blue, violet, drifting slowly enough to
- * read as alive rather than urgent.
+ * Drawn outside the panel rather than within it. An inner glow was the nicer
+ * idea and cannot work here: it renders inside the frame, which is precisely
+ * the rectangle the native view paints over, so none of it was ever visible.
+ * Cyan, blue, violet, drifting slowly enough to read as alive rather than
+ * urgent.
  */
-.agent-browser.working .agent-browser-frame {
+.agent-browser.working {
   animation: agent-aura 5s ease-in-out infinite;
 }
 
@@ -1034,16 +1053,14 @@ a.button {
   100% {
     box-shadow:
       inset 0 0 0 2px rgba(64, 112, 255, 0.9),
-      inset 0 0 34px 10px rgba(0, 192, 192, 0.5),
-      inset 0 0 70px 26px rgba(80, 16, 208, 0.34),
+      0 0 0 3px rgba(0, 192, 192, 0.28),
       0 0 26px rgba(64, 112, 255, 0.55),
       0 0 54px rgba(0, 192, 192, 0.3);
   }
   50% {
     box-shadow:
       inset 0 0 0 2px rgba(0, 192, 192, 0.9),
-      inset 0 0 40px 14px rgba(80, 16, 208, 0.55),
-      inset 0 0 78px 30px rgba(64, 112, 255, 0.38),
+      0 0 0 3px rgba(80, 16, 208, 0.32),
       0 0 34px rgba(80, 16, 208, 0.6),
       0 0 64px rgba(64, 112, 255, 0.32);
   }
@@ -1053,21 +1070,18 @@ a.button {
  * Closes the expansion, nothing else.
  *
  * Drawn as two lines rather than a multiplication sign: the glyph sits on the
- * text baseline and is not centred in its own box, so a × in a circle is
+ * text baseline and is not centred in its own box, so a x in a circle is
  * always a pixel or two low and slightly off to one side. Lines are centred
  * because they are placed, not typeset.
  */
 .agent-browser-close {
-  position: absolute;
-  top: 0.65rem;
-  left: 0.65rem;
-  z-index: 2;
-  width: 2rem;
-  height: 2rem;
+  flex: none;
+  width: 1.4rem;
+  height: 1.4rem;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--surface);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -1080,7 +1094,7 @@ a.button {
 .agent-browser-close::after {
   content: '';
   grid-area: 1 / 1;
-  width: 0.72rem;
+  width: 0.6rem;
   height: 1.5px;
   border-radius: 1px;
   background: var(--ink-soft);
@@ -1100,25 +1114,19 @@ a.button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-browser.working .agent-browser-frame {
+  .agent-browser.working {
     animation: none;
     box-shadow:
-      inset 0 0 0 1.5px rgba(64, 112, 255, 0.55),
-      inset 0 0 30px 10px rgba(0, 192, 192, 0.25);
+      inset 0 0 0 2px rgba(64, 112, 255, 0.55),
+      0 0 0 3px rgba(0, 192, 192, 0.2);
   }
 }
 
 .agent-browser-label {
-  position: absolute;
-  left: 0.85rem;
-  bottom: 0.6rem;
   display: flex;
   align-items: baseline;
   gap: 0.3rem;
   font-size: 0.75rem;
   color: var(--ink-faint);
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
   pointer-events: none;
 }

@@ -100,3 +100,23 @@ describe('coalesce', () => {
     await expect(coalesce(map, 'x', () => Promise.resolve('ok'))).resolves.toBe('ok');
   });
 });
+
+/**
+ * Whether a browser is put on screen at all.
+ *
+ * The window is only ever told about a session it has somewhere to show. A
+ * scheduled sync has no conversation, and announcing it anyway drew a real
+ * browser over whatever the student was looking at -- at the last bounds some
+ * other chat reported, because a panel going away never clears them.
+ */
+describe('showsInChat', () => {
+  it('shows a browser the conversation asked for', async () => {
+    const { showsInChat } = await import('./operations.mjs');
+    expect(showsInChat({ agentId: '11111111-1111-4111-8111-111111111111' })).toBe(true);
+  });
+
+  it('keeps a scheduled sync off the screen entirely', async () => {
+    const { showsInChat } = await import('./operations.mjs');
+    expect(showsInChat({ agentId: null })).toBe(false);
+  });
+});
