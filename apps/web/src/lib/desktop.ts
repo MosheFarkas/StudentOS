@@ -49,6 +49,8 @@ export interface DesktopBridge {
   onSiteSession?(
     fn: (payload: { active: boolean; portalId?: string; agentId?: string | null }) => void,
   ): void;
+  /** A click landed on the browser view. The site itself cannot send this. */
+  onSiteViewClick?(fn: () => void): void;
 }
 
 declare global {

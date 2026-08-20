@@ -361,6 +361,15 @@ async function doPendingWork() {
 let activeSession = null;
 let siteViewBounds = null;
 
+/*
+ * A click anywhere on the browser reaches the page it belongs to. The site
+ * itself cannot send this -- only the preload can -- so a page cannot make
+ * the panel open or close by itself.
+ */
+ipcMain.on('site-view-clicked', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('site-view-clicked');
+});
+
 function attachSiteView(session) {
   if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
   activeSession = session;

@@ -117,10 +117,6 @@ export function Chat({ agentId, onBack }: Props) {
 
   return (
     <>
-      {/* The browser the agent drives, shown only in the conversation that
-          asked for it. Renders nothing the rest of the time. */}
-      <AgentSession agentId={agentId} />
-
       <div className="chat-header">
         <button className="quiet" onClick={onBack}>
           ← Agents
@@ -149,6 +145,13 @@ export function Chat({ agentId, onBack }: Props) {
                 )}
               </div>
             ))}
+
+            {/*
+              In the message flow, where the work was asked for. Renders
+              nothing until this conversation's agent is actually driving a
+              browser.
+            */}
+            <AgentSession agentId={agentId} />
 
             {sending && (
               /*

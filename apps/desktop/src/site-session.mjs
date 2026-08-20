@@ -1,4 +1,8 @@
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { WebContentsView } from 'electron';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 /**
  * A browser the agent drives, inside the app.
@@ -35,7 +39,14 @@ export class SiteSession {
   async launch() {
     this.view = new WebContentsView({
       webPreferences: {
-        // A site is untrusted content. No preload, no node, its own store.
+        /*
+         * The site is untrusted content and is treated as such: its own store,
+         * no node, an isolated world. The preload exposes nothing to the page
+         * -- it only reports that the student clicked, which is what lets the
+         * whole view act as one button rather than needing a strip along the
+         * top to press.
+         */
+        preload: join(here, 'site-view-preload.cjs'),
         partition: `persist:site-${this.portalId}`,
         contextIsolation: true,
         nodeIntegration: false,

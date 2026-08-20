@@ -3,24 +3,23 @@ import { desktop } from '../lib/desktop.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
 
 /**
- * The browser the agent is driving, shown while it works.
+ * The browser the agent is driving, sitting in the conversation.
+ *
+ * It lives in the message column rather than floating in a corner: the work
+ * belongs to this exchange, and something hovering over the app reads as
+ * having happened to the student rather than been asked for by them.
  *
  * The frame is drawn here and the real browser is a native view the app
- * positions inside it -- a native view cannot take a CSS glow, and CSS cannot
- * render another site. So this owns where it sits and how big it is, and
- * reports that upward on every layout change.
+ * positions inside it -- a native view cannot take a CSS aura, and CSS cannot
+ * render another site. So this owns where it sits; the app owns what is in
+ * it, which is also why bounds are pushed on every layout change.
  *
- * It exists because of what is being watched. The agent is signing into a
- * student's school account; a thing that does that off-screen asks for more
- * trust than it needs to. Small by default so it does not take over, and
- * expandable because "what is it doing right now" is a fair question.
- *
- * Scoped to one conversation: it shows in the chat whose agent asked for the
- * work, and nowhere else.
+ * Clicking anywhere on it opens it. Nothing says so, because a browser that
+ * grows when you press it does not need a label explaining that it will.
  */
 export function AgentSession({ agentId }: { agentId: string }) {
   const bridge = desktop();
-  const { active } = useAgentSession(agentId);
+  const { active, portalId } = useAgentSession(agentId);
   const [expanded, setExpanded] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
@@ -35,6 +34,11 @@ export function AgentSession({ agentId }: { agentId: string }) {
     if (!active) setExpanded(false);
   }, [active]);
 
+  // A click lands on the site, not on this page, so the view forwards it.
+  useEffect(() => {
+    bridge?.onSiteViewClick?.(() => setExpanded((open) => !open));
+  }, [bridge]);
+
   useEffect(() => {
     if (!active) {
       void bridge?.setSiteViewBounds?.(null);
@@ -45,7 +49,7 @@ export function AgentSession({ agentId }: { agentId: string }) {
     // the layout has to push new bounds or the browser is left behind.
     window.addEventListener('resize', report);
     window.addEventListener('scroll', report, true);
-    const timer = setInterval(report, 500);
+    const timer = setInterval(report, 400);
     return () => {
       window.removeEventListener('resize', report);
       window.removeEventListener('scroll', report, true);
@@ -56,16 +60,21 @@ export function AgentSession({ agentId }: { agentId: string }) {
   if (!bridge || !active) return null;
 
   return (
-    <div className={`agent-session${expanded ? ' expanded' : ''}`}>
-      <button
-        className="agent-session-head"
+    <div className={`agent-browser${expanded ? ' expanded' : ''}`}>
+      <div
+        className="agent-browser-aura"
+        ref={frame}
         onClick={() => setExpanded(!expanded)}
-        aria-expanded={expanded}
-      >
-        <span className="agent-session-pulse" aria-hidden="true" />
-        <span>{expanded ? 'Working — tap to shrink' : 'Working — tap to watch'}</span>
-      </button>
-      <div className="agent-session-frame" ref={frame} />
+        role="presentation"
+      />
+      <span className="agent-browser-label">
+        {portalId}
+        <span className="dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      </span>
     </div>
   );
 }

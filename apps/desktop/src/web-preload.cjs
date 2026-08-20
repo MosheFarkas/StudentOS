@@ -29,5 +29,6 @@ contextBridge.exposeInMainWorld('contextoDesktop', {
   // the main process owns what is inside it.
   setSiteViewBounds: (bounds) => ipcRenderer.invoke('siteViewBounds', bounds),
   onSiteSession: (fn) => ipcRenderer.on('site-session', (_e, payload) => fn(payload)),
+  onSiteViewClick: (fn) => ipcRenderer.on('site-view-clicked', () => fn()),
   onSitesChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });
