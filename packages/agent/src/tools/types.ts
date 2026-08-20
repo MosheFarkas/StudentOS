@@ -115,6 +115,16 @@ export interface PortalSnapshotSource {
     requestId: string,
     timeoutMs: number,
   ): Promise<{ finished: boolean; outcome?: string | null }>;
+  /**
+   * Ask the student's computer to open one page and read it back.
+   *
+   * The same browser that signs into their sites, doing ordinary work. It
+   * runs there rather than here because that machine has their sessions and a
+   * real browser -- and because they can watch it.
+   */
+  requestBrowse(userId: string, url: string, agentId?: string): Promise<{ requestId?: string }>;
+  /** What a finished request returned, if it returned anything. */
+  resultOf(requestId: string): Promise<unknown>;
 }
 
 /**

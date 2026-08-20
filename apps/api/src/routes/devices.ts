@@ -297,6 +297,8 @@ export function createDeviceRoutes(ctx: AppContext) {
           .select({
             id: siteRefreshRequests.id,
             portalId: siteRefreshRequests.portalId,
+            kind: siteRefreshRequests.kind,
+            targetUrl: siteRefreshRequests.targetUrl,
             agentId: siteRefreshRequests.agentId,
           })
           .from(siteRefreshRequests)
@@ -316,11 +318,30 @@ export function createDeviceRoutes(ctx: AppContext) {
       .post(
         '/pending/:id/complete',
         device,
-        zValidator('json', z.object({ outcome: z.enum(['synced', 'needs_login', 'failed']) })),
+        // Bounded, because the page a device read comes back through here and
+        // is as untrusted as anything else it fetched.
+        bodyLimit({
+          maxSize: MAX_SNAPSHOT_BYTES,
+          onError: () => {
+            throw new ContextoError('validation_failed', 'That page is too large to return.');
+          },
+        }),
+        zValidator(
+          'json',
+          z.object({
+            outcome: z.enum(['synced', 'needs_login', 'failed', 'read']),
+            result: z.unknown().optional(),
+          }),
+        ),
         async (c) => {
+          const body = c.req.valid('json');
           await ctx.db
             .update(siteRefreshRequests)
-            .set({ completedAt: new Date(), outcome: c.req.valid('json').outcome })
+            .set({
+              completedAt: new Date(),
+              outcome: body.outcome,
+              result: body.result ?? null,
+            })
             .where(
               and(
                 eq(siteRefreshRequests.id, c.req.param('id')),

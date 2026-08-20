@@ -19,6 +19,7 @@ import {
   autoSignIn,
   addSiteWithSignIn,
   observeSessions,
+  browsePage,
   setWorkingForAgent,
   removePortal,
   status,
@@ -333,18 +334,24 @@ async function doPendingWork() {
 
   for (const item of work) {
     let outcome;
+    let result;
     try {
       // Tagging the work means its browser appears in the conversation that
       // asked for it, rather than floating over whatever the student is
       // looking at.
       setWorkingForAgent(item.agentId);
-      const result = await syncPortal(item.portalId);
-      outcome = result.needsLogin ? 'needs_login' : 'synced';
+      if (item.kind === 'browse') {
+        result = await browsePage(item.targetUrl);
+        outcome = 'read';
+      } else {
+        const synced = await syncPortal(item.portalId);
+        outcome = synced.needsLogin ? 'needs_login' : 'synced';
+      }
     } catch {
       outcome = 'failed';
     }
     setWorkingForAgent(null);
-    await reportWork(creds, item.id, outcome).catch(() => {});
+    await reportWork(creds, item.id, outcome, result).catch(() => {});
     notifyChanged();
   }
 }

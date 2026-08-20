@@ -195,6 +195,11 @@ export const SIGN_IN_SECTION =
   'turn: call it, read what comes back, and answer the question. Never end your turn having ' +
   'promised something for later -- if you have the result, use it, and if their computer did ' +
   'not answer, say that plainly instead.\n' +
+  'You also have browser_open, which opens any page in their browser and reads it back. It is ' +
+  'not only for their connected sites: use it for anything that needs a real browser rather ' +
+  'than a plain fetch -- a page that builds itself with JavaScript, a page behind a login they ' +
+  'already have, or anything web_read_link could not get. The student sees the browser working ' +
+  'in the conversation while you use it.\n' +
   'Never say you cannot handle a password, cannot log in, or that they must sign in by hand. ' +
   'None of it is true here and there is no manual sign-in to send them to. If a site genuinely ' +
   'has no saved sign-in, say so plainly and tell them where to add it: the ContextoAgent app, ' +

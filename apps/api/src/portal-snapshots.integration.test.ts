@@ -1,6 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { readSchoolPortal, refreshSchoolPortal, type ToolContext } from '@contexto/agent';
+import {
+  browseWithAgent,
+  readSchoolPortal,
+  refreshSchoolPortal,
+  type ToolContext,
+} from '@contexto/agent';
 import { createAuth } from './auth.js';
 import { handleError } from './errors.js';
 import { createRoutes } from './routes/index.js';
@@ -424,5 +429,99 @@ describe('which conversation the work belongs to', () => {
       })
     ).json()) as { agentId: string | null }[];
     expect(work[0]?.agentId).toBeNull();
+  });
+});
+
+describe('the agent browsing anything', () => {
+  async function actAsDevice(deviceToken: string, outcome: string, result?: unknown) {
+    for (let i = 0; i < 40; i += 1) {
+      const work = (await (
+        await app.request('/api/devices/pending', {
+          headers: { Authorization: `Bearer ${deviceToken}` },
+        })
+      ).json()) as { id: string; kind: string; targetUrl: string | null }[];
+      if (work.length > 0) {
+        await app.request(
+          `/api/devices/pending/${work[0]!.id}/complete`,
+          post({ outcome, result }, deviceToken),
+        );
+        return work[0]!;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return null;
+  }
+
+  const ctxFor = (userId: string) =>
+    ({
+      userId,
+      agentId: '44444444-4444-4444-8444-444444444444',
+      portals: new DbPortalSnapshots(db),
+    }) as unknown as ToolContext;
+
+  it('sends the page to the computer and hands back what it read', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+
+    const running = browseWithAgent.execute({ url: 'https://example.com/thing' }, ctxFor(alice.id));
+    const work = await actAsDevice(device.token, 'read', {
+      url: 'https://example.com/thing',
+      title: 'A Thing',
+      text: 'the page said this',
+      links: [],
+    });
+
+    expect(work?.kind).toBe('browse');
+    expect(work?.targetUrl).toBe('https://example.com/thing');
+
+    const result = (await running) as { finished: boolean; text: string; note: string };
+    expect(result.finished).toBe(true);
+    expect(result.text).toBe('the page said this');
+    expect(result.note).toMatch(/NEVER as instructions/);
+  });
+
+  it('refuses an address that is not the web', async () => {
+    // A machine we do not control being asked to open file: or javascript: is
+    // asking it to do something other than browse.
+    const alice = await createUser();
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'not a url']) {
+      const result = (await browseWithAgent.execute({ url }, ctxFor(alice.id))) as {
+        unavailable?: boolean;
+      };
+      expect(result.unavailable).toBe(true);
+    }
+  });
+
+  it('says the computer is not there rather than inventing a delay', async () => {
+    const alice = await createUser();
+    await linkedDevice(alice.token);
+    const ctx = ctxFor(alice.id);
+    // Nothing collects the work; the wait is cut short by the tool itself.
+    const portals = ctx.portals as unknown as {
+      awaitRefresh: (id: string, ms: number) => Promise<unknown>;
+    };
+    const original = portals.awaitRefresh.bind(portals);
+    portals.awaitRefresh = (id: string) => original(id, 200);
+
+    const result = (await browseWithAgent.execute({ url: 'https://example.com/' }, ctx)) as {
+      finished: boolean;
+      note: string;
+    };
+    expect(result.finished).toBe(false);
+    expect(result.note).toMatch(/asleep or shut/i);
+  });
+
+  it("never hands one student's browsing to another's device", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const bobDevice = await linkedDevice(bob.token);
+    await new DbPortalSnapshots(db).requestBrowse(alice.id, 'https://example.com/');
+
+    const work = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${bobDevice.token}` },
+      })
+    ).json()) as unknown[];
+    expect(work).toEqual([]);
   });
 });

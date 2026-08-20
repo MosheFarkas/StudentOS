@@ -143,6 +143,43 @@ export async function addSiteWithSignIn({ name, url, username, password }) {
   return { portal, signedIn: true, synced: true, landed: signedIn.landed, result };
 }
 
+/**
+ * Open one page and read it back.
+ *
+ * Ordinary browsing, in the same browser that signs into the student's sites.
+ * If the address belongs to a site they have connected it reuses that site's
+ * session, so a page behind a login they already have simply opens -- which
+ * is most of the reason to browse from their machine rather than the server.
+ */
+export async function browsePage(url) {
+  const target = new URL(url);
+  const site = listPortals().find((p) => p.origin === target.origin);
+  // A page on a connected site borrows its session; anything else gets a
+  // general profile, kept apart from every site the student signed into.
+  const partition = site ? site.id : 'agent-browsing';
+
+  const browser = await openBrowser(partition);
+  try {
+    await browser.openPage(target.toString());
+    // Give a page that builds itself a moment to do so.
+    await new Promise((r) => setTimeout(r, 2500));
+    const read = await evaluate(
+      browser,
+      `JSON.stringify({
+        url: location.href,
+        title: document.title,
+        text: document.body ? document.body.innerText.slice(0, 20000) : '',
+        links: Array.from(document.querySelectorAll('a[href]')).map((a) => a.href).slice(0, 80)
+      })`,
+    );
+    await browser.close();
+    return JSON.parse(read);
+  } catch (error) {
+    await browser.close().catch(() => {});
+    throw error;
+  }
+}
+
 export function removePortal(portalId) {
   const config = readConfig();
   writeConfig({ ...config, portals: (config.portals ?? []).filter((p) => p.id !== portalId) });

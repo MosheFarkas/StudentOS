@@ -10,6 +10,8 @@ const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
       latest: async () => snapshots,
       requestRefresh: async () => ({ alreadyPending: false, requestId: 'r1' }),
       awaitRefresh: async () => ({ finished: true, outcome: 'synced' }),
+      requestBrowse: async () => ({ requestId: 'b1' }),
+      resultOf: async () => null,
     },
   }) as ToolContext;
 
@@ -145,6 +147,8 @@ describe('what the read tool says when a site needs signing in', () => {
         ],
         requestRefresh: async () => ({ alreadyPending: false, requestId: 'r1' }),
         awaitRefresh: async () => ({ finished: true, outcome: 'synced' }),
+        requestBrowse: async () => ({ requestId: 'b1' }),
+        resultOf: async () => null,
       },
     } as unknown as ToolContext;
 

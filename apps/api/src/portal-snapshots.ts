@@ -11,6 +11,17 @@ import type { PortalSnapshot, PortalSnapshotSource } from '@contexto/agent';
  * of each. Doing this in SQL rather than fetching every row and reducing in
  * JavaScript keeps a term's worth of snapshots off the heap.
  */
+/**
+ * The agent tag only decides which conversation shows the browser, so a value
+ * that is not an id is dropped rather than allowed to fail the insert --
+ * losing the panel is a far smaller harm than losing the work it decorates.
+ */
+function isUuid(value: string | undefined): value is string {
+  return (
+    Boolean(value) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value!)
+  );
+}
+
 export class DbPortalSnapshots implements PortalSnapshotSource {
   constructor(private readonly db: Database) {}
 
@@ -55,6 +66,30 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
         ? ((row.map as { pages: PortalSnapshot['pages'] }).pages ?? [])
         : [],
     }));
+  }
+
+  async requestBrowse(
+    userId: string,
+    url: string,
+    agentId?: string,
+  ): Promise<{ requestId?: string }> {
+    const tag = isUuid(agentId) ? agentId : null;
+    const [created] = await this.db
+      .insert(siteRefreshRequests)
+      // portalId is empty for a one-off page: it names a configured site, and
+      // this is not one.
+      .values({ userId, portalId: '', kind: 'browse', targetUrl: url, agentId: tag })
+      .returning({ id: siteRefreshRequests.id });
+    return { requestId: created?.id };
+  }
+
+  async resultOf(requestId: string): Promise<unknown> {
+    const [row] = await this.db
+      .select({ result: siteRefreshRequests.result })
+      .from(siteRefreshRequests)
+      .where(eq(siteRefreshRequests.id, requestId))
+      .limit(1);
+    return row?.result ?? null;
   }
 
   async requestRefresh(

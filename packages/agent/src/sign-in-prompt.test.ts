@@ -51,3 +51,16 @@ describe('finishing the job', () => {
     expect(SIGN_IN_SECTION).toMatch(/say that plainly instead/i);
   });
 });
+
+describe('browsing generally', () => {
+  it('tells the agent it has a browser for ordinary work too', () => {
+    // The browser is not only a login mechanism. An agent that thinks it is
+    // will refuse perfectly reachable pages.
+    expect(SIGN_IN_SECTION).toMatch(/browser_open/);
+    expect(SIGN_IN_SECTION).toMatch(/not only for their connected sites/i);
+  });
+
+  it('says the student can watch it happen', () => {
+    expect(SIGN_IN_SECTION).toMatch(/sees the browser working in the conversation/i);
+  });
+});

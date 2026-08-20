@@ -71,6 +71,13 @@
       "when": 1787253687340,
       "tag": "0009_medical_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787258994295,
+      "tag": "0010_ambiguous_firebrand",
+      "breakpoints": true
     }
   ]
 }

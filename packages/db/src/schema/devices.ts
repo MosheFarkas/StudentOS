@@ -137,7 +137,24 @@ export const siteRefreshRequests = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    /** Which configured site, for a refresh. Empty for a one-off page. */
     portalId: text('portal_id').notNull(),
+    /**
+     * What the agent asked for.
+     *
+     * 'refresh' signs into a configured site and reads it. 'browse' opens one
+     * page and reads it back -- the same browser, doing ordinary work, which
+     * is why the student sees it either way.
+     */
+    kind: text('kind').notNull().default('refresh'),
+    /** The page to open, for a browse. */
+    targetUrl: text('target_url'),
+    /**
+     * What came back. Kept on the request rather than in portal_snapshots
+     * because a one-off page is not a site the student has connected, and
+     * storing it as one would make it look connected.
+     */
+    result: jsonb('result'),
     /**
      * Which agent asked, so the browser it opens can be shown in that
      * conversation and nowhere else. Nullable: a scheduled sync has no agent

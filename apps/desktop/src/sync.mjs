@@ -209,8 +209,11 @@ export async function pendingWork({ apiBase, token }) {
   return api(apiBase, '/api/devices/pending', { method: 'GET', token });
 }
 
-export async function reportWork({ apiBase, token }, requestId, outcome) {
-  return api(apiBase, `/api/devices/pending/${requestId}/complete`, { token, body: { outcome } });
+export async function reportWork({ apiBase, token }, requestId, outcome, result) {
+  return api(apiBase, `/api/devices/pending/${requestId}/complete`, {
+    token,
+    body: { outcome, ...(result === undefined ? {} : { result }) },
+  });
 }
 
 /** Push a portal map to the server. */
