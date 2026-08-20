@@ -199,6 +199,21 @@ export class PortalBrowser {
       return;
     }
     try {
+      /*
+       * Close our tabs before shutting down.
+       *
+       * --restore-last-session is what keeps the sign-in alive across
+       * restarts, and it restores the open tabs along with it -- so every
+       * launch reopened everything the last one left and added its own.
+       * Measured: 2, 4, 6, 8 tabs over four launches, all doing the same
+       * thing. Leaving nothing open means there is nothing to restore, and
+       * the session cookie still survives, which is the part that matters.
+       */
+      const { targetInfos } = await this.cdp.send('Target.getTargets');
+      for (const target of targetInfos.filter((t) => t.type === 'page')) {
+        await this.cdp.send('Target.closeTarget', { targetId: target.targetId }).catch(() => {});
+      }
+
       // Ask Chrome to shut down so it flushes cookies to the profile. Killing
       // the process loses the session the student just logged in to create.
       await this.cdp.send('Browser.close');

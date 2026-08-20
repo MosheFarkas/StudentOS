@@ -93,15 +93,11 @@ export async function addSiteWithSignIn({ name, url, username, password }) {
     return { portal, signedIn: false, reason: signedIn.reason ?? 'the site refused that sign-in' };
   }
 
-  // Where the site actually lives is only knowable once there is a session --
-  // the address a student pastes is often the sign-in page.
-  const landed = await resolvePortalAddress(portal.id);
-  if (!landed.needsLogin && landed.origin) {
-    updatePortal(portal.id, { url: landed.url, origin: landed.origin });
-  }
-
+  // No second look needed: signing in recorded where the site put us, which
+  // is the site. Opening another browser to ask again would only be a chance
+  // to get a different answer.
   const result = await syncPortal(portal.id);
-  return { portal, signedIn: true, synced: true, result };
+  return { portal, signedIn: true, synced: true, landed: signedIn.landed, result };
 }
 
 export function removePortal(portalId) {
@@ -275,16 +271,38 @@ export async function autoSignIn(portalId) {
     const { result: after } = await browser.cdp.send(
       'Runtime.evaluate',
       {
-        expression: 'Boolean(document.querySelector("input[type=password]"))',
+        expression: `JSON.stringify({
+          stillAsking: Boolean(document.querySelector('input[type=password]')),
+          landed: location.href
+        })`,
         returnByValue: true,
       },
       sessionId,
     );
     await browser.close();
 
-    const ok = after.value === false;
-    if (ok) updatePortal(portalId, { loggedInAt: new Date().toISOString(), lastError: null });
-    return { attempted: true, ok, reason: ok ? undefined : 'still asking for a password' };
+    const { stillAsking, landed } = JSON.parse(after.value);
+    if (stillAsking) return { attempted: true, ok: false, reason: 'still asking for a password' };
+
+    /*
+     * Where the sign-in put us IS the site.
+     *
+     * Guessing this was the long-running bug. A student pastes the address
+     * they know, which is the sign-in page; Veracross signs you in at
+     * accounts.veracross.com and hands you to portals.veracross.com. Seeding
+     * a crawl at the sign-in page then reads a password form and calls the
+     * session dead, however good it actually is.
+     *
+     * Nothing is guessed here. The site just told us where it keeps this
+     * student's things, by taking us there.
+     */
+    updatePortal(portalId, {
+      loggedInAt: new Date().toISOString(),
+      lastError: null,
+      url: landed,
+      origin: new URL(landed).origin,
+    });
+    return { attempted: true, ok: true, landed };
   } catch {
     await browser.close().catch(() => {});
     // The error is deliberately not passed on: it can carry the page's own

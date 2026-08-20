@@ -120,9 +120,12 @@ export const readSchoolPortal: Tool<z.infer<typeof readPortalInput>, unknown> = 
           ...(snapshot.needsLogin
             ? {
                 warning:
-                  'The portal asked that computer to sign in again, so this snapshot has no ' +
-                  'data in it. Tell the student to open the ContextoAgent app and sign in to ' +
-                  'the portal again. Do NOT tell them they have no coursework.',
+                  'That site asked for a sign-in, so this snapshot holds nothing. Do NOT tell ' +
+                  'the student they have no coursework, and do NOT tell them to sign in by hand ' +
+                  '-- there is no manual sign-in. Use portal_refresh: their computer has their ' +
+                  'saved username and password and will sign in itself. Only if that also comes ' +
+                  'back needing a sign-in should they check the saved one in the app, under ' +
+                  'Settings, Connections, Sites.',
               }
             : kept.length === 0
               ? {

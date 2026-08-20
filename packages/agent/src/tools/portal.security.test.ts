@@ -133,3 +133,33 @@ describe('what the refresh tool tells the model', () => {
     expect(result.reason).toMatch(/not that you are unable/i);
   });
 });
+
+describe('what the read tool says when a site needs signing in', () => {
+  it('sends the agent to refresh rather than to a manual sign-in that no longer exists', async () => {
+    const ctx = {
+      userId: 'u1',
+      agentId: 'a1',
+      portals: {
+        latest: async () => [
+          {
+            portalId: 'veracross',
+            origin: 'https://portals.veracross.com',
+            capturedAt: '2026-09-01T00:00:00.000Z',
+            redacted: false,
+            needsLogin: true,
+            pages: [],
+          },
+        ],
+        requestRefresh: async () => ({ alreadyPending: false }),
+      },
+    } as unknown as ToolContext;
+
+    const result = (await readSchoolPortal.execute({}, ctx)) as { portals: { warning?: string }[] };
+    const warning = result.portals[0]?.warning ?? '';
+    expect(warning).toMatch(/portal_refresh/);
+    expect(warning).toMatch(/no manual sign-in/i);
+    expect(warning).not.toMatch(
+      /no coursework/i.source ? /tell them they have no coursework/i : /x/,
+    );
+  });
+});
