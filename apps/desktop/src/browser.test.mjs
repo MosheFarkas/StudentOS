@@ -117,14 +117,14 @@ describe('profile directory permissions', () => {
 });
 
 describe('where profiles are written', () => {
-  it('follows CONTEXTO_CONFIG_DIR, so a test never writes into a real install', async () => {
+  it('follows CONTEXTO_CONFIG_DIR, so a test never writes into a real install', () => {
     // It did not, for several days. The override was added to the config path
     // and not to this one, so the suite kept creating profile directories in
-    // a student's own app data on every run.
+    // a student's own app data on every run. Read at call time, so no module
+    // reloading is needed to check it.
     const before = process.env['CONTEXTO_CONFIG_DIR'];
     process.env['CONTEXTO_CONFIG_DIR'] = '/tmp/ctx-profile-root-test';
     try {
-      const { profileDirFor } = await import(`./browser.mjs?profile-root-${Date.now()}`);
       expect(profileDirFor('anything')).toBe('/tmp/ctx-profile-root-test/portals/anything');
     } finally {
       if (before === undefined) delete process.env['CONTEXTO_CONFIG_DIR'];
@@ -132,12 +132,12 @@ describe('where profiles are written', () => {
     }
   });
 
-  it('uses the real location when nothing is set', async () => {
+  it('uses the real location when nothing is set', () => {
     const before = process.env['CONTEXTO_CONFIG_DIR'];
     delete process.env['CONTEXTO_CONFIG_DIR'];
     try {
-      const { profileDirFor } = await import(`./browser.mjs?profile-root-real-${Date.now()}`);
       expect(profileDirFor('veracross')).toMatch(/ContextoAgent|contexto-agent/);
+      expect(profileDirFor('veracross')).not.toMatch(/^\/tmp/);
     } finally {
       if (before !== undefined) process.env['CONTEXTO_CONFIG_DIR'] = before;
     }
