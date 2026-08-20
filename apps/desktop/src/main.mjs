@@ -15,15 +15,7 @@ import {
   keychainAvailable,
   saveCredentials,
 } from './credentials.mjs';
-import {
-  autoSignIn,
-  addPortal,
-  beginLogin,
-  finishLogin,
-  removePortal,
-  status,
-  syncPortal,
-} from './operations.mjs';
+import { autoSignIn, addSiteWithSignIn, removePortal, status, syncPortal } from './operations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const API_BASE = process.env['CONTEXTO_API'] ?? 'https://contextoagent.ai';
@@ -232,10 +224,8 @@ handle('signIn', async () => {
   return { via: 'browser', device };
 });
 
-handle('addPortal', (portal) => addPortal(portal));
+handle('addPortal', (site) => addSiteWithSignIn(site));
 handle('removePortal', (id) => removePortal(id));
-handle('beginLogin', (id) => beginLogin(id));
-handle('finishLogin', (id) => finishLogin(id));
 handle('syncPortal', (id) => syncPortal(id));
 
 /*

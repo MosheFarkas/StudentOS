@@ -71,7 +71,6 @@ export function SiteConnections() {
   const bridge = desktop();
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [signingIn, setSigningIn] = useState<Row | null>(null);
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [creds, setCreds] = useState({ username: '', password: '' });
@@ -146,57 +145,36 @@ export function SiteConnections() {
   }
 
   async function add() {
-    if (!bridge || !name.trim() || !url.trim()) return;
+    if (!bridge) return;
+    if (!name.trim() || !url.trim()) return alert('A name and address are needed.');
+    if (!creds.username.trim() || !creds.password)
+      return alert('A username and password are needed.');
+
     setBusy('add');
-    const added = await bridge.addSite({ name: name.trim(), url: url.trim() });
+    const added = await bridge.addSite({
+      name: name.trim(),
+      url: url.trim(),
+      username: creds.username.trim(),
+      password: creds.password,
+    });
+    // Cleared as soon as it is handed over. There is no reason for a password
+    // to sit in a form once the keychain has it.
+    setCreds({ username: '', password: '' });
     setBusy(null);
+
     if (!added.ok) return alert(added.error ?? 'Could not add that site.');
     setName('');
     setUrl('');
     await load();
-  }
 
-  async function startSignIn(row: Row) {
-    if (!bridge) return;
-    setBusy(row.id);
-    const started = await bridge.beginLogin(row.id);
-    setBusy(null);
-    if (!started.ok) return alert(started.error ?? 'Could not open a window.');
-    setSigningIn(row);
-  }
-
-  async function finishSignIn(row: Row) {
-    if (!bridge) return;
-    setBusy(row.id);
-    const done = await bridge.finishLogin(row.id);
-    if (done.ok && done.value?.needsLogin) {
-      setBusy(null);
-      setSigningIn(null);
-      await load();
-      return alert('That sign-in did not stick — the site still asks for a password.');
+    // Adding now includes signing in, so say which of the three things
+    // happened rather than leaving a row that looks added but never fetched.
+    if (added.value && added.value.signedIn === false) {
+      alert(
+        `Added ${name.trim()}, but that sign-in did not work: ${added.value.reason ?? 'the site refused it'}.\n\n` +
+          'If the site signs in through Google, a username and password cannot get past it.',
+      );
     }
-    await bridge.syncSite(row.id);
-    setBusy(null);
-    setSigningIn(null);
-    await load();
-  }
-
-  if (signingIn) {
-    return (
-      <div className="subsection">
-        <h3>Signing in to {signingIn.label}</h3>
-        <p className="muted">
-          A browser window is open. Sign in there — it starts signed out of everything, including
-          Google — and keep going until you can see your account.
-        </p>
-        <div className="actions">
-          <button className="primary" onClick={() => void finishSignIn(signingIn)}>
-            I&rsquo;m signed in
-          </button>
-          <button onClick={() => setSigningIn(null)}>Cancel</button>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -216,11 +194,6 @@ export function SiteConnections() {
                 <span className="muted"> — {row.detail}</span>
               </div>
               <div className="site-actions">
-                {bridge && !row.signedIn && (
-                  <button disabled={busy === row.id} onClick={() => void startSignIn(row)}>
-                    Sign in
-                  </button>
-                )}
                 <Toggle
                   checked={row.enabled}
                   disabled={busy === row.id}
@@ -291,22 +264,45 @@ export function SiteConnections() {
       )}
 
       {bridge ? (
-        <div className="add-site">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Veracross"
-            aria-label="Site name"
-          />
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://portals.veracross.com/lcc/student"
-            aria-label="Site address"
-          />
-          <button className="primary" disabled={busy === 'add'} onClick={() => void add()}>
-            Add
-          </button>
+        <div className="saved-signin">
+          <p className="muted small">
+            Your sign-in is kept in this Mac&rsquo;s keychain and never sent to ContextoAgent. It
+            works for sites with a normal username and password &mdash; not ones behind Google.
+          </p>
+          <div className="add-site">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Veracross"
+              aria-label="Site name"
+            />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://portals.veracross.com/lcc/student"
+              aria-label="Site address"
+            />
+          </div>
+          <div className="add-site">
+            <input
+              value={creds.username}
+              onChange={(e) => setCreds({ ...creds, username: e.target.value })}
+              placeholder="Username"
+              aria-label="Username"
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              value={creds.password}
+              onChange={(e) => setCreds({ ...creds, password: e.target.value })}
+              placeholder="Password"
+              aria-label="Password"
+              autoComplete="new-password"
+            />
+            <button className="primary" disabled={busy === 'add'} onClick={() => void add()}>
+              {busy === 'add' ? 'Signing in\u2026' : 'Add and sign in'}
+            </button>
+          </div>
         </div>
       ) : (
         <>

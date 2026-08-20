@@ -20,8 +20,6 @@ contextBridge.exposeInMainWorld('contextoDesktop', {
   listSites: () => ipcRenderer.invoke('status').then((r) => (r.ok ? r.value.portals : [])),
   addSite: (site) => ipcRenderer.invoke('addPortal', site),
   removeSite: (id) => ipcRenderer.invoke('removePortal', id),
-  beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
-  finishLogin: (id) => ipcRenderer.invoke('finishLogin', id),
   syncSite: (id) => ipcRenderer.invoke('syncPortal', id),
   saveCredentials: (id, creds) => ipcRenderer.invoke('saveCredentials', id, creds),
   hasCredentials: (id) => ipcRenderer.invoke('hasCredentials', id),

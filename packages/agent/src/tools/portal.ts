@@ -158,18 +158,20 @@ const refreshInput = z.object({
 export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = {
   id: 'portal_refresh',
   description:
-    "Ask the student's own computer to sign in to one of their sites again and fetch it fresh. " +
-    'Use this when portal_read returns nothing, says the sign-in expired, or the student says ' +
-    'something should be there that is not. It does NOT return the data: it queues the work, ' +
-    'which takes about a minute and only happens while their computer is on. Answer from what ' +
-    'you already have and tell them fresh data is coming.',
+    "Sign in to one of the student's sites and fetch it fresh. You CAN do this: their computer " +
+    'holds the username and password they saved, and this makes it sign in and read the site ' +
+    'again. Use it whenever they ask you to go and check a site, log in to one, or get up-to-date ' +
+    'information, and whenever portal_read comes back empty or says the sign-in expired. ' +
+    'The one thing to be clear about: it does not hand the data back to you here. The work takes ' +
+    'about a minute and only runs while their computer is awake, so answer now from what you ' +
+    'already have and say the fresh version is coming.',
   inputSchema: refreshInput,
 
   async execute({ portalId }, ctx) {
     if (!ctx.portals) {
       return unavailable(
-        'No computer is linked, so there is nothing that can fetch that. They can link one in ' +
-          'Settings, under Devices.',
+        'No computer of theirs is linked, so there is nothing that can sign in. Tell them to ' +
+          'open the ContextoAgent app and link this computer -- not that you are unable to do it.',
       );
     }
 
@@ -178,11 +180,13 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
       queued: true,
       alreadyPending,
       note: alreadyPending
-        ? `Their computer was already asked to refresh ${portalId} and has not reported back yet. ` +
-          'Do not ask again; tell them it is still working, or that their computer may be shut.'
-        : `Asked their computer to sign in to ${portalId} and fetch it again. This takes about a ` +
-          'minute and only runs while that computer is on. Answer now from what you already have, ' +
-          'and say that fresher data is on the way.',
+        ? `Their computer is already signing in to ${portalId} and has not reported back yet. ` +
+          'Do not ask again. Tell them it is in progress, or that their computer may be shut.'
+        : `Their computer is signing in to ${portalId} now and will read it again. This takes ` +
+          'about a minute and only runs while that computer is awake. Say you are doing it -- ' +
+          'you are -- then answer from what you already have and note that the fresh version is ' +
+          'on the way. If they saved no sign-in for this site, it will come back needing one, ' +
+          'and then they add it in the app under Settings, Connections, Sites.',
     };
   },
 };

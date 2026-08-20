@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { condense, readSchoolPortal } from './portal.js';
+import { condense, readSchoolPortal, refreshSchoolPortal } from './portal.js';
 import type { PortalSnapshot, ToolContext } from './types.js';
 
 const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
@@ -90,5 +90,46 @@ describe('condense keeps a hostile portal from crowding out the conversation', (
     const many = Array.from({ length: 200 }, () => page({ a: 'y'.repeat(500) }));
     const { dropped } = condense(many, 3_000);
     expect(dropped).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The tool has to read as something the agent can do. A student asking it to
+ * go and check a site should not be told it is unable to -- it is not.
+ */
+describe('what the refresh tool tells the model', () => {
+  it('describes itself as able to sign in, not as a request for someone else', () => {
+    const text = refreshSchoolPortal.description.toLowerCase();
+    expect(text).toContain('you can do this');
+    expect(text).toContain('sign in');
+    expect(text).not.toMatch(/cannot|unable|not able/);
+  });
+
+  it('is clear it returns no data, so an empty result is not read as failure', () => {
+    expect(refreshSchoolPortal.description.toLowerCase()).toContain('does not hand the data back');
+  });
+
+  it('tells the model to say it is doing it', async () => {
+    const ctx = {
+      userId: 'u1',
+      agentId: 'a1',
+      portals: { latest: async () => [], requestRefresh: async () => ({ alreadyPending: false }) },
+    } as unknown as ToolContext;
+    const result = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
+      note: string;
+    };
+    expect(result.note).toMatch(/signing in/i);
+    expect(result.note).toMatch(/say you are doing it/i);
+  });
+
+  it('points at linking a computer rather than claiming inability', async () => {
+    const result = (await refreshSchoolPortal.execute({ portalId: 'x' }, {
+      userId: 'u',
+      agentId: 'a',
+    } as ToolContext)) as {
+      reason: string;
+    };
+    expect(result.reason).toMatch(/link this computer/i);
+    expect(result.reason).toMatch(/not that you are unable/i);
   });
 });

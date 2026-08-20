@@ -14,8 +14,6 @@ contextBridge.exposeInMainWorld('contexto', {
   signIn: () => ipcRenderer.invoke('signIn'),
   addPortal: (portal) => ipcRenderer.invoke('addPortal', portal),
   removePortal: (id) => ipcRenderer.invoke('removePortal', id),
-  beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
-  finishLogin: (id) => ipcRenderer.invoke('finishLogin', id),
   syncPortal: (id) => ipcRenderer.invoke('syncPortal', id),
   saveCredentials: (id, creds) => ipcRenderer.invoke('saveCredentials', id, creds),
   hasCredentials: (id) => ipcRenderer.invoke('hasCredentials', id),

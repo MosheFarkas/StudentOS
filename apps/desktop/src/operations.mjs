@@ -8,12 +8,9 @@
  */
 
 import { PortalBrowser } from './browser.mjs';
-import { readCredentials } from './credentials.mjs';
+import { readCredentials, saveCredentials } from './credentials.mjs';
 import { explore } from './explorer.mjs';
 import { DeviceUnlinked, pushSnapshot, readConfig, writeConfig } from './sync.mjs';
-
-/** Login windows currently open, keyed by portal. Not persisted. */
-const openLogins = new Map();
 
 /** Syncs currently running, keyed by portal. */
 const inFlight = new Map();
@@ -73,6 +70,40 @@ export function addPortal({ name, url }) {
   return portal;
 }
 
+/**
+ * Add a site and get it working, in one action.
+ *
+ * Adding a site and signing into it were two steps, and the gap between them
+ * was where it went wrong: a site could sit in the list looking added while
+ * never having fetched anything. Now the sign-in is part of adding, and the
+ * result says which of the three things happened -- signed in and synced,
+ * signed in but nothing there, or the site refused the sign-in.
+ */
+export async function addSiteWithSignIn({ name, url, username, password }) {
+  const portal = addPortal({ name, url });
+  try {
+    saveCredentials(portal.id, { username, password });
+  } catch (error) {
+    removePortal(portal.id);
+    throw error;
+  }
+
+  const signedIn = await autoSignIn(portal.id);
+  if (!signedIn.ok) {
+    return { portal, signedIn: false, reason: signedIn.reason ?? 'the site refused that sign-in' };
+  }
+
+  // Where the site actually lives is only knowable once there is a session --
+  // the address a student pastes is often the sign-in page.
+  const landed = await resolvePortalAddress(portal.id);
+  if (!landed.needsLogin && landed.origin) {
+    updatePortal(portal.id, { url: landed.url, origin: landed.origin });
+  }
+
+  const result = await syncPortal(portal.id);
+  return { portal, signedIn: true, synced: true, result };
+}
+
 export function removePortal(portalId) {
   const config = readConfig();
   writeConfig({ ...config, portals: (config.portals ?? []).filter((p) => p.id !== portalId) });
@@ -90,24 +121,6 @@ function updatePortal(portalId, patch) {
     ...config,
     portals: (config.portals ?? []).map((p) => (p.id === portalId ? { ...p, ...patch } : p)),
   });
-}
-
-/**
- * Open a browser for the student to log in with.
- *
- * Deliberately not awaited to completion: there is no way to detect "the
- * student has finished logging in" from outside, and guessing would close the
- * window mid two-factor. The caller signals completion instead.
- */
-export async function beginLogin(portalId) {
-  const portal = listPortals().find((p) => p.id === portalId);
-  if (!portal) throw new Error(`No portal called ${portalId}`);
-  if (openLogins.has(portalId)) return { alreadyOpen: true };
-
-  const browser = new PortalBrowser({ portalId, mode: 'login', startUrl: portal.url });
-  await browser.launch();
-  openLogins.set(portalId, browser);
-  return { alreadyOpen: false };
 }
 
 /**
@@ -243,7 +256,17 @@ export async function autoSignIn(portalId) {
     );
     if (result.value !== 'submitted') {
       await browser.close();
-      return { attempted: true, ok: false, reason: result.value };
+      // These come back as short codes from the page script; a student should
+      // read why it did not work, not the name of the thing that was missing.
+      const explained = {
+        'no-password-field': 'that address has no sign-in form on it',
+        'no-username-field': 'the sign-in form there has no username box this could fill',
+      };
+      return {
+        attempted: true,
+        ok: false,
+        reason: explained[result.value] ?? 'the sign-in form could not be filled in',
+      };
     }
 
     // Let the sign-in land, then ask the same question a person would: are we
@@ -269,33 +292,6 @@ export async function autoSignIn(portalId) {
     // end up echoed back.
     return { attempted: true, ok: false, reason: 'the sign-in could not be completed' };
   }
-}
-
-/** Close the login window gracefully, which is what persists the session. */
-export async function finishLogin(portalId) {
-  const browser = openLogins.get(portalId);
-  if (!browser) return { closed: false };
-  openLogins.delete(portalId);
-  await browser.close();
-
-  const landed = await resolvePortalAddress(portalId);
-  if (landed.needsLogin) {
-    // Still at a sign-in page, so the login did not take. Saying so now beats
-    // a sync that reports an empty portal for a reason the student cannot see.
-    updatePortal(portalId, {
-      loggedInAt: null,
-      lastError: 'That sign-in did not stick — the portal still asks for a password.',
-    });
-    return { closed: true, needsLogin: true };
-  }
-
-  updatePortal(portalId, {
-    loggedInAt: new Date().toISOString(),
-    lastError: null,
-    url: landed.url,
-    origin: landed.origin,
-  });
-  return { closed: true, needsLogin: false, origin: landed.origin };
 }
 
 /**

@@ -37,7 +37,7 @@ function portalRow(portal) {
   const result = portal.lastResult;
 
   const detail = !portal.loggedInAt
-    ? 'Not signed in yet'
+    ? 'Sign-in did not work'
     : result
       ? `${
           result.withData === 0
@@ -53,9 +53,10 @@ function portalRow(portal) {
   const actions = !portal.loggedInAt
     ? [
         el('button', {
-          text: busy.has(`login:${portal.id}`) ? 'Opening…' : 'Sign in',
-          disabled: busy.has(`login:${portal.id}`) ? 'true' : null,
-          onclick: () => void beginLogin(portal),
+          text: syncing ? 'Trying…' : 'Try again',
+          disabled: syncing,
+          onclick: () =>
+            void call(() => window.contexto.syncPortal(portal.id), `sync:${portal.id}`),
         }),
       ]
     : [
@@ -114,56 +115,17 @@ function portalRow(portal) {
   ]);
 }
 
-/** Two steps, because nothing outside the browser can tell when a login finished. */
-async function beginLogin(portal) {
-  const started = await call(() => window.contexto.beginLogin(portal.id), `login:${portal.id}`);
-  if (!started.ok) return;
-
-  const done = el('div', { class: 'panel' }, [
-    el('h2', { text: `Signing in to ${portal.name}` }),
-    el('p', {
-      class: 'muted small',
-      text:
-        'A browser window is open. Sign in the way you normally would, including two-factor. ' +
-        'Then come back here.',
-    }),
-    el('button', {
-      class: 'primary',
-      text: "I'm signed in",
-      onclick: async () => {
-        const finished = await call(
-          () => window.contexto.finishLogin(portal.id),
-          `finish:${portal.id}`,
-        );
-        // Syncing after a sign-in that did not take just records an empty
-        // portal, which reads to the student as "there is nothing here".
-        if (finished.ok && finished.value?.needsLogin) {
-          const { cookies = 0, google = false } = finished.value;
-          alert(
-            cookies <= 2 && !google
-              ? 'No sign-in happened in the window ContextoAgent opened.\n\n' +
-                  'That window is a separate Chrome profile — it looks exactly like your ' +
-                  'normal browser but is signed out of everything, including Google. ' +
-                  'Being signed in elsewhere does not count.\n\n' +
-                  'Open it again and sign in inside that window, all the way through Google, ' +
-                  'until you can see your courses.'
-              : 'The site still asks for a password after signing in. It may have rejected the ' +
-                  'login, or it signs you out again straight away.',
-          );
-          return;
-        }
-        await call(() => window.contexto.syncPortal(portal.id), `sync:${portal.id}`);
-      },
-    }),
-  ]);
-  app.replaceChildren(done);
-}
-
 function addPortalPanel() {
   const name = el('input', { placeholder: 'Veracross', 'aria-label': 'Site name' });
   const url = el('input', {
     placeholder: 'https://portals.veracross.com/lcc/student',
     'aria-label': 'Site address',
+  });
+  const username = el('input', { placeholder: 'Username', 'aria-label': 'Username' });
+  const password = el('input', {
+    type: 'password',
+    placeholder: 'Password',
+    'aria-label': 'Password',
   });
 
   return el('div', { class: 'panel' }, [
@@ -173,16 +135,28 @@ function addPortalPanel() {
       text: 'The page you normally land on after signing in — not the sign-in page itself. Copy it from your browser.',
     }),
     el('div', { class: 'row' }, [name, url]),
+    el('div', { class: 'row', style: 'margin-top:.5rem' }, [username, password]),
     el('div', { class: 'row', style: 'margin-top:.6rem' }, [
       el('button', {
         class: 'primary',
-        text: 'Add',
+        text: 'Add and sign in',
         onclick: () => {
-          if (!name.value.trim() || !url.value.trim()) return alert('Both fields are needed.');
+          if (!name.value.trim() || !url.value.trim())
+            return alert('A name and address are needed.');
+          if (!username.value.trim() || !password.value)
+            return alert('A username and password are needed.');
           void call(
-            () => window.contexto.addPortal({ name: name.value.trim(), url: url.value.trim() }),
+            () =>
+              window.contexto.addPortal({
+                name: name.value.trim(),
+                url: url.value.trim(),
+                username: username.value.trim(),
+                password: password.value,
+              }),
             'add',
           );
+          // Cleared the moment it is handed over.
+          password.value = '';
         },
       }),
     ]),
