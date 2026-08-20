@@ -240,18 +240,24 @@ export function syncPortal(portalId, options = {}) {
   return coalesce(inFlight, portalId, () => runSync(portalId, options));
 }
 
-async function runSync(portalId, { budget = 40 } = {}) {
+async function runSync(portalId, { budget = 40, retried = false } = {}) {
   const config = readConfig();
   if (!config.token) throw new Error('This computer is not linked yet.');
   const portal = (config.portals ?? []).find((p) => p.id === portalId);
   if (!portal) throw new Error(`No portal called ${portalId}`);
 
   /*
-   * A remembered sign-in makes an expired session self-healing.
+   * A remembered sign-in makes a dead session self-healing.
+   *
+   * Checking loggedInAt was not enough: a session can be gone while that flag
+   * still says otherwise -- it expired, the site signed us out, or the
+   * browser itself changed and took its cookie store with it. The crawl is
+   * the only thing that actually knows, so the recovery happens after it
+   * rather than before, and only once.
    *
    * Without this the student finds out days later, when they ask the agent
-   * something and it says the site needs signing into again -- which is a
-   * worse way to learn it than never noticing at all.
+   * something and it says the site needs signing into again -- a worse way to
+   * learn it than never noticing at all.
    */
   if (!portal.loggedInAt && readCredentials(portalId)) {
     const recovered = await autoSignIn(portalId);
@@ -273,6 +279,17 @@ async function runSync(portalId, { budget = 40 } = {}) {
       { apiBase: config.apiBase ?? 'https://contextoagent.ai', token: config.token },
       { portalId, origin: portal.origin, map, redacted: map.redacted },
     );
+
+    /*
+     * The crawl found a sign-in page. If there is a saved sign-in, use it and
+     * look again -- once. Reporting an empty site when the means to fix it is
+     * sitting in the keychain is the wrong answer.
+     */
+    if (map.needsLogin && !retried && readCredentials(portalId)) {
+      await browser.close();
+      const recovered = await autoSignIn(portalId);
+      if (recovered.ok) return runSync(portalId, { budget, retried: true });
+    }
 
     const components = map.pages.flatMap((p) => p.components);
     const withData = components.filter((c) => c.empty === false);
