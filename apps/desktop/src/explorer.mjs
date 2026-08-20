@@ -221,7 +221,21 @@ export async function explore(
       needsLogin = true;
       break;
     }
-    pages.push({ url: page.url, title: page.title, components: page.components });
+    /*
+     * The visible text is kept, not just the JSON.
+     *
+     * Only sites that render themselves from an API leave components behind.
+     * A server-rendered portal -- which most are -- produces none at all, and
+     * dropping its text meant the agent received a list of page titles and
+     * nothing to read. Measured on four live sites: two returned JSON, two
+     * returned none and would have arrived empty.
+     */
+    pages.push({
+      url: page.url,
+      title: page.title,
+      text: raw ? page.text : undefined,
+      components: page.components,
+    });
     onPage?.(page);
     for (const link of inScopeLinks(page.links, origin, seen)) queue.push(link);
   }

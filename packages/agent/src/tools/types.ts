@@ -67,6 +67,8 @@ export interface ToolContext {
 export interface PortalPage {
   url: string;
   title: string;
+  /** What the page actually says. Present for sites that render on the server. */
+  text?: string;
   components: {
     url: string;
     status: number;

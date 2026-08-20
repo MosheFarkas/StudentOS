@@ -125,3 +125,52 @@ describe('readSchoolPortal', () => {
     expect(result.reason).toMatch(/mozaik/);
   });
 });
+
+describe('server-rendered sites', () => {
+  const withText = (text: string): PortalPage => ({
+    url: 'https://portal.test/grades',
+    title: 'Grades',
+    text,
+    components: [],
+  });
+
+  it('keeps a page that has words but no JSON behind it', () => {
+    // Most portals render on the server. Judging a page by its components
+    // alone discarded every page such a site had.
+    const { kept, dropped } = condense([withText('Maths 82%  English 74%')]);
+    expect(dropped).toBe(0);
+    expect(JSON.stringify(kept)).toContain('Maths 82%');
+  });
+
+  it('still drops a page that has neither', () => {
+    const { kept, dropped } = condense([withText('   ')]);
+    expect(kept).toHaveLength(0);
+    expect(dropped).toBe(1);
+  });
+
+  it('keeps both the text and the JSON when a page has both', () => {
+    const page: PortalPage = {
+      url: 'https://portal.test/x',
+      title: 'Both',
+      text: 'visible words',
+      components: [
+        {
+          url: 'https://portal.test/api',
+          status: 200,
+          method: 'GET',
+          shape: { a: 1 },
+          empty: false,
+        },
+      ],
+    };
+    const json = JSON.stringify(condense([page]).kept);
+    expect(json).toContain('visible words');
+    expect(json).toContain('"a"');
+  });
+
+  it('stays inside its budget when the text is enormous', () => {
+    const huge = Array.from({ length: 100 }, () => withText('x'.repeat(50_000)));
+    const { kept } = condense(huge, 14_000);
+    expect(JSON.stringify(kept).length).toBeLessThanOrEqual(14_000);
+  });
+});

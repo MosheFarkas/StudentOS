@@ -30,17 +30,27 @@ export function condense(pages: PortalPage[], budget = MAX_CHARS) {
   let dropped = 0;
 
   for (const page of pages) {
-    // A page whose components all came back empty carries no information and
-    // is common out of term. Listing them would spend the budget on nothing.
     const withData = page.components.filter((c) => c.empty !== true && c.shape !== null);
-    if (withData.length === 0) {
+    const text = page.text?.trim();
+
+    /*
+     * A page counts if it has JSON or if it has words.
+     *
+     * Only sites built on an API leave components behind; a server-rendered
+     * portal has none, and judging it by components alone threw away every
+     * page it had. Both kinds of site have to arrive here intact.
+     */
+    if (withData.length === 0 && !text) {
       dropped += 1;
       continue;
     }
     const entry = {
       page: page.title || page.url,
       url: page.url,
-      data: withData.map((c) => ({ from: c.url, content: c.shape })),
+      ...(text ? { text } : {}),
+      ...(withData.length > 0
+        ? { data: withData.map((c) => ({ from: c.url, content: c.shape })) }
+        : {}),
     };
     const size = JSON.stringify(entry).length;
     if (used + size > budget) {
