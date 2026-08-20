@@ -276,59 +276,103 @@ describe('removing a site', () => {
 });
 
 describe('the agent asking a computer to look again', () => {
-  it('queues work the device can then collect', async () => {
+  /** Stand in for the desktop app: collect the work and report an outcome. */
+  async function actAsDevice(deviceToken: string, outcome: 'synced' | 'needs_login' | 'failed') {
+    for (let i = 0; i < 40; i += 1) {
+      const work = (await (
+        await app.request('/api/devices/pending', {
+          headers: { Authorization: `Bearer ${deviceToken}` },
+        })
+      ).json()) as { id: string }[];
+      if (work.length > 0) {
+        await app.request(
+          `/api/devices/pending/${work[0]!.id}/complete`,
+          post({ outcome }, deviceToken),
+        );
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return false;
+  }
+
+  it('waits for the computer and hands back the site, not a promise', async () => {
+    // The whole point of the change: the agent stays on the job. Returning
+    // "it will be ready shortly" and stopping is describing the work, not
+    // doing it.
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    await pushRealMap(device.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: '22222222-2222-4222-8222-222222222222',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    const running = refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+    expect(await actAsDevice(device.token, 'synced')).toBe(true);
+
+    const result = (await running) as {
+      finished: boolean;
+      signedIn: boolean;
+      pages: unknown[];
+      note: string;
+    };
+    expect(result.finished).toBe(true);
+    expect(result.signedIn).toBe(true);
+    expect(result.pages.length).toBeGreaterThan(0);
+    // The note must read as a finished job, not a pending one -- that is the
+    // whole behaviour change.
+    expect(result.note).toMatch(/already happened/i);
+    expect(result.note).toMatch(/right now/i);
+    expect(result.note).not.toMatch(/will be|shortly|in a minute|coming/i);
+  });
+
+  it('says the sign-in was refused rather than inventing a delay', async () => {
     const alice = await createUser();
     const device = await linkedDevice(alice.token);
     const ctx = {
       userId: alice.id,
-      agentId: 'a1',
+      agentId: '22222222-2222-4222-8222-222222222222',
       portals: new DbPortalSnapshots(db),
     } as unknown as ToolContext;
 
-    const queued = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
-      queued: boolean;
-      alreadyPending: boolean;
-    };
-    expect(queued.queued).toBe(true);
-    expect(queued.alreadyPending).toBe(false);
+    const running = refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+    await actAsDevice(device.token, 'needs_login');
+
+    const result = (await running) as { finished: boolean; signedIn: boolean; note: string };
+    expect(result.signedIn).toBe(false);
+    expect(result.note).toMatch(/would not accept the saved sign-in/i);
+    expect(result.note).toMatch(/no such thing here/i);
+  });
+
+  it('queues the work the device can collect', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    void new DbPortalSnapshots(db).requestRefresh(alice.id, 'veracross');
+    await new Promise((r) => setTimeout(r, 100));
 
     const work = (await (
       await app.request('/api/devices/pending', {
         headers: { Authorization: `Bearer ${device.token}` },
       })
-    ).json()) as { id: string; portalId: string }[];
+    ).json()) as { portalId: string }[];
     expect(work.map((w) => w.portalId)).toEqual(['veracross']);
   });
 
   it('does not queue the same site twice', async () => {
-    // An agent asking twice in one conversation must not make a laptop open
-    // two browsers.
     const alice = await createUser();
     await linkedDevice(alice.token);
-    const ctx = {
-      userId: alice.id,
-      agentId: 'a1',
-      portals: new DbPortalSnapshots(db),
-    } as unknown as ToolContext;
-
-    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
-    const second = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
-      alreadyPending: boolean;
-    };
-    expect(second.alreadyPending).toBe(true);
+    const source = new DbPortalSnapshots(db);
+    await source.requestRefresh(alice.id, 'veracross');
+    expect((await source.requestRefresh(alice.id, 'veracross')).alreadyPending).toBe(true);
   });
 
   it("never hands one student's work to another's device", async () => {
     const alice = await createUser();
     const bob = await createUser();
     const bobDevice = await linkedDevice(bob.token);
-    const aliceCtx = {
-      userId: alice.id,
-      agentId: 'a1',
-      portals: new DbPortalSnapshots(db),
-    } as unknown as ToolContext;
-
-    await refreshSchoolPortal.execute({ portalId: 'veracross' }, aliceCtx);
+    await new DbPortalSnapshots(db).requestRefresh(alice.id, 'veracross');
 
     const work = (await (
       await app.request('/api/devices/pending', {
@@ -341,23 +385,8 @@ describe('the agent asking a computer to look again', () => {
   it('drops off the list once the device reports back', async () => {
     const alice = await createUser();
     const device = await linkedDevice(alice.token);
-    const ctx = {
-      userId: alice.id,
-      agentId: 'a1',
-      portals: new DbPortalSnapshots(db),
-    } as unknown as ToolContext;
-    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
-
-    const [item] = (await (
-      await app.request('/api/devices/pending', {
-        headers: { Authorization: `Bearer ${device.token}` },
-      })
-    ).json()) as { id: string }[];
-
-    await app.request(
-      `/api/devices/pending/${item!.id}/complete`,
-      post({ outcome: 'synced' }, device.token),
-    );
+    await new DbPortalSnapshots(db).requestRefresh(alice.id, 'veracross');
+    await actAsDevice(device.token, 'synced');
 
     const after = (await (
       await app.request('/api/devices/pending', {
@@ -366,50 +395,29 @@ describe('the agent asking a computer to look again', () => {
     ).json()) as unknown[];
     expect(after).toEqual([]);
   });
-
-  it('tells the agent plainly when no computer is linked', async () => {
-    const alice = await createUser();
-    const ctx = {
-      userId: alice.id,
-      agentId: 'a1',
-      portals: new DbPortalSnapshots(db),
-    } as unknown as ToolContext;
-    // Queuing still succeeds -- there is simply nothing to collect it.
-    const result = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
-      queued: boolean;
-    };
-    expect(result.queued).toBe(true);
-  });
 });
 
 describe('which conversation the work belongs to', () => {
   it('remembers the agent that asked, so its browser shows there', async () => {
     const alice = await createUser();
     const device = await linkedDevice(alice.token);
-    const ctx = {
-      userId: alice.id,
-      agentId: '11111111-1111-4111-8111-111111111111',
-      portals: new DbPortalSnapshots(db),
-    } as unknown as ToolContext;
-
-    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+    await new DbPortalSnapshots(db).requestRefresh(
+      alice.id,
+      'veracross',
+      '11111111-1111-4111-8111-111111111111',
+    );
     const work = (await (
       await app.request('/api/devices/pending', {
         headers: { Authorization: `Bearer ${device.token}` },
       })
     ).json()) as { agentId: string | null }[];
-
     expect(work[0]?.agentId).toBe('11111111-1111-4111-8111-111111111111');
   });
 
   it('leaves it empty for work nobody asked for', async () => {
-    // A scheduled sync has no conversation to belong to, and showing its
-    // browser in one would be something appearing rather than something the
-    // student started.
     const alice = await createUser();
     const device = await linkedDevice(alice.token);
     await new DbPortalSnapshots(db).requestRefresh(alice.id, 'veracross');
-
     const work = (await (
       await app.request('/api/devices/pending', {
         headers: { Authorization: `Bearer ${device.token}` },

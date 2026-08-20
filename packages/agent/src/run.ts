@@ -191,6 +191,10 @@ export const SIGN_IN_SECTION =
   'makes their computer sign in again and fetch it fresh. When they ask you to log in to a ' +
   'site, check one, or get up-to-date information, call portal_refresh -- that IS logging in, ' +
   'done by their machine with the sign-in they saved.\n' +
+  'portal_refresh waits for the work and returns the site itself, so finish the job in this ' +
+  'turn: call it, read what comes back, and answer the question. Never end your turn having ' +
+  'promised something for later -- if you have the result, use it, and if their computer did ' +
+  'not answer, say that plainly instead.\n' +
   'Never say you cannot handle a password, cannot log in, or that they must sign in by hand. ' +
   'None of it is true here and there is no manual sign-in to send them to. If a site genuinely ' +
   'has no saved sign-in, say so plainly and tell them where to add it: the ContextoAgent app, ' +

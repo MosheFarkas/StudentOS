@@ -103,7 +103,18 @@ export interface PortalSnapshotSource {
     userId: string,
     portalId: string,
     agentId?: string,
-  ): Promise<{ alreadyPending: boolean }>;
+  ): Promise<{ alreadyPending: boolean; requestId?: string }>;
+  /**
+   * Wait for a queued refresh to finish.
+   *
+   * The agent stays on the job rather than promising and stopping. Resolves
+   * with what the computer made of it, or with waited:false when the wait ran
+   * out -- a shut laptop is a real answer, just not the one hoped for.
+   */
+  awaitRefresh(
+    requestId: string,
+    timeoutMs: number,
+  ): Promise<{ finished: boolean; outcome?: string | null }>;
 }
 
 /**

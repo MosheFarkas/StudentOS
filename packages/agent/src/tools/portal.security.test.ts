@@ -8,7 +8,8 @@ const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
     agentId: 'a1',
     portals: {
       latest: async () => snapshots,
-      requestRefresh: async () => ({ alreadyPending: false }),
+      requestRefresh: async () => ({ alreadyPending: false, requestId: 'r1' }),
+      awaitRefresh: async () => ({ finished: true, outcome: 'synced' }),
     },
   }) as ToolContext;
 
@@ -105,21 +106,13 @@ describe('what the refresh tool tells the model', () => {
     expect(text).not.toMatch(/cannot|unable|not able/);
   });
 
-  it('is clear it returns no data, so an empty result is not read as failure', () => {
-    expect(refreshSchoolPortal.description.toLowerCase()).toContain('does not hand the data back');
-  });
-
-  it('tells the model to say it is doing it', async () => {
-    const ctx = {
-      userId: 'u1',
-      agentId: 'a1',
-      portals: { latest: async () => [], requestRefresh: async () => ({ alreadyPending: false }) },
-    } as unknown as ToolContext;
-    const result = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
-      note: string;
-    };
-    expect(result.note).toMatch(/signing in/i);
-    expect(result.note).toMatch(/say you are doing it/i);
+  it('is clear it returns the site itself, having waited for it', () => {
+    // It used to queue and return a receipt, which made the agent answer "that
+    // will be ready shortly" and stop. Describing the work is not doing it.
+    const text = refreshSchoolPortal.description.toLowerCase();
+    expect(text).toContain('waits for the sign-in');
+    expect(text).toContain('hands you the pages');
+    expect(text).toMatch(/the work is done/);
   });
 
   it('points at linking a computer rather than claiming inability', async () => {
@@ -150,7 +143,8 @@ describe('what the read tool says when a site needs signing in', () => {
             pages: [],
           },
         ],
-        requestRefresh: async () => ({ alreadyPending: false }),
+        requestRefresh: async () => ({ alreadyPending: false, requestId: 'r1' }),
+        awaitRefresh: async () => ({ finished: true, outcome: 'synced' }),
       },
     } as unknown as ToolContext;
 

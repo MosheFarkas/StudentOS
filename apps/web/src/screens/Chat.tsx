@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AgentSession } from './AgentSession.js';
+import { useAgentSession } from '../lib/useAgentSession.js';
 import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import type { PreviewTarget } from '../lib/preview.js';
@@ -22,6 +23,7 @@ export function Chat({ agentId, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
@@ -148,7 +150,24 @@ export function Chat({ agentId, onBack }: Props) {
               </div>
             ))}
 
-            {sending && <p className="muted">Thinking…</p>}
+            {sending && (
+              /*
+               * What it is doing, not just that it is doing something. A
+               * minute of "Thinking" while a browser signs into a school
+               * account reads as a hang; naming the site makes the same wait
+               * legible.
+               */
+              <p className="muted thinking">
+                {session.active && session.portalId
+                  ? `Signing in to ${session.portalId} and reading it`
+                  : 'Thinking'}
+                <span className="dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </p>
+            )}
             <div ref={bottom} />
           </div>
 

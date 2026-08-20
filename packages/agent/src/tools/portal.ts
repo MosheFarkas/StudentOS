@@ -5,6 +5,15 @@ import { unavailable } from './types.js';
 const MAX_CHARS = 14_000;
 
 /**
+ * How long to stay with a refresh before giving up on it.
+ *
+ * Long enough for a computer that is awake to sign in and read a site, short
+ * enough that a shut one does not hold the conversation open. Past this the
+ * honest answer is that their machine is not there.
+ */
+const REFRESH_WAIT_MS = 75_000;
+
+/**
  * Portal content is UNTRUSTED in the same way mail and web pages are.
  *
  * Most of it is written by teachers, which is not the same as safe. An
@@ -175,9 +184,10 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
     'holds the username and password they saved, and this makes it sign in and read the site ' +
     'again. Use it whenever they ask you to go and check a site, log in to one, or get up-to-date ' +
     'information, and whenever portal_read comes back empty or says the sign-in expired. ' +
-    'The one thing to be clear about: it does not hand the data back to you here. The work takes ' +
-    'about a minute and only runs while their computer is awake, so answer now from what you ' +
-    'already have and say the fresh version is coming.',
+    'It returns the site as it stands right now: it waits for the sign-in and the read to ' +
+    'finish, then hands you the pages. By the time you are reading the result the work is done, ' +
+    'so answer from it. If their computer is asleep it says so, and that is worth telling them ' +
+    'plainly.',
   inputSchema: refreshInput,
 
   async execute({ portalId }, ctx) {
@@ -188,20 +198,82 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
       );
     }
 
-    // The agent id travels with the request so the browser it opens can be
-    // shown in this conversation and nowhere else.
-    const { alreadyPending } = await ctx.portals.requestRefresh(ctx.userId, portalId, ctx.agentId);
+    const { alreadyPending, requestId } = await ctx.portals.requestRefresh(
+      ctx.userId,
+      portalId,
+      // The agent id travels with the request so the browser it opens shows
+      // in this conversation and nowhere else.
+      ctx.agentId,
+    );
+
+    /*
+     * Wait for it, rather than promising and stopping.
+     *
+     * Queuing and returning made the agent answer "that will be ready in a
+     * minute" and end its turn, which is not doing the task -- it is
+     * describing someone else doing it. The student asked for the
+     * information. So this stays on the job until the computer reports back,
+     * and only gives up when waiting has genuinely stopped being useful.
+     */
+    const waited = requestId
+      ? await ctx.portals.awaitRefresh(requestId, REFRESH_WAIT_MS)
+      : { finished: false };
+
+    if (!waited.finished) {
+      return {
+        finished: false,
+        note:
+          `Their computer has not reported back on ${portalId} yet. It is most likely asleep or ` +
+          'shut. Tell them plainly that it needs to be awake for you to read that site, and ' +
+          'answer now from whatever you already have.',
+      };
+    }
+
+    if (waited.outcome === 'needs_login') {
+      return {
+        finished: true,
+        signedIn: false,
+        note:
+          `Their computer tried ${portalId} and the site would not accept the saved sign-in. ` +
+          'Say so directly. They can fix it in the ContextoAgent app under Settings, ' +
+          'Connections, Sites. Do not tell them to sign in by hand elsewhere -- there is no ' +
+          'such thing here.',
+      };
+    }
+
+    if (waited.outcome !== 'synced') {
+      return {
+        finished: true,
+        signedIn: false,
+        note: `Their computer could not read ${portalId} just now. Say so and offer to try again.`,
+      };
+    }
+
+    /*
+     * Hand back the data itself, not a receipt for it.
+     *
+     * The refresh exists to answer a question. Returning "done, now call
+     * portal_read" spends another turn and gives the student a second pause
+     * for no reason.
+     */
+    const snapshots = await ctx.portals.latest(ctx.userId);
+    const fresh = snapshots.find((s) => s.portalId === portalId);
+    if (!fresh) {
+      return { finished: true, note: `Signed in to ${portalId}, but it returned nothing to read.` };
+    }
+
+    const { kept, dropped } = condense(fresh.pages);
     return {
-      queued: true,
-      alreadyPending,
-      note: alreadyPending
-        ? `Their computer is already signing in to ${portalId} and has not reported back yet. ` +
-          'Do not ask again. Tell them it is in progress, or that their computer may be shut.'
-        : `Their computer is signing in to ${portalId} now and will read it again. This takes ` +
-          'about a minute and only runs while that computer is awake. Say you are doing it -- ' +
-          'you are -- then answer from what you already have and note that the fresh version is ' +
-          'on the way. If they saved no sign-in for this site, it will come back needing one, ' +
-          'and then they add it in the app under Settings, Connections, Sites.',
+      finished: true,
+      signedIn: true,
+      note:
+        UNTRUSTED_NOTE +
+        ` This is ${portalId} as it stands right now: you signed in and read it just now. ` +
+        'Answer the question from what is here. It has already happened.',
+      capturedAt: fresh.capturedAt,
+      pages: kept,
+      ...(dropped > 0 ? { pagesOmitted: dropped } : {}),
+      ...(alreadyPending ? { note2: 'A refresh was already running; this is its result.' } : {}),
     };
   },
 };

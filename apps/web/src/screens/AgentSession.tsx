@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { desktop } from '../lib/desktop.js';
+import { useAgentSession } from '../lib/useAgentSession.js';
 
 /**
  * The browser the agent is driving, shown while it works.
@@ -19,7 +20,7 @@ import { desktop } from '../lib/desktop.js';
  */
 export function AgentSession({ agentId }: { agentId: string }) {
   const bridge = desktop();
-  const [active, setActive] = useState(false);
+  const { active } = useAgentSession(agentId);
   const [expanded, setExpanded] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
@@ -31,21 +32,8 @@ export function AgentSession({ agentId }: { agentId: string }) {
   }, [bridge]);
 
   useEffect(() => {
-    bridge?.onSiteSession?.((payload) => {
-      /*
-       * Only this conversation's work. A browser signing into a school
-       * account belongs where it was asked for -- floating it over whatever
-       * the student happens to be looking at makes it something that appeared
-       * rather than something they started.
-       *
-       * A scheduled sync carries no agent and shows nowhere; nobody asked for
-       * it and there is no conversation for it to belong to.
-       */
-      if (payload.active && payload.agentId !== agentId) return;
-      setActive(payload.active);
-      if (!payload.active) setExpanded(false);
-    });
-  }, [bridge, agentId]);
+    if (!active) setExpanded(false);
+  }, [active]);
 
   useEffect(() => {
     if (!active) {

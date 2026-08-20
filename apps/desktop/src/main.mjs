@@ -44,11 +44,16 @@ const STALE_AFTER_MS = 60 * 60 * 1000;
 /**
  * How often to ask whether the agent needs something fetched.
  *
- * A minute, because the student is usually waiting on the answer when this
- * fires -- they asked their agent a question and it wants fresher data. The
- * six-hourly sync is the background job; this is the doorbell.
+ * Three seconds, because the agent now waits for the answer instead of
+ * promising one. A minute of that wait spent before the work even starts is a
+ * minute of the student watching nothing happen.
+ *
+ * It is a poll because the work happens on a machine that reaches out to us
+ * and cannot be reached back. A tiny request every few seconds is cheaper
+ * than the machinery that would avoid it, and it stops entirely when nothing
+ * is linked.
  */
-const WORK_POLL_MS = 60 * 1000;
+const WORK_POLL_MS = 3 * 1000;
 
 let mainWindow = null;
 let tray = null;

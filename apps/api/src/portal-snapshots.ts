@@ -61,7 +61,7 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
     userId: string,
     portalId: string,
     agentId?: string,
-  ): Promise<{ alreadyPending: boolean }> {
+  ): Promise<{ alreadyPending: boolean; requestId?: string }> {
     // De-duplicated: an agent asked twice in a conversation should not make a
     // laptop open two browsers.
     const [pending] = await this.db
@@ -77,7 +77,7 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
       )
       .limit(1);
 
-    if (pending) return { alreadyPending: true };
+    if (pending) return { alreadyPending: true, requestId: pending.id };
 
     /*
      * The agent tag only decides which conversation shows the browser. If it
@@ -89,7 +89,37 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
       agentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId)
         ? agentId
         : null;
-    await this.db.insert(siteRefreshRequests).values({ userId, portalId, agentId: tag });
-    return { alreadyPending: false };
+    const [created] = await this.db
+      .insert(siteRefreshRequests)
+      .values({ userId, portalId, agentId: tag })
+      .returning({ id: siteRefreshRequests.id });
+    return { alreadyPending: false, requestId: created?.id };
+  }
+
+  async awaitRefresh(
+    requestId: string,
+    timeoutMs: number,
+  ): Promise<{ finished: boolean; outcome?: string | null }> {
+    const deadline = Date.now() + timeoutMs;
+    /*
+     * Polled rather than pushed. The work happens on a machine that reaches
+     * out to us and cannot be reached back, so there is nothing to listen to
+     * -- and a query on an indexed primary key every second is cheaper than
+     * the machinery that would avoid it.
+     */
+    while (Date.now() < deadline) {
+      const [row] = await this.db
+        .select({
+          completedAt: siteRefreshRequests.completedAt,
+          outcome: siteRefreshRequests.outcome,
+        })
+        .from(siteRefreshRequests)
+        .where(eq(siteRefreshRequests.id, requestId))
+        .limit(1);
+
+      if (row?.completedAt) return { finished: true, outcome: row.outcome };
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return { finished: false };
   }
 }
