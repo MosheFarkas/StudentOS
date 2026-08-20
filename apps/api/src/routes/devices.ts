@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
-import { and, desc, eq, gt, isNotNull, isNull, lt, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lt, ne, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { deviceLinkRequests, devices, disabledSites, portalSnapshots } from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
@@ -173,6 +173,30 @@ export function createDeviceRoutes(ctx: AppContext) {
           .returning({ id: devices.id });
 
         if (!created) throw new ContextoError('internal_error', 'Could not register this device.');
+
+        /*
+         * Linking again from the same machine replaces, rather than adds.
+         *
+         * A student who re-links -- after reinstalling, or because a session
+         * went wrong -- ends up with two rows of the same computer name, one
+         * of which can never sync again because its token exists nowhere.
+         * Both offer an Unlink button and neither says which is which.
+         *
+         * Matched on name because that is what identifies a machine to the
+         * person reading the list; the older row is revoked rather than
+         * deleted, so the history of what was linked when survives.
+         */
+        await ctx.db
+          .update(devices)
+          .set({ revokedAt: new Date() })
+          .where(
+            and(
+              eq(devices.userId, claimed.userId),
+              eq(devices.name, claimed.deviceName),
+              isNull(devices.revokedAt),
+              ne(devices.id, created.id),
+            ),
+          );
 
         /*
          * A session for the app, minted here rather than asked for again.

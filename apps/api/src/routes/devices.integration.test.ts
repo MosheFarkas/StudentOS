@@ -452,3 +452,77 @@ describe('refreshing a session from a device', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('linking the same machine again', () => {
+  it('replaces the old row instead of adding a second', async () => {
+    // Re-linking used to leave two rows with the same computer name, one of
+    // which could never sync because its token existed nowhere, and no way to
+    // tell them apart in Settings.
+    const alice = await createUser();
+    await linkDevice(alice.token, 'Lucass-MacBook-Air.local');
+    await linkDevice(alice.token, 'Lucass-MacBook-Air.local');
+
+    const listed = (await (await app.request('/api/devices', as(alice.token))).json()) as unknown[];
+    expect(listed).toHaveLength(1);
+  });
+
+  it('leaves the newest one working', async () => {
+    const alice = await createUser();
+    await linkDevice(alice.token, 'Mac');
+    const second = await linkDevice(alice.token, 'Mac');
+
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: {},
+        },
+        second.token,
+      ),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('stops the superseded one working', async () => {
+    const alice = await createUser();
+    const first = await linkDevice(alice.token, 'Mac');
+    await linkDevice(alice.token, 'Mac');
+
+    const res = await app.request(
+      '/api/devices/portal-snapshot',
+      json(
+        {
+          portalId: 'veracross',
+          origin: 'https://portals.veracross.com',
+          redacted: true,
+          capturedAt: new Date().toISOString(),
+          map: {},
+        },
+        first.token,
+      ),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('does not touch a genuinely different computer', async () => {
+    const alice = await createUser();
+    await linkDevice(alice.token, 'MacBook');
+    await linkDevice(alice.token, 'iMac');
+    const listed = (await (await app.request('/api/devices', as(alice.token))).json()) as unknown[];
+    expect(listed).toHaveLength(2);
+  });
+
+  it("does not touch another student's identically named machine", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    await linkDevice(bob.token, 'Mac');
+    await linkDevice(alice.token, 'Mac');
+
+    const bobs = (await (await app.request('/api/devices', as(bob.token))).json()) as unknown[];
+    expect(bobs).toHaveLength(1);
+  });
+});
