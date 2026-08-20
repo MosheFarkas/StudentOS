@@ -416,9 +416,18 @@ function attachSiteView(session) {
 
 function applySiteViewBounds() {
   if (!activeSession?.view) return;
-  // Off-screen until the page says where it wants it. Showing it at 0,0 first
-  // makes it flash across the whole window on every open.
-  activeSession.view.setBounds(siteViewBounds ?? { x: -10_000, y: 0, width: 10, height: 10 });
+  /*
+   * Hidden until the page says where it goes, rather than parked off-screen
+   * as a ten-pixel sliver. The sliver still counted as showing, so a missing
+   * bounds report looked like a browser that had loaded nothing -- an empty
+   * box, which is worse than no box.
+   */
+  if (!siteViewBounds) {
+    activeSession.view.setVisible(false);
+    return;
+  }
+  activeSession.view.setVisible(true);
+  activeSession.view.setBounds(siteViewBounds);
 }
 
 /**

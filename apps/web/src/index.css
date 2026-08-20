@@ -1049,29 +1049,54 @@ a.button {
   }
 }
 
-/* Closes the expansion, nothing else. Top left, away from anything a page
-   normally puts in that corner. */
+/*
+ * Closes the expansion, nothing else.
+ *
+ * Drawn as two lines rather than a multiplication sign: the glyph sits on the
+ * text baseline and is not centred in its own box, so a × in a circle is
+ * always a pixel or two low and slightly off to one side. Lines are centred
+ * because they are placed, not typeset.
+ */
 .agent-browser-close {
   position: absolute;
-  top: 0.6rem;
-  left: 0.6rem;
+  top: 0.65rem;
+  left: 0.65rem;
   z-index: 2;
-  width: 1.9rem;
-  height: 1.9rem;
-  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   border: 1px solid var(--line);
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.94);
-  color: var(--ink);
-  font-size: 1.05rem;
-  line-height: 1;
   cursor: pointer;
   display: grid;
   place-items: center;
-  padding: 0;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.agent-browser-close::before,
+.agent-browser-close::after {
+  content: '';
+  grid-area: 1 / 1;
+  width: 0.72rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--ink-soft);
+}
+
+.agent-browser-close::before {
+  transform: rotate(45deg);
+}
+
+.agent-browser-close::after {
+  transform: rotate(-45deg);
 }
 
 .agent-browser-close:hover {
   background: #fff;
+  border-color: var(--ink-faint);
 }
 
 @media (prefers-reduced-motion: reduce) {

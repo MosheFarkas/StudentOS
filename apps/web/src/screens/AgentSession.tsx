@@ -51,10 +51,16 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
   }, [bridge]);
 
   useEffect(() => {
-    if (!showing) {
-      void bridge?.setSiteViewBounds?.(null);
-      return;
-    }
+    /*
+     * Never clears the bounds on the way out.
+     *
+     * A panel unmounting used to push null, which parks the browser
+     * off-screen -- and moving between conversations mounts the new panel
+     * before the old one tears down, so the null arrived last and left an
+     * empty box where the page should be. Whether a browser is on screen is
+     * the app's business, not a component's; this only ever says where.
+     */
+    if (!showing) return;
     report();
     // A native view does not move with the document, so anything that changes
     // the layout has to push new bounds or the browser is left behind.
@@ -87,9 +93,7 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
             setExpanded(false);
           }}
           aria-label="Close"
-        >
-          ×
-        </button>
+        />
       )}
 
       <span className="agent-browser-label">

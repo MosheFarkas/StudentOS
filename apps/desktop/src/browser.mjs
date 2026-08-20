@@ -35,11 +35,25 @@ import { findBrowser } from './chrome.mjs';
  *    profile only ever holds a school-portal session.
  */
 
-const PROFILE_ROOT =
+const DEFAULT_PROFILE_ROOT =
   {
     darwin: () => join(homedir(), 'Library', 'Application Support', 'ContextoAgent', 'portals'),
     win32: () => join(process.env['APPDATA'] ?? homedir(), 'ContextoAgent', 'portals'),
   }[platform()] ?? (() => join(homedir(), '.config', 'contexto-agent', 'portals'));
+
+/**
+ * Where browser profiles live.
+ *
+ * Honours CONTEXTO_CONFIG_DIR for the same reason configPath does, and this
+ * was missed when that was added: a test set the variable, imported this
+ * module, and wrote its profile into the real install anyway. Half a fix,
+ * reported as a whole one, and it kept putting test directories in a
+ * student's app data every time the suite ran.
+ */
+const PROFILE_ROOT = () => {
+  const override = process.env['CONTEXTO_CONFIG_DIR'];
+  return override ? join(override, 'portals') : DEFAULT_PROFILE_ROOT();
+};
 
 export function profileDirFor(portalId) {
   if (!/^[a-z0-9-]+$/.test(portalId)) throw new Error(`Invalid portal id: ${portalId}`);
