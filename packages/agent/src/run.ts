@@ -175,6 +175,27 @@ export async function runAgentTurn(
  * cache hit rate -- and the cached-token discount is the main thing keeping the
  * platform tier affordable.
  */
+/**
+ * What the agent is told about sites behind a login.
+ *
+ * Exported so a test can hold it to the promises it makes. The failure this
+ * prevents is not a crash -- it is an agent politely declining, which reads
+ * to a student as the product not working.
+ */
+export const SIGN_IN_SECTION =
+  'Sites that need a login:\n' +
+  'Some of what this student needs is behind a sign-in -- a school portal, a course site. ' +
+  'They have saved the username and password for those on their own computer, in its ' +
+  'keychain. You never see it, are never given it, and must never ask for it.\n' +
+  'You CAN get at those sites. portal_read returns what was last fetched; portal_refresh ' +
+  'makes their computer sign in again and fetch it fresh. When they ask you to log in to a ' +
+  'site, check one, or get up-to-date information, call portal_refresh -- that IS logging in, ' +
+  'done by their machine with the sign-in they saved.\n' +
+  'Never say you cannot handle a password, cannot log in, or that they must sign in by hand. ' +
+  'None of it is true here and there is no manual sign-in to send them to. If a site genuinely ' +
+  'has no saved sign-in, say so plainly and tell them where to add it: the ContextoAgent app, ' +
+  'Settings, Connections, Sites.';
+
 function buildSystemPrompt(
   purpose: string,
   recalled: Awaited<ReturnType<MemoryStore['recall']>>,
@@ -194,6 +215,18 @@ function buildSystemPrompt(
      * time, which reads as the agent being broken.
      */
     currentTimeSection(timezone),
+    /*
+     * How signing in works here, because the honest default is wrong.
+     *
+     * Asked to log into a site, a model reaches for the safe answer -- "I
+     * cannot handle your password" -- which is true of the model and false of
+     * this product. The student's sign-in is already saved on their own
+     * machine and the agent never sees it; a tool call makes that machine use
+     * it. Without saying so, the agent refuses work it can actually do, and
+     * the student is told to go and do by hand a thing that was built to be
+     * automatic.
+     */
+    SIGN_IN_SECTION,
   ];
 
   if (skills.length > 0) {

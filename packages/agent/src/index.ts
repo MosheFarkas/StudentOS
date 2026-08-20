@@ -86,6 +86,7 @@ export * from './tools/google/scopes.js';
 export {
   runAgentTurn,
   currentTimeSection,
+  SIGN_IN_SECTION,
   type AgentRunDeps,
   type AgentRunInput,
   type AgentRunResult,
