@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('contexto', {
   hasCredentials: (id) => ipcRenderer.invoke('hasCredentials', id),
   clearCredentials: (id) => ipcRenderer.invoke('clearCredentials', id),
   autoSignIn: (id) => ipcRenderer.invoke('autoSignIn', id),
+  // Where to put the browser the agent is driving. The page owns the layout;
+  // the main process owns what is inside it.
+  setSiteViewBounds: (bounds) => ipcRenderer.invoke('siteViewBounds', bounds),
+  onSiteSession: (fn) => ipcRenderer.on('site-session', (_e, payload) => fn(payload)),
   setOpenAtLogin: (value) => ipcRenderer.invoke('setOpenAtLogin', value),
   onPortalsChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });

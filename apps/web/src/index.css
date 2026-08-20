@@ -836,3 +836,96 @@ a.button {
 .saved-signin p {
   margin: 0 0 0.6rem;
 }
+
+/* ---------- the browser the agent is driving ---------- */
+
+/*
+ * The glow is the whole point: something is acting on the student's account
+ * right now, and that should be visible rather than inferred. Cyan, blue and
+ * violet, drifting, so it reads as alive without demanding attention.
+ */
+.agent-session {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  width: min(28rem, 42vw);
+  z-index: 40;
+  border-radius: 14px;
+  padding: 3px;
+  background: linear-gradient(120deg, #00c0c0, #4070ff, #5010d0, #00c0c0);
+  background-size: 300% 300%;
+  animation: agent-glow 6s ease infinite;
+  box-shadow:
+    0 0 22px rgba(64, 112, 255, 0.45),
+    0 0 44px rgba(80, 16, 208, 0.28);
+}
+
+.agent-session.expanded {
+  right: 50%;
+  bottom: 50%;
+  transform: translate(50%, 50%);
+  width: min(70rem, 88vw);
+}
+
+@keyframes agent-glow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-session {
+    animation: none;
+  }
+}
+
+.agent-session-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  border-radius: 11px 11px 0 0;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.agent-session-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00c0c0;
+  box-shadow: 0 0 8px #00c0c0;
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The hole the native browser sits in. It is deliberately empty: whatever is
+   painted here would be hidden behind the view anyway. */
+.agent-session-frame {
+  height: 15rem;
+  border-radius: 0 0 11px 11px;
+  background: #fff;
+}
+
+.agent-session.expanded .agent-session-frame {
+  height: min(38rem, 70vh);
+}

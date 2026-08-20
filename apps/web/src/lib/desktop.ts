@@ -43,6 +43,10 @@ export interface DesktopBridge {
     id: string,
   ): Promise<{ ok: boolean; value?: { ok?: boolean; reason?: string }; error?: string }>;
   onSitesChanged(fn: () => void): void;
+  setSiteViewBounds?(
+    bounds: { x: number; y: number; width: number; height: number } | null,
+  ): Promise<unknown>;
+  onSiteSession?(fn: (payload: { active: boolean; portalId?: string }) => void): void;
 }
 
 declare global {

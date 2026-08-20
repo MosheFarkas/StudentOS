@@ -15,7 +15,14 @@ import {
   keychainAvailable,
   saveCredentials,
 } from './credentials.mjs';
-import { autoSignIn, addSiteWithSignIn, removePortal, status, syncPortal } from './operations.mjs';
+import {
+  autoSignIn,
+  addSiteWithSignIn,
+  observeSessions,
+  removePortal,
+  status,
+  syncPortal,
+} from './operations.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const API_BASE = process.env['CONTEXTO_API'] ?? 'https://contextoagent.ai';
@@ -238,6 +245,24 @@ handle('hasCredentials', (id) => ({ saved: hasCredentials(id), available: keycha
 handle('clearCredentials', (id) => clearCredentials(id));
 handle('autoSignIn', (id) => autoSignIn(id));
 
+/*
+ * The page reporting where its frame is. Sent on every layout change --
+ * expanding, resizing, scrolling -- because a native view does not move with
+ * the document and would otherwise sit where the frame used to be.
+ */
+handle('siteViewBounds', (bounds) => {
+  siteViewBounds = bounds
+    ? {
+        x: Math.round(bounds.x),
+        y: Math.round(bounds.y),
+        width: Math.max(1, Math.round(bounds.width)),
+        height: Math.max(1, Math.round(bounds.height)),
+      }
+    : null;
+  applySiteViewBounds();
+  return { ok: true };
+});
+
 /**
  * Sync everything that has a session, quietly.
  *
@@ -313,6 +338,44 @@ async function doPendingWork() {
   }
 }
 
+/**
+ * The browser the agent is driving, shown inside the app.
+ *
+ * A native view cannot be given a CSS glow, so the page draws the frame and
+ * this positions the view inside the hole it leaves. The page owns where it
+ * goes and how big it is; this owns what is in it. That split is why the
+ * student can expand it, drag the window, or scroll, and the view stays put
+ * without any of that logic living out here.
+ */
+let activeSession = null;
+let siteViewBounds = null;
+
+function attachSiteView(session) {
+  if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
+  activeSession = session;
+  mainWindow.contentView.addChildView(session.view);
+  applySiteViewBounds();
+  mainWindow.webContents.send('site-session', { active: true, portalId: session.portalId });
+}
+
+function applySiteViewBounds() {
+  if (!activeSession?.view) return;
+  // Off-screen until the page says where it wants it. Showing it at 0,0 first
+  // makes it flash across the whole window on every open.
+  activeSession.view.setBounds(siteViewBounds ?? { x: -10_000, y: 0, width: 10, height: 10 });
+}
+
+function detachSiteView() {
+  if (activeSession?.view && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.contentView.removeChildView(activeSession.view);
+  }
+  activeSession = null;
+  siteViewBounds = null;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('site-session', { active: false });
+  }
+}
+
 /** Keep the window and the menu bar showing the same thing. */
 function notifyChanged() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('portals-changed');
@@ -365,6 +428,7 @@ async function ensureSession() {
 }
 
 void app.whenReady().then(async () => {
+  observeSessions({ open: attachSiteView, close: detachSiteView });
   attachSession();
   await ensureSession();
   showWindow();

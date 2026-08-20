@@ -8,9 +8,45 @@
  */
 
 import { PortalBrowser } from './browser.mjs';
+import { fillScript, explainFailure, INSPECT_SCRIPT } from './sign-in.mjs';
 import { readCredentials, saveCredentials } from './credentials.mjs';
 import { explore } from './explorer.mjs';
 import { DeviceUnlinked, pushSnapshot, readConfig, writeConfig } from './sync.mjs';
+
+/**
+ * Open a browser for a site.
+ *
+ * Inside the app that is a view the student can watch; from the command line
+ * there is no Electron to host one, so it falls back to driving Chrome. Both
+ * present the same surface, which is why the explorer does not know or care
+ * which it got.
+ */
+let onSessionOpen = null;
+let onSessionClose = null;
+
+/** Let the app show what the agent is doing. Optional: the CLI sets neither. */
+export function observeSessions({ open, close }) {
+  onSessionOpen = open;
+  onSessionClose = close;
+}
+
+async function openBrowser(portalId) {
+  if (process.versions.electron) {
+    const { SiteSession } = await import('./site-session.mjs');
+    const session = new SiteSession({ portalId });
+    await session.launch();
+    onSessionOpen?.(session);
+    const close = session.close.bind(session);
+    session.close = async () => {
+      onSessionClose?.(session);
+      await close();
+    };
+    return session;
+  }
+  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
+  await browser.launch();
+  return browser;
+}
 
 /** Syncs currently running, keyed by portal. */
 const inFlight = new Map();
@@ -120,80 +156,6 @@ function updatePortal(portalId, patch) {
 }
 
 /**
- * Find out where the portal actually lives, once there is a session.
- *
- * A student pastes the address they know, and the address they know is
- * usually the sign-in page -- which is the one page guaranteed NOT to be the
- * portal. Veracross signs you in at accounts.veracross.com and then sends you
- * to portals.veracross.com, a different origin, so locking to what was typed
- * meant the crawl could never reach anything.
- *
- * So the origin is discovered rather than declared: after logging in, follow
- * the redirects once and record where they end. Every later sync is locked to
- * that resolved origin, so this is the one moment a redirect is allowed to
- * decide where we go -- immediately after a student signed in, not during an
- * unattended background sync.
- */
-export async function resolvePortalAddress(portalId) {
-  const portal = listPortals().find((p) => p.id === portalId);
-  if (!portal) throw new Error(`No portal called ${portalId}`);
-
-  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
-  try {
-    await browser.launch();
-    const { sessionId } = await browser.openPage('about:blank');
-
-    const look = async (url) => {
-      await browser.navigate(url, sessionId);
-      // Redirect chains after SSO are several hops and partly client-side.
-      await new Promise((r) => setTimeout(r, 3000));
-      const { result } = await browser.cdp.send(
-        'Runtime.evaluate',
-        {
-          expression: `JSON.stringify({
-            url: location.href,
-            hasPassword: Boolean(document.querySelector('input[type=password]'))
-          })`,
-          returnByValue: true,
-        },
-        sessionId,
-      );
-      return JSON.parse(result.value);
-    };
-
-    /*
-     * Only where the pasted address ends up, deliberately.
-     *
-     * Falling back to the origin root when the seed shows a password field
-     * looks like an improvement and is a trap: a root that serves a public
-     * page has no password field either, so a signed-OUT profile resolves as
-     * signed in and the next sync captures a public page as if it were the
-     * student's coursework. Tested, and it did exactly that.
-     *
-     * A portal that keeps rendering its login form to an authenticated
-     * visitor is therefore read as signed out. That is the safe direction:
-     * asking someone to sign in again costs a minute, while claiming success
-     * on a page holding none of their data is silently wrong.
-     */
-    const landed = await look(portal.url);
-
-    const { cookies } = await browser.cdp.send('Storage.getCookies');
-    const evidence = {
-      cookies: cookies.length,
-      google: cookies.some((c) => /google\./.test(c.domain)),
-    };
-    const signedOut = landed.hasPassword;
-    await browser.close();
-
-    if (signedOut) return { needsLogin: true, ...evidence };
-    return { needsLogin: false, url: landed.url, origin: new URL(landed.url).origin, ...evidence };
-  } catch (error) {
-    await browser.close().catch(() => {});
-    throw error;
-  }
-}
-
-/**
  * Sign in without the student, using a sign-in they chose to remember.
  *
  * Only works for a plain username-and-password form. A site behind Google or
@@ -212,89 +174,34 @@ export async function autoSignIn(portalId) {
   const saved = readCredentials(portalId);
   if (!saved) return { attempted: false, reason: 'no saved sign-in' };
 
-  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
+  const browser = await openBrowser(portalId);
   try {
-    await browser.launch();
     const { sessionId } = await browser.openPage(portal.url);
+    await new Promise((r) => setTimeout(r, 1500));
 
-    const fill = `(() => {
-      const pw = document.querySelector('input[type=password]');
-      if (!pw) return 'no-password-field';
-      const form = pw.form ?? document;
-      const inputs = Array.from(form.querySelectorAll('input'));
-      const before = inputs.slice(0, inputs.indexOf(pw)).reverse();
-      const user = before.find((i) => /^(text|email|tel)$/.test(i.type) && !i.disabled)
-        ?? form.querySelector('input[type=email], input[type=text]');
-      if (!user) return 'no-username-field';
-      // Assigning .value directly is invisible to React, which tracks its own
-      // state -- the form would submit empty. Going through the prototype
-      // setter and firing the events is what a real keystroke looks like.
-      const set = (el, value) => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-        setter ? setter.call(el, value) : (el.value = value);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-      };
-      set(user, ${JSON.stringify(saved.username)});
-      set(pw, ${JSON.stringify(saved.password)});
-      const submit = form.querySelector('button[type=submit], input[type=submit]')
-        ?? Array.from(form.querySelectorAll('button')).find((b) => !b.type || b.type === 'submit');
-      if (submit) submit.click();
-      else if (form.requestSubmit) form.requestSubmit();
-      else if (form.submit) form.submit();
-      return 'submitted';
-    })()`;
-
-    const { result } = await browser.cdp.send(
-      'Runtime.evaluate',
-      { expression: fill, returnByValue: true },
-      sessionId,
-    );
-    if (result.value !== 'submitted') {
+    const filled = await evaluate(browser, fillScript(saved.username, saved.password), sessionId);
+    if (filled !== 'submitted') {
       await browser.close();
-      // These come back as short codes from the page script; a student should
-      // read why it did not work, not the name of the thing that was missing.
-      const explained = {
-        'no-password-field': 'that address has no sign-in form on it',
-        'no-username-field': 'the sign-in form there has no username box this could fill',
-      };
-      return {
-        attempted: true,
-        ok: false,
-        reason: explained[result.value] ?? 'the sign-in form could not be filled in',
-      };
+      return { attempted: true, ok: false, reason: explainFailure(filled) };
     }
 
     // Let the sign-in land, then ask the same question a person would: are we
     // still looking at a password box?
     await new Promise((r) => setTimeout(r, 4000));
-    const { result: after } = await browser.cdp.send(
-      'Runtime.evaluate',
-      {
-        expression: `JSON.stringify({
-          stillAsking: Boolean(document.querySelector('input[type=password]')),
-          landed: location.href
-        })`,
-        returnByValue: true,
-      },
-      sessionId,
-    );
+    const { stillAsking, landed } = JSON.parse(await evaluate(browser, INSPECT_SCRIPT, sessionId));
     await browser.close();
 
-    const { stillAsking, landed } = JSON.parse(after.value);
     if (stillAsking) return { attempted: true, ok: false, reason: 'still asking for a password' };
 
     /*
      * Where the sign-in put us IS the site.
      *
-     * Guessing this was the long-running bug. A student pastes the address
-     * they know, which is the sign-in page; Veracross signs you in at
-     * accounts.veracross.com and hands you to portals.veracross.com. Seeding
-     * a crawl at the sign-in page then reads a password form and calls the
-     * session dead, however good it actually is.
-     *
-     * Nothing is guessed here. The site just told us where it keeps this
-     * student's things, by taking us there.
+     * A student pastes the address they know, which is the sign-in page;
+     * Veracross signs you in at accounts.veracross.com and hands you to
+     * portals.veracross.com. Seeding a crawl at the sign-in page reads a
+     * password form and calls the session dead, however good it is. Nothing
+     * is guessed here -- the site said where it keeps this student's things
+     * by taking us there.
      */
     updatePortal(portalId, {
       loggedInAt: new Date().toISOString(),
@@ -306,10 +213,21 @@ export async function autoSignIn(portalId) {
   } catch {
     await browser.close().catch(() => {});
     // The error is deliberately not passed on: it can carry the page's own
-    // text, and a failed sign-in page is exactly where a typed password can
-    // end up echoed back.
+    // text, and a rejected sign-in page is exactly where a typed password
+    // gets echoed back.
     return { attempted: true, ok: false, reason: 'the sign-in could not be completed' };
   }
+}
+
+/** Read from the page, whichever browser this is. */
+async function evaluate(browser, expression, sessionId) {
+  if (browser.evaluate) return browser.evaluate(expression);
+  const { result } = await browser.cdp.send(
+    'Runtime.evaluate',
+    { expression, returnByValue: true },
+    sessionId,
+  );
+  return result?.value;
 }
 
 /**
@@ -340,9 +258,8 @@ async function runSync(portalId, { budget = 40 } = {}) {
     if (recovered.ok) portal.loggedInAt = new Date().toISOString();
   }
 
-  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
+  const browser = await openBrowser(portalId);
   try {
-    await browser.launch();
     const { sessionId } = await browser.openPage('about:blank');
     const map = await explore(browser, sessionId, {
       origin: portal.origin,
