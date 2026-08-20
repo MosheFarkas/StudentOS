@@ -14,6 +14,31 @@ contextoagent.ai, www.contextoagent.ai {
 		reverse_proxy localhost:3210
 	}
 
+	# Desktop app downloads. Outside apps/web/dist because the deploy rebuilds
+	# that directory and would delete anything put there.
+	handle /downloads/* {
+		root * /srv/contexto
+		file_server
+	}
+
+	# Asset filenames carry a content hash, so they can be cached forever.
+	# index.html must NOT be: it names which bundle to load, and a cached copy
+	# pins the app to a build that no longer exists. Served with no directive
+	# at all -- as it was -- browsers cache it heuristically, and a deploy
+	# silently fails to reach anyone who had already visited. That is exactly
+	# how a shipped feature looked missing for a day.
+	#
+	# /downloads is deliberately not immutable: the DMG keeps one filename
+	# while its contents change every build.
+	#
+	# Both matchers are explicit and non-overlapping. A bare header directive
+	# applies to everything and overrides a matched one, which quietly turns
+	# the immutable rule off.
+	@immutable path /assets/*
+	@revalidate not path /assets/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	header @revalidate Cache-Control "no-cache"
+
 	handle {
 		root * /srv/contexto/apps/web/dist
 		# SPA fallback: unknown paths return index.html so client routing works
