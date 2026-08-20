@@ -4,7 +4,6 @@ import { desktop } from './lib/desktop.js';
 import { MAC_DOWNLOAD } from './lib/download.js';
 import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
-import { AgentSession } from './screens/AgentSession.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
 import { LinkDevice } from './screens/LinkDevice.js';
@@ -121,9 +120,6 @@ export function App() {
       {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}
 
       {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
-
-      {/* Always mounted, renders nothing until the agent is actually working. */}
-      <AgentSession />
 
       {route.name === 'notFound' && (
         <div className="panel">

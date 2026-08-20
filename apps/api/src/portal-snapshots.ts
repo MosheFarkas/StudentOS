@@ -57,7 +57,11 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
     }));
   }
 
-  async requestRefresh(userId: string, portalId: string): Promise<{ alreadyPending: boolean }> {
+  async requestRefresh(
+    userId: string,
+    portalId: string,
+    agentId?: string,
+  ): Promise<{ alreadyPending: boolean }> {
     // De-duplicated: an agent asked twice in a conversation should not make a
     // laptop open two browsers.
     const [pending] = await this.db
@@ -74,7 +78,18 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
       .limit(1);
 
     if (pending) return { alreadyPending: true };
-    await this.db.insert(siteRefreshRequests).values({ userId, portalId });
+
+    /*
+     * The agent tag only decides which conversation shows the browser. If it
+     * is not a real id, drop it rather than let it fail the insert -- losing
+     * the panel is a far smaller harm than losing the refresh it was
+     * decorating.
+     */
+    const tag =
+      agentId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(agentId)
+        ? agentId
+        : null;
+    await this.db.insert(siteRefreshRequests).values({ userId, portalId, agentId: tag });
     return { alreadyPending: false };
   }
 }

@@ -30,10 +30,17 @@ export function observeSessions({ open, close }) {
   onSessionClose = close;
 }
 
+/** Set while doing work an agent asked for, so its browser can be shown there. */
+let workingForAgent = null;
+
+export function setWorkingForAgent(agentId) {
+  workingForAgent = agentId ?? null;
+}
+
 async function openBrowser(portalId) {
   if (process.versions.electron) {
     const { SiteSession } = await import('./site-session.mjs');
-    const session = new SiteSession({ portalId });
+    const session = new SiteSession({ portalId, agentId: workingForAgent });
     await session.launch();
     onSessionOpen?.(session);
     const close = session.close.bind(session);

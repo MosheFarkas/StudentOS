@@ -381,3 +381,40 @@ describe('the agent asking a computer to look again', () => {
     expect(result.queued).toBe(true);
   });
 });
+
+describe('which conversation the work belongs to', () => {
+  it('remembers the agent that asked, so its browser shows there', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: '11111111-1111-4111-8111-111111111111',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+    const work = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${device.token}` },
+      })
+    ).json()) as { agentId: string | null }[];
+
+    expect(work[0]?.agentId).toBe('11111111-1111-4111-8111-111111111111');
+  });
+
+  it('leaves it empty for work nobody asked for', async () => {
+    // A scheduled sync has no conversation to belong to, and showing its
+    // browser in one would be something appearing rather than something the
+    // student started.
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    await new DbPortalSnapshots(db).requestRefresh(alice.id, 'veracross');
+
+    const work = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${device.token}` },
+      })
+    ).json()) as { agentId: string | null }[];
+    expect(work[0]?.agentId).toBeNull();
+  });
+});

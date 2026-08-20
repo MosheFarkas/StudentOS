@@ -138,6 +138,12 @@ export const siteRefreshRequests = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     portalId: text('portal_id').notNull(),
+    /**
+     * Which agent asked, so the browser it opens can be shown in that
+     * conversation and nowhere else. Nullable: a scheduled sync has no agent
+     * behind it and nothing to show it in.
+     */
+    agentId: uuid('agent_id'),
     requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     /** What the device made of it: 'synced' | 'needs_login' | 'failed'. */

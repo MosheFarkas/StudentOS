@@ -13,8 +13,11 @@ import { desktop } from '../lib/desktop.js';
  * student's school account; a thing that does that off-screen asks for more
  * trust than it needs to. Small by default so it does not take over, and
  * expandable because "what is it doing right now" is a fair question.
+ *
+ * Scoped to one conversation: it shows in the chat whose agent asked for the
+ * work, and nowhere else.
  */
-export function AgentSession() {
+export function AgentSession({ agentId }: { agentId: string }) {
   const bridge = desktop();
   const [active, setActive] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -29,10 +32,20 @@ export function AgentSession() {
 
   useEffect(() => {
     bridge?.onSiteSession?.((payload) => {
+      /*
+       * Only this conversation's work. A browser signing into a school
+       * account belongs where it was asked for -- floating it over whatever
+       * the student happens to be looking at makes it something that appeared
+       * rather than something they started.
+       *
+       * A scheduled sync carries no agent and shows nowhere; nobody asked for
+       * it and there is no conversation for it to belong to.
+       */
+      if (payload.active && payload.agentId !== agentId) return;
       setActive(payload.active);
       if (!payload.active) setExpanded(false);
     });
-  }, [bridge]);
+  }, [bridge, agentId]);
 
   useEffect(() => {
     if (!active) {

@@ -99,7 +99,11 @@ export interface PortalSnapshotSource {
    * machine and never leaves it, so nothing here can fetch anything -- it can
    * only leave a note the device picks up.
    */
-  requestRefresh(userId: string, portalId: string): Promise<{ alreadyPending: boolean }>;
+  requestRefresh(
+    userId: string,
+    portalId: string,
+    agentId?: string,
+  ): Promise<{ alreadyPending: boolean }>;
 }
 
 /**

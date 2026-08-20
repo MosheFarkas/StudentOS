@@ -188,7 +188,9 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
       );
     }
 
-    const { alreadyPending } = await ctx.portals.requestRefresh(ctx.userId, portalId);
+    // The agent id travels with the request so the browser it opens can be
+    // shown in this conversation and nowhere else.
+    const { alreadyPending } = await ctx.portals.requestRefresh(ctx.userId, portalId, ctx.agentId);
     return {
       queued: true,
       alreadyPending,

@@ -19,8 +19,10 @@ import { WebContentsView } from 'electron';
  */
 export class SiteSession {
   /** @param {{ portalId: string, onFrame?: () => void }} options */
-  constructor({ portalId }) {
+  constructor({ portalId, agentId = null }) {
     this.portalId = portalId;
+    /** Which conversation this belongs to, or null for a scheduled sync. */
+    this.agentId = agentId;
     this.view = null;
     this.attached = false;
     this.listeners = new Map();

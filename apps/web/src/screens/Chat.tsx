@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AgentSession } from './AgentSession.js';
 import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import type { PreviewTarget } from '../lib/preview.js';
@@ -114,6 +115,10 @@ export function Chat({ agentId, onBack }: Props) {
 
   return (
     <>
+      {/* The browser the agent drives, shown only in the conversation that
+          asked for it. Renders nothing the rest of the time. */}
+      <AgentSession agentId={agentId} />
+
       <div className="chat-header">
         <button className="quiet" onClick={onBack}>
           ← Agents

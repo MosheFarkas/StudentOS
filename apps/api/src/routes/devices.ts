@@ -294,7 +294,11 @@ export function createDeviceRoutes(ctx: AppContext) {
       /** What a device should go and do. Polled by the desktop app. */
       .get('/pending', device, async (c) => {
         const rows = await ctx.db
-          .select({ id: siteRefreshRequests.id, portalId: siteRefreshRequests.portalId })
+          .select({
+            id: siteRefreshRequests.id,
+            portalId: siteRefreshRequests.portalId,
+            agentId: siteRefreshRequests.agentId,
+          })
           .from(siteRefreshRequests)
           .where(
             and(

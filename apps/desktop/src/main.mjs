@@ -19,6 +19,7 @@ import {
   autoSignIn,
   addSiteWithSignIn,
   observeSessions,
+  setWorkingForAgent,
   removePortal,
   status,
   syncPortal,
@@ -328,11 +329,16 @@ async function doPendingWork() {
   for (const item of work) {
     let outcome;
     try {
+      // Tagging the work means its browser appears in the conversation that
+      // asked for it, rather than floating over whatever the student is
+      // looking at.
+      setWorkingForAgent(item.agentId);
       const result = await syncPortal(item.portalId);
       outcome = result.needsLogin ? 'needs_login' : 'synced';
     } catch {
       outcome = 'failed';
     }
+    setWorkingForAgent(null);
     await reportWork(creds, item.id, outcome).catch(() => {});
     notifyChanged();
   }
@@ -355,7 +361,11 @@ function attachSiteView(session) {
   activeSession = session;
   mainWindow.contentView.addChildView(session.view);
   applySiteViewBounds();
-  mainWindow.webContents.send('site-session', { active: true, portalId: session.portalId });
+  mainWindow.webContents.send('site-session', {
+    active: true,
+    portalId: session.portalId,
+    agentId: session.agentId,
+  });
 }
 
 function applySiteViewBounds() {
