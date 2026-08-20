@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { desktop } from './desktop.js';
 
 export interface AgentSessionState {
+  /** The agent is driving it right now. Only this puts an aura on it. */
   active: boolean;
+  /** There is a page on screen, working or not. */
+  showing: boolean;
   portalId?: string;
 }
 
@@ -14,15 +17,21 @@ export interface AgentSessionState {
  * than neither, because it makes the app look like it has lost track.
  */
 export function useAgentSession(agentId: string): AgentSessionState {
-  const [state, setState] = useState<AgentSessionState>({ active: false });
+  const [state, setState] = useState<AgentSessionState>({ active: false, showing: false });
 
   useEffect(() => {
     const bridge = desktop();
     bridge?.onSiteSession?.((payload) => {
       // Only work this conversation asked for. A scheduled sync carries no
       // agent and belongs in no chat.
-      if (payload.active && payload.agentId !== agentId) return;
-      setState({ active: payload.active, portalId: payload.portalId });
+      if (payload.agentId && payload.agentId !== agentId) return;
+      setState({
+        active: payload.active,
+        // The page stays after the work ends. A browser that vanishes with
+        // the spinner takes the evidence of what it did with it.
+        showing: payload.active || Boolean(payload.showing),
+        portalId: payload.portalId,
+      });
     });
   }, [agentId]);
 

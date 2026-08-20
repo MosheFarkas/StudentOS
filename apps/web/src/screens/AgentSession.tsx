@@ -16,10 +16,15 @@ import { useAgentSession } from '../lib/useAgentSession.js';
  *
  * Clicking anywhere on it opens it. Nothing says so, because a browser that
  * grows when you press it does not need a label explaining that it will.
+ *
+ * It stays after the work finishes, without the aura. The page the agent
+ * ended on is the evidence of what it did, and a browser that vanishes with
+ * the spinner takes that with it -- but a glow on something no longer
+ * happening would be saying something untrue.
  */
 export function AgentSession({ agentId }: { agentId: string }) {
   const bridge = desktop();
-  const { active, portalId } = useAgentSession(agentId);
+  const { active, showing, portalId } = useAgentSession(agentId);
   const [expanded, setExpanded] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
@@ -31,8 +36,8 @@ export function AgentSession({ agentId }: { agentId: string }) {
   }, [bridge]);
 
   useEffect(() => {
-    if (!active) setExpanded(false);
-  }, [active]);
+    if (!showing) setExpanded(false);
+  }, [showing]);
 
   // A click lands on the site, not on this page, so the view forwards it.
   useEffect(() => {
@@ -40,7 +45,7 @@ export function AgentSession({ agentId }: { agentId: string }) {
   }, [bridge]);
 
   useEffect(() => {
-    if (!active) {
+    if (!showing) {
       void bridge?.setSiteViewBounds?.(null);
       return;
     }
@@ -55,25 +60,27 @@ export function AgentSession({ agentId }: { agentId: string }) {
       window.removeEventListener('scroll', report, true);
       clearInterval(timer);
     };
-  }, [active, expanded, bridge, report]);
+  }, [showing, expanded, bridge, report]);
 
-  if (!bridge || !active) return null;
+  if (!bridge || !showing) return null;
 
   return (
-    <div className={`agent-browser${expanded ? ' expanded' : ''}`}>
+    <div className={`agent-browser${expanded ? ' expanded' : ''}${active ? ' working' : ''}`}>
       <div
-        className="agent-browser-aura"
+        className="agent-browser-frame"
         ref={frame}
         onClick={() => setExpanded(!expanded)}
         role="presentation"
       />
       <span className="agent-browser-label">
         {portalId}
-        <span className="dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
+        {active && (
+          <span className="dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
       </span>
     </div>
   );

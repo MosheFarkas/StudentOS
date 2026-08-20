@@ -1001,26 +1001,32 @@ a.button {
 }
 
 /*
- * The aura. An inner glow rather than a border, so the colour bleeds over the
- * page the agent is on instead of framing it -- the site stays the subject
- * and the colour says something is acting on it. Cyan, blue, violet, drifting
- * slowly enough to read as alive rather than urgent.
+ * The page itself, resting. No border and no glow: nothing is happening to it,
+ * and decoration on a finished thing would be saying otherwise.
  */
-.agent-browser-aura {
+.agent-browser-frame {
   height: 16rem;
   border-radius: 12px;
   cursor: pointer;
   background: #fff;
-  box-shadow:
-    inset 0 0 0 1.5px rgba(64, 112, 255, 0.55),
-    inset 0 0 22px 6px rgba(0, 192, 192, 0.28),
-    inset 0 0 46px 14px rgba(80, 16, 208, 0.2),
-    0 0 18px rgba(64, 112, 255, 0.3);
-  animation: agent-aura 5s ease-in-out infinite;
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 400ms ease;
 }
 
-.agent-browser.expanded .agent-browser-aura {
+.agent-browser.expanded .agent-browser-frame {
   height: 100%;
+}
+
+/*
+ * The aura, only while the agent is actually working.
+ *
+ * An inner glow rather than a border, so the colour bleeds over the page
+ * instead of framing it -- the site stays the subject and the colour says
+ * something is acting on it. Cyan, blue, violet, drifting slowly enough to
+ * read as alive rather than urgent.
+ */
+.agent-browser.working .agent-browser-frame {
+  animation: agent-aura 5s ease-in-out infinite;
 }
 
 @keyframes agent-aura {
@@ -1042,13 +1048,14 @@ a.button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-browser-aura {
+  .agent-browser.working .agent-browser-frame {
     animation: none;
+    box-shadow:
+      inset 0 0 0 1.5px rgba(64, 112, 255, 0.55),
+      inset 0 0 30px 10px rgba(0, 192, 192, 0.25);
   }
 }
 
-/* Which site, quietly. Not an instruction -- a browser that grows when you
-   press it does not need a label saying it will. */
 .agent-browser-label {
   position: absolute;
   left: 0.85rem;

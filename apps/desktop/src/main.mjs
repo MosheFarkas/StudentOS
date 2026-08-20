@@ -379,6 +379,16 @@ ipcMain.on('site-view-clicked', () => {
 
 function attachSiteView(session) {
   if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
+
+  // Whatever was left on screen from last time makes way for this.
+  if (activeSession && activeSession !== session) {
+    mainWindow.contentView.removeChildView(activeSession.view);
+    activeSession.destroy();
+  }
+
+  // Kept after the work finishes: the page the agent ended on is the evidence
+  // of what it did, and it should not disappear with the spinner.
+  session.keepView = true;
   activeSession = session;
   mainWindow.contentView.addChildView(session.view);
   applySiteViewBounds();
@@ -396,15 +406,21 @@ function applySiteViewBounds() {
   activeSession.view.setBounds(siteViewBounds ?? { x: -10_000, y: 0, width: 10, height: 10 });
 }
 
-function detachSiteView() {
-  if (activeSession?.view && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.contentView.removeChildView(activeSession.view);
-  }
-  activeSession = null;
-  siteViewBounds = null;
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('site-session', { active: false });
-  }
+/**
+ * The work is done, but the page stays.
+ *
+ * Only the state changes: the conversation stops showing it as working, and
+ * the aura goes with that. The browser itself remains until the next piece of
+ * work replaces it, or the window closes.
+ */
+function markSiteViewIdle() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('site-session', {
+    active: false,
+    showing: Boolean(activeSession?.view),
+    portalId: activeSession?.portalId,
+    agentId: activeSession?.agentId,
+  });
 }
 
 /** Keep the window and the menu bar showing the same thing. */
@@ -459,7 +475,7 @@ async function ensureSession() {
 }
 
 void app.whenReady().then(async () => {
-  observeSessions({ open: attachSiteView, close: detachSiteView });
+  observeSessions({ open: attachSiteView, close: markSiteViewIdle });
   attachSession();
   await ensureSession();
   showWindow();

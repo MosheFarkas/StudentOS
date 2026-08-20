@@ -27,6 +27,8 @@ export class SiteSession {
     this.portalId = portalId;
     /** Which conversation this belongs to, or null for a scheduled sync. */
     this.agentId = agentId;
+    /** Set by whoever is showing it, to keep the page up after the work ends. */
+    this.keepView = false;
     this.view = null;
     this.attached = false;
     this.listeners = new Map();
@@ -118,6 +120,15 @@ export class SiteSession {
     return result?.value;
   }
 
+  /**
+   * Finish with the page, and usually leave it on screen.
+   *
+   * The last thing the agent looked at is worth keeping: a browser that
+   * vanishes the moment it stops takes the evidence with it, and "what did it
+   * actually read" is a fair question after the fact as well as during. The
+   * protocol connection is always released -- nothing is driving it any more
+   * -- but the view stays until something replaces it.
+   */
   async close() {
     if (!this.view) return;
     try {
@@ -127,9 +138,20 @@ export class SiteSession {
       // left to release.
     }
     this.attached = false;
-    this.view.webContents?.close();
-    this.view = null;
     this.cdp = null;
     this.listeners.clear();
+
+    if (this.keepView) return;
+    this.destroy();
+  }
+
+  /** Actually take it down. */
+  destroy() {
+    try {
+      this.view?.webContents?.close();
+    } catch {
+      // Already gone.
+    }
+    this.view = null;
   }
 }
