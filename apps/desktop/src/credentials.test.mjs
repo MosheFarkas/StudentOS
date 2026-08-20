@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { clearCredentials, hasCredentials, keychainAvailable, readCredentials, saveCredentials } from './credentials.mjs';
+import {
+  clearCredentials,
+  hasCredentials,
+  keychainAvailable,
+  readCredentials,
+  saveCredentials,
+} from './credentials.mjs';
 
 /**
  * A student's school password is the most sensitive thing this app touches.
