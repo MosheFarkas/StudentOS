@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
-import { readSchoolPortal, type ToolContext } from '@contexto/agent';
+import { readSchoolPortal, refreshSchoolPortal, type ToolContext } from '@contexto/agent';
 import { createAuth } from './auth.js';
 import { handleError } from './errors.js';
 import { createRoutes } from './routes/index.js';
@@ -272,5 +272,112 @@ describe('removing a site', () => {
     expect(
       ((await readSchoolPortal.execute({}, ctx)) as { portals?: unknown[] }).portals,
     ).toHaveLength(1);
+  });
+});
+
+describe('the agent asking a computer to look again', () => {
+  it('queues work the device can then collect', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    const queued = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
+      queued: boolean;
+      alreadyPending: boolean;
+    };
+    expect(queued.queued).toBe(true);
+    expect(queued.alreadyPending).toBe(false);
+
+    const work = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${device.token}` },
+      })
+    ).json()) as { id: string; portalId: string }[];
+    expect(work.map((w) => w.portalId)).toEqual(['veracross']);
+  });
+
+  it('does not queue the same site twice', async () => {
+    // An agent asking twice in one conversation must not make a laptop open
+    // two browsers.
+    const alice = await createUser();
+    await linkedDevice(alice.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+    const second = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
+      alreadyPending: boolean;
+    };
+    expect(second.alreadyPending).toBe(true);
+  });
+
+  it("never hands one student's work to another's device", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const bobDevice = await linkedDevice(bob.token);
+    const aliceCtx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+
+    await refreshSchoolPortal.execute({ portalId: 'veracross' }, aliceCtx);
+
+    const work = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${bobDevice.token}` },
+      })
+    ).json()) as unknown[];
+    expect(work).toEqual([]);
+  });
+
+  it('drops off the list once the device reports back', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+    await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx);
+
+    const [item] = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${device.token}` },
+      })
+    ).json()) as { id: string }[];
+
+    await app.request(
+      `/api/devices/pending/${item!.id}/complete`,
+      post({ outcome: 'synced' }, device.token),
+    );
+
+    const after = (await (
+      await app.request('/api/devices/pending', {
+        headers: { Authorization: `Bearer ${device.token}` },
+      })
+    ).json()) as unknown[];
+    expect(after).toEqual([]);
+  });
+
+  it('tells the agent plainly when no computer is linked', async () => {
+    const alice = await createUser();
+    const ctx = {
+      userId: alice.id,
+      agentId: 'a1',
+      portals: new DbPortalSnapshots(db),
+    } as unknown as ToolContext;
+    // Queuing still succeeds -- there is simply nothing to collect it.
+    const result = (await refreshSchoolPortal.execute({ portalId: 'veracross' }, ctx)) as {
+      queued: boolean;
+    };
+    expect(result.queued).toBe(true);
   });
 });

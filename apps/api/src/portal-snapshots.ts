@@ -1,6 +1,6 @@
-import { and, desc, eq, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, notInArray } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
-import { disabledSites, portalSnapshots } from '@contexto/db';
+import { disabledSites, portalSnapshots, siteRefreshRequests } from '@contexto/db';
 import type { PortalSnapshot, PortalSnapshotSource } from '@contexto/agent';
 
 /**
@@ -55,5 +55,26 @@ export class DbPortalSnapshots implements PortalSnapshotSource {
         ? ((row.map as { pages: PortalSnapshot['pages'] }).pages ?? [])
         : [],
     }));
+  }
+
+  async requestRefresh(userId: string, portalId: string): Promise<{ alreadyPending: boolean }> {
+    // De-duplicated: an agent asked twice in a conversation should not make a
+    // laptop open two browsers.
+    const [pending] = await this.db
+      .select({ id: siteRefreshRequests.id })
+      .from(siteRefreshRequests)
+      .where(
+        and(
+          eq(siteRefreshRequests.userId, userId),
+          eq(siteRefreshRequests.portalId, portalId),
+          isNull(siteRefreshRequests.completedAt),
+          gt(siteRefreshRequests.requestedAt, new Date(Date.now() - 60 * 60 * 1000)),
+        ),
+      )
+      .limit(1);
+
+    if (pending) return { alreadyPending: true };
+    await this.db.insert(siteRefreshRequests).values({ userId, portalId });
+    return { alreadyPending: false };
   }
 }

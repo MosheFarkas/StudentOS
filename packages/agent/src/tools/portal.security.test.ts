@@ -3,7 +3,14 @@ import { condense, readSchoolPortal } from './portal.js';
 import type { PortalSnapshot, ToolContext } from './types.js';
 
 const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
-  ({ userId: 'u1', agentId: 'a1', portals: { latest: async () => snapshots } }) as ToolContext;
+  ({
+    userId: 'u1',
+    agentId: 'a1',
+    portals: {
+      latest: async () => snapshots,
+      requestRefresh: async () => ({ alreadyPending: false }),
+    },
+  }) as ToolContext;
 
 const snap = (pages: PortalSnapshot['pages']): PortalSnapshot => ({
   portalId: 'veracross',

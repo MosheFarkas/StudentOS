@@ -17,7 +17,14 @@ const component = (shape: unknown, empty: boolean | null = false) => ({
 });
 
 const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
-  ({ userId: 'u1', agentId: 'a1', portals: { latest: async () => snapshots } }) as ToolContext;
+  ({
+    userId: 'u1',
+    agentId: 'a1',
+    portals: {
+      latest: async () => snapshots,
+      requestRefresh: async () => ({ alreadyPending: false }),
+    },
+  }) as ToolContext;
 
 const snapshot = (over: Partial<PortalSnapshot> = {}): PortalSnapshot => ({
   portalId: 'veracross',

@@ -55,7 +55,7 @@ export {
   trashMail,
   type MailAttachment,
 } from './tools/google/gmail.js';
-export { readSchoolPortal, condense } from './tools/portal.js';
+export { readSchoolPortal, refreshSchoolPortal, condense } from './tools/portal.js';
 export { readWebLink } from './tools/web/read-link.js';
 export {
   readYoutubeVideo,

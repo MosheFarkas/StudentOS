@@ -90,6 +90,14 @@ export interface PortalSnapshot {
 export interface PortalSnapshotSource {
   /** Latest snapshot per portal, most recently captured first. */
   latest(userId: string): Promise<PortalSnapshot[]>;
+  /**
+   * Ask the student's own computer to fetch a site again.
+   *
+   * Queued, not performed. The sign-in that gets past a login lives on that
+   * machine and never leaves it, so nothing here can fetch anything -- it can
+   * only leave a note the device picks up.
+   */
+  requestRefresh(userId: string, portalId: string): Promise<{ alreadyPending: boolean }>;
 }
 
 /**

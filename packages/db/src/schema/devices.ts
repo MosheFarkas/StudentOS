@@ -118,3 +118,30 @@ export const disabledSites = pgTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.portalId] })],
 );
+
+/**
+ * The agent asking a student's computer to go and look again.
+ *
+ * The credential that reaches a site lives on that machine and never leaves
+ * it, so the agent cannot fetch anything itself -- it leaves a request here
+ * and the device picks it up. That inversion is the whole point: the server
+ * holds what was found, never the means to find it.
+ *
+ * Rows are short-lived. A request nobody collected within the hour is a
+ * laptop that was closed, not work still owed.
+ */
+export const siteRefreshRequests = pgTable(
+  'site_refresh_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    portalId: text('portal_id').notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    /** What the device made of it: 'synced' | 'needs_login' | 'failed'. */
+    outcome: text('outcome'),
+  },
+  (t) => [index('site_refresh_user_idx').on(t.userId, t.portalId, t.requestedAt)],
+);

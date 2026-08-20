@@ -1,7 +1,14 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
-import { link, readConfig, refreshSession, sessionValid } from './sync.mjs';
+import {
+  link,
+  pendingWork,
+  readConfig,
+  refreshSession,
+  reportWork,
+  sessionValid,
+} from './sync.mjs';
 import {
   clearCredentials,
   hasCredentials,
@@ -33,6 +40,15 @@ const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
  * quit-and-reopen spawns a browser and re-reads the whole portal.
  */
 const STALE_AFTER_MS = 60 * 60 * 1000;
+
+/**
+ * How often to ask whether the agent needs something fetched.
+ *
+ * A minute, because the student is usually waiting on the answer when this
+ * fires -- they asked their agent a question and it wants fresher data. The
+ * six-hourly sync is the background job; this is the doorbell.
+ */
+const WORK_POLL_MS = 60 * 1000;
 
 let mainWindow = null;
 let tray = null;
@@ -275,6 +291,38 @@ function reloadApp() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reload();
 }
 
+/**
+ * Do what the agent asked, using a sign-in that never leaves this machine.
+ *
+ * This is the inversion that lets the agent reach a site without the server
+ * ever holding the means to: it can leave a request, and only the computer
+ * with the keychain entry can act on it.
+ */
+async function doPendingWork() {
+  const config = readConfig();
+  if (!config.token) return;
+  const creds = { apiBase: config.apiBase ?? API_BASE, token: config.token };
+
+  let work;
+  try {
+    work = await pendingWork(creds);
+  } catch {
+    return; // Offline, or the device was revoked. Nothing to do either way.
+  }
+
+  for (const item of work) {
+    let outcome;
+    try {
+      const result = await syncPortal(item.portalId);
+      outcome = result.needsLogin ? 'needs_login' : 'synced';
+    } catch {
+      outcome = 'failed';
+    }
+    await reportWork(creds, item.id, outcome).catch(() => {});
+    notifyChanged();
+  }
+}
+
 /** Keep the window and the menu bar showing the same thing. */
 function notifyChanged() {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('portals-changed');
@@ -333,6 +381,7 @@ void app.whenReady().then(async () => {
   buildTray();
   void syncAll({ onlyStale: true });
   setInterval(() => void syncAll(), SYNC_INTERVAL_MS);
+  setInterval(() => void doPendingWork(), WORK_POLL_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) showWindow();

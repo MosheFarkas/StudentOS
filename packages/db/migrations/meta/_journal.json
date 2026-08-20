@@ -57,6 +57,13 @@
       "when": 1787166521249,
       "tag": "0007_amazing_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787193268884,
+      "tag": "0008_panoramic_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

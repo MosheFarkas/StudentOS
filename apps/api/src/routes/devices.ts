@@ -4,7 +4,13 @@ import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { deviceLinkRequests, devices, disabledSites, portalSnapshots } from '@contexto/db';
+import {
+  deviceLinkRequests,
+  devices,
+  disabledSites,
+  portalSnapshots,
+  siteRefreshRequests,
+} from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -15,6 +21,15 @@ const LINK_TTL_MS = 10 * 60 * 1000;
 
 /** History kept per portal. Only the newest is ever read. */
 const SNAPSHOTS_KEPT = 5;
+
+/**
+ * How long a refresh request stays worth doing.
+ *
+ * A request nobody collected within the hour is a laptop that was closed, not
+ * work still owed -- running it on the next launch would fetch data for a
+ * question asked long ago.
+ */
+const REFRESH_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Ceiling on one pushed snapshot.
@@ -239,6 +254,80 @@ export function createDeviceRoutes(ctx: AppContext) {
         const session = await authContext.internalAdapter.createSession(c.get('userId'), undefined);
         return c.json({ sessionToken: session.token });
       })
+
+      /**
+       * Ask the student's computer to look at a site again.
+       *
+       * Queued rather than performed: the credential that gets past a login
+       * lives on that machine, so this server can only ask. It de-duplicates
+       * on purpose -- an agent that asks three times in a minute should not
+       * make a laptop open three browsers.
+       */
+      .post('/sites/:portalId/refresh', auth, async (c) => {
+        const userId = c.get('userId');
+        const portalId = c.req.param('portalId');
+
+        const [pending] = await ctx.db
+          .select({ id: siteRefreshRequests.id })
+          .from(siteRefreshRequests)
+          .where(
+            and(
+              eq(siteRefreshRequests.userId, userId),
+              eq(siteRefreshRequests.portalId, portalId),
+              isNull(siteRefreshRequests.completedAt),
+              gt(siteRefreshRequests.requestedAt, new Date(Date.now() - REFRESH_TTL_MS)),
+            ),
+          )
+          .limit(1);
+
+        if (pending) return c.json({ queued: true, requestId: pending.id, alreadyPending: true });
+
+        const [created] = await ctx.db
+          .insert(siteRefreshRequests)
+          .values({ userId, portalId })
+          .returning({ id: siteRefreshRequests.id });
+
+        if (!created) throw new ContextoError('internal_error', 'Could not ask for a refresh.');
+        return c.json({ queued: true, requestId: created.id, alreadyPending: false });
+      })
+
+      /** What a device should go and do. Polled by the desktop app. */
+      .get('/pending', device, async (c) => {
+        const rows = await ctx.db
+          .select({ id: siteRefreshRequests.id, portalId: siteRefreshRequests.portalId })
+          .from(siteRefreshRequests)
+          .where(
+            and(
+              eq(siteRefreshRequests.userId, c.get('userId')),
+              isNull(siteRefreshRequests.completedAt),
+              gt(siteRefreshRequests.requestedAt, new Date(Date.now() - REFRESH_TTL_MS)),
+            ),
+          )
+          .orderBy(siteRefreshRequests.requestedAt);
+
+        return c.json(rows);
+      })
+
+      /** The device reporting back on one of them. */
+      .post(
+        '/pending/:id/complete',
+        device,
+        zValidator('json', z.object({ outcome: z.enum(['synced', 'needs_login', 'failed']) })),
+        async (c) => {
+          await ctx.db
+            .update(siteRefreshRequests)
+            .set({ completedAt: new Date(), outcome: c.req.valid('json').outcome })
+            .where(
+              and(
+                eq(siteRefreshRequests.id, c.req.param('id')),
+                // Scoped to the caller: a device may only close its own
+                // student's requests, never another's.
+                eq(siteRefreshRequests.userId, c.get('userId')),
+              ),
+            );
+          return c.json({ ok: true });
+        },
+      )
 
       /** Linked devices, for Settings. */
       .get('/', auth, async (c) => {

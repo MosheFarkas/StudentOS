@@ -138,3 +138,51 @@ export const readSchoolPortal: Tool<z.infer<typeof readPortalInput>, unknown> = 
     };
   },
 };
+
+const refreshInput = z.object({
+  portalId: z.string().describe("Which site, e.g. 'veracross'. Use the id from portal_read."),
+});
+
+/**
+ * Ask the student's computer to fetch a site again.
+ *
+ * Worth being precise with the model about what this does, because the shape
+ * is unusual: it does not return data. The sign-in that gets past a login
+ * lives on the student's own machine, so this leaves a request there and the
+ * computer acts on it when it next checks -- within a minute if it is awake,
+ * and not at all if it is shut.
+ *
+ * So the honest thing to tell a student is that fresher data is on its way,
+ * while answering now from what is already here.
+ */
+export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = {
+  id: 'portal_refresh',
+  description:
+    "Ask the student's own computer to sign in to one of their sites again and fetch it fresh. " +
+    'Use this when portal_read returns nothing, says the sign-in expired, or the student says ' +
+    'something should be there that is not. It does NOT return the data: it queues the work, ' +
+    'which takes about a minute and only happens while their computer is on. Answer from what ' +
+    'you already have and tell them fresh data is coming.',
+  inputSchema: refreshInput,
+
+  async execute({ portalId }, ctx) {
+    if (!ctx.portals) {
+      return unavailable(
+        'No computer is linked, so there is nothing that can fetch that. They can link one in ' +
+          'Settings, under Devices.',
+      );
+    }
+
+    const { alreadyPending } = await ctx.portals.requestRefresh(ctx.userId, portalId);
+    return {
+      queued: true,
+      alreadyPending,
+      note: alreadyPending
+        ? `Their computer was already asked to refresh ${portalId} and has not reported back yet. ` +
+          'Do not ask again; tell them it is still working, or that their computer may be shut.'
+        : `Asked their computer to sign in to ${portalId} and fetch it again. This takes about a ` +
+          'minute and only runs while that computer is on. Answer now from what you already have, ' +
+          'and say that fresher data is on the way.',
+    };
+  },
+};

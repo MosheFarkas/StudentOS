@@ -204,6 +204,15 @@ export async function refreshSession({ apiBase, token }) {
   return sessionToken;
 }
 
+/** Work the agent has asked this machine to do. */
+export async function pendingWork({ apiBase, token }) {
+  return api(apiBase, '/api/devices/pending', { method: 'GET', token });
+}
+
+export async function reportWork({ apiBase, token }, requestId, outcome) {
+  return api(apiBase, `/api/devices/pending/${requestId}/complete`, { token, body: { outcome } });
+}
+
 /** Push a portal map to the server. */
 export async function pushSnapshot({ apiBase, token }, { portalId, origin, map, redacted }) {
   return api(apiBase, '/api/devices/portal-snapshot', {
