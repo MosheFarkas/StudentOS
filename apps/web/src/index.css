@@ -824,3 +824,15 @@ a.button {
   flex: 1;
   min-width: 0;
 }
+
+/* Saving a site sign-in, desktop app only. */
+.saved-signin {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.saved-signin p {
+  margin: 0 0 0.6rem;
+}

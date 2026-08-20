@@ -72,6 +72,9 @@ export function SiteConnections() {
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState<Row | null>(null);
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [creds, setCreds] = useState({ username: '', password: '' });
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
 
@@ -80,6 +83,15 @@ export function SiteConnections() {
     const server: ServerSite[] = res.ok ? await res.json() : [];
     const local = bridge ? await bridge.listSites() : [];
     setRows(merge(server, local));
+
+    if (bridge?.hasCredentials) {
+      const flags: Record<string, boolean> = {};
+      for (const site of local) {
+        const result = await bridge.hasCredentials(site.id);
+        flags[site.id] = Boolean(result.ok && result.value?.saved);
+      }
+      setSaved(flags);
+    }
   }
 
   useEffect(() => {
@@ -103,6 +115,32 @@ export function SiteConnections() {
     setBusy(row.id);
     await api.devices.sites[':portalId'].$delete({ param: { portalId: row.id } });
     await bridge?.removeSite(row.id);
+    await load();
+    setBusy(null);
+  }
+
+  async function rememberSignIn(portalId: string) {
+    if (!bridge?.saveCredentials) return;
+    if (!creds.username.trim() || !creds.password) return alert('Both fields are needed.');
+    setBusy(portalId);
+    const result = await bridge.saveCredentials(portalId, {
+      username: creds.username.trim(),
+      password: creds.password,
+    });
+    // Cleared from the page as soon as it is handed over -- there is no reason
+    // for a password to sit in a form once the keychain has it.
+    setCreds({ username: '', password: '' });
+    setEditing(null);
+    setBusy(null);
+    if (!result.ok) return alert(result.error ?? 'Could not save that sign-in.');
+    await load();
+  }
+
+  async function forgetSignIn(row: Row) {
+    if (!bridge?.clearCredentials) return;
+    if (!confirm(`Forget the saved sign-in for ${row.label}?`)) return;
+    setBusy(row.id);
+    await bridge.clearCredentials(row.id);
     await load();
     setBusy(null);
   }
@@ -189,6 +227,22 @@ export function SiteConnections() {
                   label={`Let your agent read ${row.label}`}
                   onChange={(next) => void setEnabled(row, next)}
                 />
+                {bridge?.saveCredentials &&
+                  (saved[row.id] ? (
+                    <button disabled={busy === row.id} onClick={() => void forgetSignIn(row)}>
+                      Forget sign-in
+                    </button>
+                  ) : (
+                    <button
+                      disabled={busy === row.id}
+                      onClick={() => {
+                        setEditing(row.id);
+                        setCreds({ username: '', password: '' });
+                      }}
+                    >
+                      Save sign-in
+                    </button>
+                  ))}
                 <button disabled={busy === row.id} onClick={() => void remove(row)}>
                   Remove
                 </button>
@@ -196,6 +250,44 @@ export function SiteConnections() {
             </li>
           ))}
         </ul>
+      )}
+
+      {editing && (
+        <div className="saved-signin">
+          <p className="muted small">
+            Kept in your Mac&rsquo;s keychain on this computer. It is never sent to ContextoAgent,
+            and only works for sites with a normal username and password &mdash; not ones behind
+            Google.
+          </p>
+          <div className="add-site">
+            <input
+              value={creds.username}
+              onChange={(e) => setCreds({ ...creds, username: e.target.value })}
+              placeholder="Username"
+              aria-label="Username"
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              value={creds.password}
+              onChange={(e) => setCreds({ ...creds, password: e.target.value })}
+              placeholder="Password"
+              aria-label="Password"
+              autoComplete="new-password"
+            />
+            <button className="primary" onClick={() => void rememberSignIn(editing)}>
+              Save
+            </button>
+            <button
+              onClick={() => {
+                setEditing(null);
+                setCreds({ username: '', password: '' });
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {bridge ? (

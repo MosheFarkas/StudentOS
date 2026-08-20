@@ -13,8 +13,8 @@ type State =
  *
  * The student reaches this because the app opened their browser here. What
  * they are agreeing to is worth stating plainly on the page rather than in a
- * help article: that computer will be able to read the school portals they log
- * into on it, and send what it finds back to their account.
+ * help article: that computer will be able to read the sites they sign into on
+ * it, and send what it finds back to their account.
  *
  * Nothing here is one-click-from-an-email safe by accident -- approval is a
  * POST from an authenticated session, and the request expires in ten minutes.
@@ -84,8 +84,8 @@ export function LinkDevice({ requestId }: { requestId: string }) {
         <strong>{state.deviceName}</strong> is asking to connect to your account.
       </p>
       <div className="notice">
-        Once linked, this computer can read the school portals you sign into on it and send what it
-        finds to your account. Only approve it if you started this yourself.
+        Once linked, this computer can read the sites you sign into on it and send what it finds to
+        your account. Only approve it if you started this yourself.
       </div>
       <div className="actions">
         <button className="primary" disabled={busy} onClick={() => void approve(state.deviceName)}>

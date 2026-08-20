@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('contexto', {
   beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
   finishLogin: (id) => ipcRenderer.invoke('finishLogin', id),
   syncPortal: (id) => ipcRenderer.invoke('syncPortal', id),
+  saveCredentials: (id, creds) => ipcRenderer.invoke('saveCredentials', id, creds),
+  hasCredentials: (id) => ipcRenderer.invoke('hasCredentials', id),
+  clearCredentials: (id) => ipcRenderer.invoke('clearCredentials', id),
+  autoSignIn: (id) => ipcRenderer.invoke('autoSignIn', id),
   setOpenAtLogin: (value) => ipcRenderer.invoke('setOpenAtLogin', value),
   onPortalsChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });

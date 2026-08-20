@@ -27,6 +27,17 @@ export interface DesktopBridge {
     id: string,
   ): Promise<{ ok: boolean; value?: { needsLogin?: boolean }; error?: string }>;
   syncSite(id: string): Promise<{ ok: boolean; error?: string }>;
+  saveCredentials?(
+    id: string,
+    creds: { username: string; password: string },
+  ): Promise<{ ok: boolean; error?: string }>;
+  hasCredentials?(
+    id: string,
+  ): Promise<{ ok: boolean; value?: { saved: boolean; available: boolean } }>;
+  clearCredentials?(id: string): Promise<{ ok: boolean }>;
+  autoSignIn?(
+    id: string,
+  ): Promise<{ ok: boolean; value?: { ok?: boolean; reason?: string }; error?: string }>;
   onSitesChanged(fn: () => void): void;
 }
 

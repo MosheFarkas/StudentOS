@@ -23,5 +23,9 @@ contextBridge.exposeInMainWorld('contextoDesktop', {
   beginLogin: (id) => ipcRenderer.invoke('beginLogin', id),
   finishLogin: (id) => ipcRenderer.invoke('finishLogin', id),
   syncSite: (id) => ipcRenderer.invoke('syncPortal', id),
+  saveCredentials: (id, creds) => ipcRenderer.invoke('saveCredentials', id, creds),
+  hasCredentials: (id) => ipcRenderer.invoke('hasCredentials', id),
+  clearCredentials: (id) => ipcRenderer.invoke('clearCredentials', id),
+  autoSignIn: (id) => ipcRenderer.invoke('autoSignIn', id),
   onSitesChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });

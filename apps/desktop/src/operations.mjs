@@ -8,6 +8,7 @@
  */
 
 import { PortalBrowser } from './browser.mjs';
+import { readCredentials } from './credentials.mjs';
 import { explore } from './explorer.mjs';
 import { DeviceUnlinked, pushSnapshot, readConfig, writeConfig } from './sync.mjs';
 
@@ -183,6 +184,93 @@ export async function resolvePortalAddress(portalId) {
   }
 }
 
+/**
+ * Sign in without the student, using a sign-in they chose to remember.
+ *
+ * Only works for a plain username-and-password form. A site behind Google or
+ * any other SSO is deliberately out of reach: that flow is designed to detect
+ * automation, and defeating it would mean teaching this app to look like
+ * something it is not. Those sites keep the two-step sign-in a person does.
+ *
+ * The credentials are read from the keychain at the moment they are typed
+ * into the page and are never written anywhere else, never logged, and never
+ * sent to the server.
+ */
+export async function autoSignIn(portalId) {
+  const portal = listPortals().find((p) => p.id === portalId);
+  if (!portal) throw new Error(`No site called ${portalId}`);
+
+  const saved = readCredentials(portalId);
+  if (!saved) return { attempted: false, reason: 'no saved sign-in' };
+
+  const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
+  try {
+    await browser.launch();
+    const { sessionId } = await browser.openPage(portal.url);
+
+    const fill = `(() => {
+      const pw = document.querySelector('input[type=password]');
+      if (!pw) return 'no-password-field';
+      const form = pw.form ?? document;
+      const inputs = Array.from(form.querySelectorAll('input'));
+      const before = inputs.slice(0, inputs.indexOf(pw)).reverse();
+      const user = before.find((i) => /^(text|email|tel)$/.test(i.type) && !i.disabled)
+        ?? form.querySelector('input[type=email], input[type=text]');
+      if (!user) return 'no-username-field';
+      // Assigning .value directly is invisible to React, which tracks its own
+      // state -- the form would submit empty. Going through the prototype
+      // setter and firing the events is what a real keystroke looks like.
+      const set = (el, value) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        setter ? setter.call(el, value) : (el.value = value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      set(user, ${JSON.stringify(saved.username)});
+      set(pw, ${JSON.stringify(saved.password)});
+      const submit = form.querySelector('button[type=submit], input[type=submit]')
+        ?? Array.from(form.querySelectorAll('button')).find((b) => !b.type || b.type === 'submit');
+      if (submit) submit.click();
+      else if (form.requestSubmit) form.requestSubmit();
+      else if (form.submit) form.submit();
+      return 'submitted';
+    })()`;
+
+    const { result } = await browser.cdp.send(
+      'Runtime.evaluate',
+      { expression: fill, returnByValue: true },
+      sessionId,
+    );
+    if (result.value !== 'submitted') {
+      await browser.close();
+      return { attempted: true, ok: false, reason: result.value };
+    }
+
+    // Let the sign-in land, then ask the same question a person would: are we
+    // still looking at a password box?
+    await new Promise((r) => setTimeout(r, 4000));
+    const { result: after } = await browser.cdp.send(
+      'Runtime.evaluate',
+      {
+        expression: 'Boolean(document.querySelector("input[type=password]"))',
+        returnByValue: true,
+      },
+      sessionId,
+    );
+    await browser.close();
+
+    const ok = after.value === false;
+    if (ok) updatePortal(portalId, { loggedInAt: new Date().toISOString(), lastError: null });
+    return { attempted: true, ok, reason: ok ? undefined : 'still asking for a password' };
+  } catch {
+    await browser.close().catch(() => {});
+    // The error is deliberately not passed on: it can carry the page's own
+    // text, and a failed sign-in page is exactly where a typed password can
+    // end up echoed back.
+    return { attempted: true, ok: false, reason: 'the sign-in could not be completed' };
+  }
+}
+
 /** Close the login window gracefully, which is what persists the session. */
 export async function finishLogin(portalId) {
   const browser = openLogins.get(portalId);
@@ -225,6 +313,18 @@ async function runSync(portalId, { budget = 40 } = {}) {
   if (!config.token) throw new Error('This computer is not linked yet.');
   const portal = (config.portals ?? []).find((p) => p.id === portalId);
   if (!portal) throw new Error(`No portal called ${portalId}`);
+
+  /*
+   * A remembered sign-in makes an expired session self-healing.
+   *
+   * Without this the student finds out days later, when they ask the agent
+   * something and it says the site needs signing into again -- which is a
+   * worse way to learn it than never noticing at all.
+   */
+  if (!portal.loggedInAt && readCredentials(portalId)) {
+    const recovered = await autoSignIn(portalId);
+    if (recovered.ok) portal.loggedInAt = new Date().toISOString();
+  }
 
   const browser = new PortalBrowser({ portalId, mode: 'drive', visible: false });
   try {

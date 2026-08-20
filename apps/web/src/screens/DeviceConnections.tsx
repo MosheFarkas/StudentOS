@@ -40,7 +40,12 @@ export function DeviceConnections() {
   }, []);
 
   async function revoke(device: Device) {
-    if (!confirm(`Unlink ${device.name}? It will stop sending portal updates.`)) return;
+    if (
+      !confirm(
+        `Unlink ${device.name}? It will stop sending updates from the sites you signed into on it.`,
+      )
+    )
+      return;
     await api.devices[':id'].revoke.$post({ param: { id: device.id } });
     await load();
   }

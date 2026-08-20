@@ -3,6 +3,13 @@ import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
 import { link, readConfig, refreshSession, sessionValid } from './sync.mjs';
 import {
+  clearCredentials,
+  hasCredentials,
+  keychainAvailable,
+  saveCredentials,
+} from './credentials.mjs';
+import {
+  autoSignIn,
   addPortal,
   beginLogin,
   finishLogin,
@@ -214,6 +221,16 @@ handle('removePortal', (id) => removePortal(id));
 handle('beginLogin', (id) => beginLogin(id));
 handle('finishLogin', (id) => finishLogin(id));
 handle('syncPortal', (id) => syncPortal(id));
+
+/*
+ * Saved sign-ins. The password crosses this boundary once, on its way to the
+ * keychain, and never comes back out -- hasCredentials answers yes or no, and
+ * nothing returns the value itself to a window.
+ */
+handle('saveCredentials', (id, creds) => saveCredentials(id, creds));
+handle('hasCredentials', (id) => ({ saved: hasCredentials(id), available: keychainAvailable() }));
+handle('clearCredentials', (id) => clearCredentials(id));
+handle('autoSignIn', (id) => autoSignIn(id));
 
 /**
  * Sync everything that has a session, quietly.
