@@ -22,9 +22,15 @@ import { useAgentSession } from '../lib/useAgentSession.js';
  * the spinner takes that with it -- but a glow on something no longer
  * happening would be saying something untrue.
  */
-export function AgentSession({ agentId }: { agentId: string }) {
+export function AgentSession({ agentId, working }: { agentId: string; working: boolean }) {
   const bridge = desktop();
   const { active, showing, portalId } = useAgentSession(agentId);
+  /*
+   * Lit for the whole time the agent is working, not only while a page is
+   * being driven. Between two steps it is still working, and a glow that
+   * blinks out in the gaps looks like it stopped.
+   */
+  const lit = active || working;
   const [expanded, setExpanded] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
@@ -65,16 +71,30 @@ export function AgentSession({ agentId }: { agentId: string }) {
   if (!bridge || !showing) return null;
 
   return (
-    <div className={`agent-browser${expanded ? ' expanded' : ''}${active ? ' working' : ''}`}>
+    <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>
       <div
         className="agent-browser-frame"
         ref={frame}
         onClick={() => setExpanded(!expanded)}
         role="presentation"
       />
+      {expanded && (
+        /* Closes the expansion only. The browser stays where it was. */
+        <button
+          className="agent-browser-close"
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded(false);
+          }}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      )}
+
       <span className="agent-browser-label">
         {portalId}
-        {active && (
+        {lit && (
           <span className="dots" aria-hidden="true">
             <i />
             <i />

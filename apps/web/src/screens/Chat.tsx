@@ -151,7 +151,7 @@ export function Chat({ agentId, onBack }: Props) {
               nothing until this conversation's agent is actually driving a
               browser.
             */}
-            <AgentSession agentId={agentId} />
+            <AgentSession agentId={agentId} working={sending} />
 
             {sending && (
               /*

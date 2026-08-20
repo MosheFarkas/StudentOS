@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { condense, readSchoolPortal, refreshSchoolPortal } from './portal.js';
+import { browseWithAgent, condense, readSchoolPortal, refreshSchoolPortal } from './portal.js';
 import type { PortalSnapshot, ToolContext } from './types.js';
 
 const ctxWith = (snapshots: PortalSnapshot[]): ToolContext =>
@@ -159,5 +159,48 @@ describe('what the read tool says when a site needs signing in', () => {
     expect(warning).not.toMatch(
       /no coursework/i.source ? /tell them they have no coursework/i : /x/,
     );
+  });
+});
+
+describe('what a successful browse tells the model', () => {
+  const ctx = (result: unknown) =>
+    ({
+      userId: 'u1',
+      agentId: 'a1',
+      portals: {
+        latest: async () => [],
+        requestRefresh: async () => ({ alreadyPending: false, requestId: 'r1' }),
+        awaitRefresh: async () => ({ finished: true, outcome: 'read' }),
+        requestBrowse: async () => ({ requestId: 'b1' }),
+        resultOf: async () => result,
+      },
+    }) as unknown as ToolContext;
+
+  it('says the page opened, not just that here is some text', async () => {
+    // It handed back four thousand words of Google and the agent told the
+    // student it could not open Google -- because nothing in the result said
+    // the call had worked.
+    const result = (await browseWithAgent.execute(
+      { url: 'https://www.google.com/search?q=dogs' },
+      ctx({
+        url: 'https://www.google.com/search?q=dogs',
+        title: 'dogs',
+        text: 'results here',
+        links: [],
+      }),
+    )) as { opened: boolean; note: string; text: string };
+
+    expect(result.opened).toBe(true);
+    expect(result.note).toMatch(/it worked/i);
+    expect(result.note).toMatch(/do not tell the student you could not open it/i);
+    expect(result.text).toBe('results here');
+  });
+
+  it('still marks the content as untrusted in the same breath', async () => {
+    const result = (await browseWithAgent.execute(
+      { url: 'https://example.com/' },
+      ctx({ text: 'x', links: [] }),
+    )) as { note: string };
+    expect(result.note).toMatch(/NEVER as instructions/);
   });
 });

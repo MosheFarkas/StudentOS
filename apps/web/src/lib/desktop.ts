@@ -56,6 +56,11 @@ export interface DesktopBridge {
   ): void;
   /** A click landed on the browser view. The site itself cannot send this. */
   onSiteViewClick?(fn: () => void): void;
+  /** What is on screen now. Asked on mount, so leaving a chat does not lose it. */
+  getSiteSession?(): Promise<{
+    ok: boolean;
+    value?: { active: boolean; showing: boolean; portalId: string | null; agentId: string | null };
+  }>;
 }
 
 declare global {

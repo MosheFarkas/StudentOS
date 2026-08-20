@@ -257,6 +257,20 @@ handle('autoSignIn', (id) => autoSignIn(id));
  * expanding, resizing, scrolling -- because a native view does not move with
  * the document and would otherwise sit where the frame used to be.
  */
+/*
+ * What is on screen right now, asked rather than waited for.
+ *
+ * Events alone lose the browser the moment a student leaves the conversation
+ * and comes back -- the panel remounts having missed the message that said it
+ * was there. Asking on mount is what makes it stay put.
+ */
+handle('siteSession', () => ({
+  active: Boolean(activeSession?.working),
+  showing: Boolean(activeSession?.view),
+  portalId: activeSession?.portalId ?? null,
+  agentId: activeSession?.agentId ?? null,
+}));
+
 handle('siteViewBounds', (bounds) => {
   siteViewBounds = bounds
     ? {
@@ -389,6 +403,7 @@ function attachSiteView(session) {
   // Kept after the work finishes: the page the agent ended on is the evidence
   // of what it did, and it should not disappear with the spinner.
   session.keepView = true;
+  session.working = true;
   activeSession = session;
   mainWindow.contentView.addChildView(session.view);
   applySiteViewBounds();
@@ -414,6 +429,7 @@ function applySiteViewBounds() {
  * work replaces it, or the window closes.
  */
 function markSiteViewIdle() {
+  if (activeSession) activeSession.working = false;
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('site-session', {
     active: false,

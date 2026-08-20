@@ -21,6 +21,18 @@ export function useAgentSession(agentId: string): AgentSessionState {
 
   useEffect(() => {
     const bridge = desktop();
+
+    /*
+     * Ask what is already there before listening for changes. A student who
+     * leaves the conversation and comes back has missed every event, and
+     * without this the browser they were watching is simply gone.
+     */
+    void bridge?.getSiteSession?.().then((reply) => {
+      const now = reply?.value;
+      if (!now?.showing) return;
+      if (now.agentId && now.agentId !== agentId) return;
+      setState({ active: now.active, showing: true, portalId: now.portalId ?? undefined });
+    });
     bridge?.onSiteSession?.((payload) => {
       // Only work this conversation asked for. A scheduled sync carries no
       // agent and belongs in no chat.

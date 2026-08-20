@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('contexto', {
   setSiteViewBounds: (bounds) => ipcRenderer.invoke('siteViewBounds', bounds),
   onSiteSession: (fn) => ipcRenderer.on('site-session', (_e, payload) => fn(payload)),
   onSiteViewClick: (fn) => ipcRenderer.on('site-view-clicked', () => fn()),
+  getSiteSession: () => ipcRenderer.invoke('siteSession'),
   setOpenAtLogin: (value) => ipcRenderer.invoke('setOpenAtLogin', value),
   onPortalsChanged: (fn) => ipcRenderer.on('portals-changed', () => fn()),
 });
