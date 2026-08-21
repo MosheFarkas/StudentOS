@@ -63,6 +63,20 @@ export interface AgentRunResult {
  */
 const MAX_ITERATIONS = 8;
 
+/**
+ * The model's text, as a string, whatever it actually sent.
+ *
+ * A response carrying no text has no text field -- the OpenAI adapter passes
+ * `output_text` straight through and that is simply absent when there is
+ * nothing to say. Treating it as a string and calling .trim() threw, and it
+ * threw in exactly the case the fallback below exists to rescue, so the turn
+ * died instead of answering. Everything the model says is normalised on the
+ * way in rather than guarded at each use.
+ */
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export async function runAgentTurn(
   deps: AgentRunDeps,
   input: AgentRunInput,
@@ -108,7 +122,7 @@ export async function runAgentTurn(
     );
 
     if (response.toolCalls.length === 0) {
-      reply = response.content;
+      reply = text(response.content);
       break;
     }
 
@@ -140,7 +154,7 @@ export async function runAgentTurn(
       { messages },
       { userId: input.userId, agentId: input.agentId, signal: input.signal },
     );
-    reply = final.content;
+    reply = text(final.content);
   }
 
   /*

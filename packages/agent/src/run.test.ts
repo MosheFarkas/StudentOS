@@ -218,3 +218,40 @@ describe('always answering', () => {
     expect(reply).toMatch(/browser_open/);
   });
 });
+
+/**
+ * A model that returns no text field at all.
+ *
+ * Not hypothetical: the OpenAI adapter passes `output_text` straight through,
+ * and a response carrying no text has no such field. That is the very case
+ * the fallback above exists for -- so reaching it must not be what breaks.
+ * Calling .trim() on it threw a TypeError, which took the whole turn down and
+ * left the student with nothing at all rather than with the fallback.
+ */
+describe('a reply with no text field', () => {
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  const input = { userId: 'u1', agentId: 'a1', purpose: 'test', message: 'go' } as never;
+  const deps = (chat: () => Promise<unknown>) =>
+    ({
+      llm: { chat },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools: new ToolRegistry(),
+    }) as unknown as AgentRunDeps;
+
+  it('does not throw when content is missing entirely', async () => {
+    const { reply } = await runAgentTurn(
+      deps(async () => ({ toolCalls: [], usage, finishReason: 'stop' as const })),
+      input,
+    );
+    expect(reply.trim()).not.toBe('');
+  });
+
+  it('does not throw when content is null', async () => {
+    const { reply } = await runAgentTurn(
+      deps(async () => ({ content: null, toolCalls: [], usage, finishReason: 'stop' as const })),
+      input,
+    );
+    expect(reply.trim()).not.toBe('');
+  });
+});
