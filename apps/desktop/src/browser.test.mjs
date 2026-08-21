@@ -41,12 +41,59 @@ describe('diagnoseExit', () => {
 });
 
 describe('findBrowser', () => {
-  it('finds a Chromium-family browser on this machine', () => {
-    expect(findBrowser().path).toBeTruthy();
+  /*
+   * Asked about a made-up machine, not the one running the tests.
+   *
+   * This used to assert that a Chromium browser existed on whatever box ran
+   * the suite -- which tests the box, not the code, and fails on any CI runner
+   * without Chrome installed. What is worth pinning is the order of
+   * preference and that an unreadable path is skipped; both are properties of
+   * the lookup, so the lookup is what gets handed a fake.
+   */
+  const installed =
+    (...present) =>
+    (path) =>
+      present.some((p) => path === p);
+
+  it('finds Chrome where macOS puts it', () => {
+    const found = findBrowser('darwin', {
+      executable: installed('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+    });
+    expect(found).toEqual({
+      brand: 'chrome',
+      path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    });
+  });
+
+  it('prefers Chrome over Edge when both are installed', () => {
+    // School SSO is tested against Chrome; Edge is the fallback, not the pick.
+    const found = findBrowser('darwin', {
+      executable: installed(
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      ),
+    });
+    expect(found.brand).toBe('chrome');
+  });
+
+  it('falls back to Edge when Chrome is absent', () => {
+    const found = findBrowser('darwin', {
+      executable: installed('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'),
+    });
+    expect(found.brand).toBe('edge');
+  });
+
+  it('asks PATH on Linux, where installs land wherever the distro puts them', () => {
+    const found = findBrowser('linux', {
+      which: (binary) => (binary === 'google-chrome' ? '/usr/bin/google-chrome' : null),
+      executable: installed('/usr/bin/google-chrome'),
+    });
+    expect(found).toEqual({ brand: 'chrome', path: '/usr/bin/google-chrome' });
   });
 
   it('throws a student-readable error when nothing is installed', () => {
     expect(() => findBrowser('sunos')).toThrow(/Install Chrome/);
+    expect(() => findBrowser('darwin', { executable: () => false })).toThrow(/Install Chrome/);
   });
 });
 

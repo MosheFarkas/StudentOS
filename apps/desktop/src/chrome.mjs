@@ -90,16 +90,24 @@ function whichSync(binary) {
 /**
  * @returns {{ brand: string, path: string }}
  * @throws when no Chromium-family browser is installed.
+ *
+ * The two ways of looking are injectable so this can be asked about a machine
+ * other than the one running it. Without that the only honest test is "is
+ * Chrome installed here", which tests the machine rather than the order of
+ * preference, and red-lines CI on any runner without a browser.
  */
-export function findBrowser(platform = process.platform) {
+export function findBrowser(
+  platform = process.platform,
+  { executable = isExecutable, which = whichSync } = {},
+) {
   for (const [brand, path] of CANDIDATES[platform] ?? []) {
-    if (isExecutable(path)) return { brand, path };
+    if (executable(path)) return { brand, path };
   }
 
   if (platform === 'linux') {
     for (const [brand, binary] of LINUX_BINARIES) {
-      const resolved = whichSync(binary);
-      if (isExecutable(resolved)) return { brand, path: resolved };
+      const resolved = which(binary);
+      if (resolved && executable(resolved)) return { brand, path: resolved };
     }
   }
 
