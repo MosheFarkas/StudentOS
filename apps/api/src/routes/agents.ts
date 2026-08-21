@@ -93,12 +93,22 @@ export function createAgentRoutes(ctx: AppContext) {
         const userId = c.get('userId');
         const agent = await ownedAgent(userId, c.req.param('id'));
 
-        // Shared with the messaging gateway -- see src/agent-turn.ts.
+        /*
+         * Deliberately not tied to the request.
+         *
+         * Passing c.req.raw.signal meant a student who closed the window or
+         * reloaded mid-turn killed the work: the user's message is written
+         * before the model runs, the reply only after, so aborting left the
+         * question saved with no answer and nothing to say one was coming.
+         * The turn now finishes and the reply is stored, and they find it when
+         * they come back.
+         *
+         * Shared with the messaging gateway -- see src/agent-turn.ts.
+         */
         const result = await runTurnForAgent(ctx, {
           userId,
           agent,
           content: c.req.valid('json').content,
-          signal: c.req.raw.signal,
         });
 
         return c.json(result);

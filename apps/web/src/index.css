@@ -306,6 +306,100 @@ hr {
   border-bottom-color: var(--line);
 }
 
+/*
+ * An agent row, which is now two controls rather than one.
+ *
+ * The row used to be a single button. A delete control cannot live inside
+ * one -- a button in a button is not a thing -- so the row is a container and
+ * the part you press to open the conversation is its own button, filling
+ * everything the delete control does not.
+ */
+.row-agent {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.row-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 0.85rem 0 0.85rem 1rem;
+  border: 0;
+  background: none;
+}
+
+/*
+ * Quiet until wanted. Deleting a conversation is not something to invite by
+ * putting a bright control beside every agent, but hiding it until hover
+ * would leave no way to reach it by touch, which is where this mostly runs.
+ */
+.row-remove {
+  flex: none;
+  align-self: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-right: 0.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0.35;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease;
+}
+
+.row-remove::before,
+.row-remove::after {
+  content: '';
+  grid-area: 1 / 1;
+  width: 0.62rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--ink-soft);
+}
+
+.row-remove::before {
+  transform: rotate(45deg);
+}
+
+.row-remove::after {
+  transform: rotate(-45deg);
+}
+
+.row-remove:hover {
+  opacity: 1;
+  background: var(--wash);
+}
+
+.row-remove:hover::before,
+.row-remove:hover::after {
+  background: var(--danger);
+}
+
+/* The same row, asking. Sized like the one it replaced so nothing jumps. */
+.row-asking {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.row-asking .actions {
+  margin: 0;
+}
+
 .row strong {
   font-weight: 600;
 }

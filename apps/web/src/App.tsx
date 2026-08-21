@@ -114,7 +114,22 @@ export function App() {
       )}
 
       {route.name === 'chat' && (
-        <Chat agentId={route.agentId} onBack={() => navigate({ name: 'agents' })} />
+        /*
+         * Keyed, so moving between conversations builds a new one rather than
+         * repainting the old.
+         *
+         * Without it React kept a single Chat and only swapped the prop, so
+         * everything it was holding came along: a reply still in flight landed
+         * in whichever conversation was open by the time it arrived, the
+         * composer stayed disabled because some other chat was mid-turn, and a
+         * half-typed message followed you into a different agent. A
+         * conversation is not a repaint of another one.
+         */
+        <Chat
+          key={route.agentId}
+          agentId={route.agentId}
+          onBack={() => navigate({ name: 'agents' })}
+        />
       )}
 
       {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}

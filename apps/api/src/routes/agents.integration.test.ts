@@ -1,5 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
+import { agentMessages } from '@contexto/db';
 import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
@@ -166,5 +168,49 @@ describe('agent creation', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+/**
+ * Removing an agent.
+ *
+ * The list screen offers this, and what it promises is that the conversation
+ * goes too -- "delete X and everything it has said". That is a cascade in the
+ * schema rather than anything the route does, so it is worth pinning here:
+ * a delete that quietly left the messages behind would keep a student's
+ * transcript after they asked for it to be gone.
+ */
+describe('deleting an agent', () => {
+  it('removes it, and the conversation with it', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+    const db = await testDb();
+
+    await db.insert(agentMessages).values([
+      { agentId: agent.id, role: 'user', content: 'something private' },
+      { agentId: agent.id, role: 'assistant', content: 'a reply about it' },
+    ]);
+
+    expect(
+      (await app.request(`/api/agents/${agent.id}`, { method: 'DELETE', ...as(alice.token) }))
+        .status,
+      // 204: nothing left to describe. `res.ok` covers it on the client.
+    ).toBe(204);
+
+    // Gone from the list, and gone when asked for directly.
+    expect((await app.request(`/api/agents/${agent.id}`, as(alice.token))).status).toBe(404);
+
+    const left = await db.select().from(agentMessages).where(eq(agentMessages.agentId, agent.id));
+    expect(left).toEqual([]);
+  });
+
+  it("leaves the student's other agents alone", async () => {
+    const alice = await createUser();
+    const doomed = await createAgent(alice.id);
+    const keeper = await createAgent(alice.id);
+
+    await app.request(`/api/agents/${doomed.id}`, { method: 'DELETE', ...as(alice.token) });
+
+    expect((await app.request(`/api/agents/${keeper.id}`, as(alice.token))).status).toBe(200);
   });
 });

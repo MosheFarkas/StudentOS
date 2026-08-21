@@ -10,6 +10,9 @@ export function Agents({ onOpen }: Props) {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  /** The agent being asked about, if any. Only ever one at a time. */
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [removingNow, setRemovingNow] = useState(false);
 
   async function load() {
     try {
@@ -25,6 +28,23 @@ export function Agents({ onOpen }: Props) {
   useEffect(() => {
     void load();
   }, []);
+
+  async function remove(agent: Agent) {
+    setRemovingNow(true);
+    setError(null);
+    try {
+      const res = await api.agents[':id'].$delete({ param: { id: agent.id } });
+      if (!res.ok) throw new Error(`Could not remove ${agent.name} (${res.status})`);
+      // Dropped here rather than reloading the list: the server has already
+      // agreed, and a round trip would leave the row sitting there meanwhile.
+      setAgents((prev) => (prev ?? []).filter((a) => a.id !== agent.id));
+      setRemoving(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unknown error');
+    } finally {
+      setRemovingNow(false);
+    }
+  }
 
   if (error) return <p className="muted">{error}</p>;
   if (!agents) return <p className="muted">Loading…</p>;
@@ -48,12 +68,42 @@ export function Agents({ onOpen }: Props) {
         />
       )}
 
-      {agents.map((agent) => (
-        <button key={agent.id} className="row" onClick={() => onOpen(agent)}>
-          <strong>{agent.name}</strong>
-          <span className="muted">{agent.purpose}</span>
-        </button>
-      ))}
+      {agents.map((agent) =>
+        removing === agent.id ? (
+          /*
+           * The row asks in place rather than throwing up a dialog. Deleting
+           * takes the conversation with it, so it is worth a second press --
+           * but not worth a box over the whole screen, and putting the
+           * question where the row was means it is obvious which one is meant.
+           */
+          <div key={agent.id} className="row row-asking">
+            <span>
+              Delete <strong>{agent.name}</strong> and everything it has said?
+            </span>
+            <div className="actions">
+              <button className="danger" onClick={() => void remove(agent)} disabled={removingNow}>
+                {removingNow ? 'Deleting…' : 'Delete'}
+              </button>
+              <button onClick={() => setRemoving(null)} disabled={removingNow}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div key={agent.id} className="row row-agent">
+            <button className="row-open" onClick={() => onOpen(agent)}>
+              <strong>{agent.name}</strong>
+              <span className="muted">{agent.purpose}</span>
+            </button>
+            <button
+              className="row-remove"
+              onClick={() => setRemoving(agent.id)}
+              aria-label={`Delete ${agent.name}`}
+              title={`Delete ${agent.name}`}
+            />
+          </div>
+        ),
+      )}
 
       {agents.length > 0 && !creating && (
         <button style={{ marginTop: '1rem' }} onClick={() => setCreating(true)}>
