@@ -94,3 +94,38 @@ describe('parse', () => {
     expect(parsed?.channelUserId).toBe('1111');
   });
 });
+
+/**
+ * The webhook secret.
+ *
+ * The one route the public internet reaches without credentials, so what it
+ * accepts and rejects is worth stating exactly.
+ */
+describe('verifyRequest', () => {
+  const channel = new TelegramChannel({ botToken: 'bot', webhookSecret: 'the-real-secret' });
+  const withHeader = (value?: string) =>
+    new Headers(value === undefined ? {} : { 'x-telegram-bot-api-secret-token': value });
+
+  it('accepts the real secret', () => {
+    expect(channel.verifyRequest(withHeader('the-real-secret'))).toBe(true);
+  });
+
+  it('rejects a wrong secret', () => {
+    expect(channel.verifyRequest(withHeader('not-the-secret'))).toBe(false);
+  });
+
+  it('rejects a missing header rather than throwing', () => {
+    expect(channel.verifyRequest(withHeader())).toBe(false);
+  });
+
+  it('rejects a prefix of the real secret', () => {
+    // The shape a byte-at-a-time guess takes, and the reason the comparison
+    // is over fixed-length digests rather than the strings themselves.
+    expect(channel.verifyRequest(withHeader('the-real-secre'))).toBe(false);
+    expect(channel.verifyRequest(withHeader(''))).toBe(false);
+  });
+
+  it('rejects a much longer string without throwing on the length', () => {
+    expect(channel.verifyRequest(withHeader('x'.repeat(4096)))).toBe(false);
+  });
+});

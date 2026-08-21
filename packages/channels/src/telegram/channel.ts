@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Channel, InboundMessage } from '../types.js';
 
 const API_BASE = 'https://api.telegram.org';
@@ -24,10 +25,25 @@ export class TelegramChannel implements Channel {
 
   constructor(private readonly options: TelegramOptions) {}
 
+  /**
+   * Whether this really came from Telegram.
+   *
+   * The only route on the server the public internet can reach without
+   * credentials, and the secret is the whole of what stands in front of it --
+   * anything that gets past speaks to a student's agent as that student.
+   *
+   * Compared in constant time. `===` on strings returns as soon as two bytes
+   * differ, which leaks how much of a guess was right; over a network that is
+   * a hard attack to land, but the defence costs one line and the thing being
+   * defended is every account on the box. Both sides are hashed first so the
+   * comparison is over a fixed length and the secret's own length does not
+   * leak either.
+   */
   verifyRequest(headers: Headers): boolean {
     const provided = headers.get('x-telegram-bot-api-secret-token');
-    // Length check first so the comparison below cannot throw on a null.
-    return typeof provided === 'string' && provided === this.options.webhookSecret;
+    if (typeof provided !== 'string') return false;
+    const digest = (value: string) => createHash('sha256').update(value).digest();
+    return timingSafeEqual(digest(provided), digest(this.options.webhookSecret));
   }
 
   parse(body: unknown): InboundMessage | null {

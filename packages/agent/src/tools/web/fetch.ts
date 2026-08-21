@@ -74,26 +74,64 @@ export function isForbiddenAddress(ip: string): boolean {
   if (normalised === '::1' || normalised === '::') return true;
   if (normalised.startsWith('fe80')) return true; // link-local
   if (/^f[cd]/.test(normalised)) return true; // unique local
-  // IPv4-mapped IPv6 smuggles the whole v4 problem back in.
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalised);
-  if (mapped?.[1]) return isForbiddenAddress(mapped[1]);
+  /*
+   * IPv4-mapped IPv6 smuggles the whole v4 problem back in, and it has two
+   * spellings. The dotted one is what a person writes; the hex one is what
+   * comes back out of the URL parser, which rewrites
+   * "[::ffff:169.254.169.254]" as "[::ffff:a9fe:a9fe]". Only the first was
+   * recognised, so the address the parser actually produces for cloud
+   * metadata read as an ordinary public address.
+   */
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalised);
+  if (dotted?.[1]) return isForbiddenAddress(dotted[1]);
+
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(normalised);
+  if (hex?.[1] && hex[2]) {
+    const high = parseInt(hex[1], 16);
+    const low = parseInt(hex[2], 16);
+    const quad = [high >> 8, high & 0xff, low >> 8, low & 0xff].join('.');
+    return isForbiddenAddress(quad);
+  }
   return false;
 }
 
-/** Resolve, and reject unless EVERY answer is a public address. */
+/**
+ * Resolve, and reject unless EVERY answer is a public address.
+ *
+ * The resolver is injectable so the guard can be tested against a chosen
+ * answer. The attack worth covering is a public-looking hostname that
+ * resolves inward -- DNS rebinding -- and there is no way to write that test
+ * against the real resolver, which is why it went uncovered.
+ */
 export async function resolvePublicAddress(
   hostname: string,
+  lookup: (
+    host: string,
+    options: { all: true },
+  ) => Promise<{ address: string; family: number }[]> = dnsLookup,
 ): Promise<{ address: string; family: number }> {
-  if (isIP(hostname) !== 0) {
-    if (isForbiddenAddress(hostname)) {
+  /*
+   * An IPv6 literal arrives wrapped in brackets.
+   *
+   * `new URL('http://[::1]/').hostname` is "[::1]", and isIP() does not
+   * recognise that, so the literal-address check below was skipped entirely
+   * and a loopback address was handed to the resolver as though it were a
+   * name. It failed closed only because that lookup failed -- luck, not a
+   * guard. A resolver that answered would have let it straight through.
+   */
+  const literal =
+    hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+
+  if (isIP(literal) !== 0) {
+    if (isForbiddenAddress(literal)) {
       throw new FetchRejected('That address is not allowed.');
     }
-    return { address: hostname, family: isIP(hostname) };
+    return { address: literal, family: isIP(literal) };
   }
 
   let answers: { address: string; family: number }[];
   try {
-    answers = await dnsLookup(hostname, { all: true });
+    answers = await lookup(hostname, { all: true });
   } catch {
     throw new FetchRejected(`Could not find ${hostname}.`);
   }

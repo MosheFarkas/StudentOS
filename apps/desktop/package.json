@@ -15,7 +15,7 @@
   },
   "main": "src/main.mjs",
   "devDependencies": {
-    "electron": "^38.0.0",
+    "electron": "^39.8.10",
     "electron-builder": "^25.1.8"
   },
   "description": "Reads school portals that have no API, using logins the student completes themselves."

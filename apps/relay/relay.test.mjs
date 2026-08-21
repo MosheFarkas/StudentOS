@@ -53,7 +53,77 @@ describe('assertPublicHost', () => {
     await expect(assertPublicHost('localhost')).rejects.toThrow();
   });
 
-  it('allows a genuinely public host', async () => {
-    await expect(assertPublicHost('example.com')).resolves.toBeUndefined();
+  /*
+   * Answered from a resolver we choose, not from DNS.
+   *
+   * This used to ask the real resolver about example.com, which made a
+   * security test depend on the network: it failed on a DNS hiccup, and a
+   * guard whose test cannot be trusted is a guard nobody will trust. Choosing
+   * the answer also covers the case that matters most and could not be
+   * written before -- a public-looking name that resolves inward.
+   */
+  const resolvesTo =
+    (...addresses) =>
+    async () =>
+      addresses.map((address) => ({ address, family: address.includes(':') ? 6 : 4 }));
+
+  it('allows a host that resolves to a public address', async () => {
+    await expect(
+      assertPublicHost('example.com', resolvesTo('93.184.216.34')),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a public-looking name that resolves inward', async () => {
+    // DNS rebinding: the name says nothing, the answer is everything.
+    await expect(
+      assertPublicHost('totally-fine.example', resolvesTo('127.0.0.1')),
+    ).rejects.toThrow();
+    await expect(
+      assertPublicHost('totally-fine.example', resolvesTo('169.254.169.254')),
+    ).rejects.toThrow();
+  });
+
+  it('refuses when any one answer is internal, not just the first', async () => {
+    // A host answering with one public and one internal address must not be
+    // reachable at all -- otherwise which one is used becomes a race.
+    await expect(
+      assertPublicHost('mixed.example', resolvesTo('93.184.216.34', '10.0.0.5')),
+    ).rejects.toThrow();
+  });
+
+  it('refuses a name that resolves to nothing', async () => {
+    await expect(assertPublicHost('empty.example', resolvesTo())).rejects.toThrow();
+  });
+
+  it('refuses a name that cannot be resolved at all', async () => {
+    const fails = async () => {
+      throw new Error('ENOTFOUND');
+    };
+    await expect(assertPublicHost('nope.example', fails)).rejects.toThrow(/host not found/);
+  });
+});
+
+/**
+ * The spelling the URL parser actually produces.
+ *
+ * "[::ffff:169.254.169.254]" comes back out of `new URL()` as
+ * "[::ffff:a9fe:a9fe]", and only the dotted spelling was recognised as
+ * IPv4-mapped -- so the relay would have forwarded a request to cloud
+ * metadata written that way.
+ */
+describe('ipv4-mapped addresses in hex form', () => {
+  it('recognises hex-form metadata and loopback as forbidden', () => {
+    expect(isForbiddenAddress('::ffff:a9fe:a9fe')).toBe(true);
+    expect(isForbiddenAddress('::ffff:7f00:1')).toBe(true);
+  });
+
+  it('still allows a genuinely public mapped address', () => {
+    expect(isForbiddenAddress('::ffff:5db8:d822')).toBe(false);
+  });
+
+  it('rejects a bracketed literal without consulting a resolver', async () => {
+    const wouldAllow = async () => [{ address: '93.184.216.34', family: 4 }];
+    await expect(assertPublicHost('[::1]', wouldAllow)).rejects.toThrow(/not allowed/);
+    await expect(assertPublicHost('[::ffff:a9fe:a9fe]', wouldAllow)).rejects.toThrow(/not allowed/);
   });
 });

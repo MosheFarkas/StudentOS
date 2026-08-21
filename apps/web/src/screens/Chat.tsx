@@ -192,9 +192,6 @@ export function Chat({ agentId, onBack }: Props) {
                 ) : (
                   message.content
                 )}
-                {message.toolsUsed.length > 0 && (
-                  <span className="muted tools">used {message.toolsUsed.join(', ')}</span>
-                )}
               </div>
             ))}
 

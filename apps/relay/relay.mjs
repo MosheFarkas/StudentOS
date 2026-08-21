@@ -71,20 +71,47 @@ export function isForbiddenAddress(ip) {
   if (normalised === '::1' || normalised === '::') return true;
   if (normalised.startsWith('fe80')) return true;
   if (/^f[cd]/.test(normalised)) return true;
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalised);
-  if (mapped?.[1]) return isForbiddenAddress(mapped[1]);
+  /*
+   * IPv4-mapped IPv6 has two spellings, and only the dotted one was checked.
+   * The URL parser emits the hex one -- "[::ffff:169.254.169.254]" comes back
+   * as "[::ffff:a9fe:a9fe]" -- so cloud metadata read as a public address.
+   */
+  const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalised);
+  if (dotted?.[1]) return isForbiddenAddress(dotted[1]);
+
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(normalised);
+  if (hex?.[1] && hex[2]) {
+    const high = parseInt(hex[1], 16);
+    const low = parseInt(hex[2], 16);
+    return isForbiddenAddress([high >> 8, high & 0xff, low >> 8, low & 0xff].join('.'));
+  }
   return false;
 }
 
 /** Resolve, and reject unless EVERY answer is public. */
-export async function assertPublicHost(hostname) {
-  if (isIP(hostname) !== 0) {
-    if (isForbiddenAddress(hostname)) throw new Error('address not allowed');
+/**
+ * @param hostname the host being asked for
+ * @param lookup   how to resolve it -- injectable so this can be tested
+ *   against a chosen answer rather than against whatever DNS says today. The
+ *   attack worth covering is a public-looking name that resolves inward, and
+ *   there is no way to write that test with the real resolver.
+ */
+export async function assertPublicHost(hostname, lookup = dnsLookup) {
+  /*
+   * An IPv6 literal arrives wrapped in brackets, and isIP() does not know
+   * what "[::1]" is -- so the check below was skipped and a loopback address
+   * went to the resolver as if it were a hostname.
+   */
+  const literal =
+    hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+
+  if (isIP(literal) !== 0) {
+    if (isForbiddenAddress(literal)) throw new Error('address not allowed');
     return;
   }
   let answers;
   try {
-    answers = await dnsLookup(hostname, { all: true });
+    answers = await lookup(hostname, { all: true });
   } catch {
     throw new Error('host not found');
   }

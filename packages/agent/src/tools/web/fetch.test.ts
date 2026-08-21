@@ -1,6 +1,13 @@
 import { createServer, type Server } from 'node:http';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { FetchRejected, fetchPage, htmlToText, pinnedLookup } from './fetch.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  FetchRejected,
+  fetchPage,
+  htmlToText,
+  isForbiddenAddress,
+  pinnedLookup,
+  resolvePublicAddress,
+} from './fetch.js';
 
 /**
  * SSRF is the reason this module exists, so it is the bulk of what is tested.
@@ -203,5 +210,148 @@ describe('residential retry', () => {
       await expect(fetchPage(url, transport as never)).rejects.toBeInstanceOf(FetchRejected);
     }
     expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * What a name resolves to, rather than what it looks like.
+ *
+ * The guard checks every DNS answer, and until the resolver could be chosen
+ * there was no way to test that: the real one will not return 127.0.0.1 for a
+ * public name on request. So the case the check exists for -- DNS rebinding,
+ * where an innocuous hostname answers with an internal address -- was the one
+ * case going unverified.
+ */
+describe('what a hostname resolves to', () => {
+  const resolvesTo =
+    (...addresses: string[]) =>
+    async () =>
+      addresses.map((address) => ({ address, family: address.includes(':') ? 6 : 4 }));
+
+  it('allows a name that resolves to a public address', async () => {
+    await expect(resolvePublicAddress('example.com', resolvesTo('93.184.216.34'))).resolves.toEqual(
+      { address: '93.184.216.34', family: 4 },
+    );
+  });
+
+  it('refuses a public-looking name that resolves to loopback', async () => {
+    await expect(
+      resolvePublicAddress('totally-fine.example', resolvesTo('127.0.0.1')),
+    ).rejects.toBeInstanceOf(FetchRejected);
+  });
+
+  it('refuses one that resolves to cloud metadata', async () => {
+    // The address that returns droplet metadata in production.
+    await expect(
+      resolvePublicAddress('totally-fine.example', resolvesTo('169.254.169.254')),
+    ).rejects.toBeInstanceOf(FetchRejected);
+  });
+
+  it('refuses when any answer is internal, not merely the first', async () => {
+    await expect(
+      resolvePublicAddress('mixed.example', resolvesTo('93.184.216.34', '10.0.0.5')),
+    ).rejects.toBeInstanceOf(FetchRejected);
+  });
+
+  it('refuses an ipv6 answer that points inward', async () => {
+    await expect(resolvePublicAddress('v6.example', resolvesTo('::1'))).rejects.toBeInstanceOf(
+      FetchRejected,
+    );
+  });
+
+  it('refuses a name that resolves to nothing at all', async () => {
+    await expect(resolvePublicAddress('empty.example', resolvesTo())).rejects.toBeInstanceOf(
+      FetchRejected,
+    );
+  });
+});
+
+/**
+ * IPv6 literals arrive wrapped in brackets.
+ *
+ * `new URL('http://[::1]/').hostname` is "[::1]", and isIP() does not know
+ * what that is -- so the literal-address check was skipped and a loopback
+ * address went to the resolver as if it were a name. It failed closed only
+ * because the lookup happened to fail, which is luck rather than a guard, and
+ * slow luck at that: the test for it timed out at five seconds.
+ */
+describe('bracketed ipv6 literals', () => {
+  /*
+   * A resolver that would happily allow anything.
+   *
+   * Rejection therefore proves the literal-address check ran; a test using a
+   * failing resolver would pass either way and prove nothing, which is how
+   * this went unnoticed.
+   */
+  let asked: string[] = [];
+  const wouldAllow = async (host: string) => {
+    asked.push(host);
+    return [{ address: '93.184.216.34', family: 4 }];
+  };
+
+  beforeEach(() => {
+    asked = [];
+  });
+
+  it('rejects bracketed loopback even when the resolver would allow it', async () => {
+    await expect(resolvePublicAddress('[::1]', wouldAllow)).rejects.toBeInstanceOf(FetchRejected);
+    expect(asked).toEqual([]);
+  });
+
+  it('rejects bracketed link-local even when the resolver would allow it', async () => {
+    await expect(resolvePublicAddress('[fe80::1]', wouldAllow)).rejects.toBeInstanceOf(
+      FetchRejected,
+    );
+    expect(asked).toEqual([]);
+  });
+
+  it('rejects a bracketed ipv4-mapped loopback', async () => {
+    await expect(resolvePublicAddress('[::ffff:127.0.0.1]', wouldAllow)).rejects.toBeInstanceOf(
+      FetchRejected,
+    );
+    expect(asked).toEqual([]);
+  });
+
+  it('still allows a bracketed public address, without a lookup', async () => {
+    await expect(resolvePublicAddress('[2606:4700:4700::1111]', wouldAllow)).resolves.toMatchObject(
+      { family: 6 },
+    );
+    expect(asked).toEqual([]);
+  });
+});
+
+/**
+ * IPv4-mapped IPv6, in the form the URL parser actually produces.
+ *
+ * `new URL('http://[::ffff:169.254.169.254]/').hostname` is
+ * "[::ffff:a9fe:a9fe]" -- the parser rewrites the dotted tail as hex. The
+ * mapped-address check only understood the dotted spelling, so the hex one
+ * was not recognised as IPv4 at all and cloud metadata read as a public
+ * address. It was reachable only because a bracketed literal used to fall
+ * through to DNS and fail there; the moment that was fixed, this became a
+ * live route to 169.254.169.254.
+ */
+describe('ipv4-mapped addresses in hex form', () => {
+  it('recognises hex-form metadata as forbidden', () => {
+    expect(isForbiddenAddress('::ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  it('recognises hex-form loopback as forbidden', () => {
+    expect(isForbiddenAddress('::ffff:7f00:1')).toBe(true);
+  });
+
+  it('recognises hex-form private ranges as forbidden', () => {
+    expect(isForbiddenAddress('::ffff:a00:1')).toBe(true); // 10.0.0.1
+    expect(isForbiddenAddress('::ffff:c0a8:1')).toBe(true); // 192.168.0.1
+  });
+
+  it('still allows a genuinely public mapped address', () => {
+    expect(isForbiddenAddress('::ffff:5db8:d822')).toBe(false); // 93.184.216.34
+  });
+
+  it('agrees with the dotted spelling of the same address', () => {
+    expect(isForbiddenAddress('::ffff:169.254.169.254')).toBe(
+      isForbiddenAddress('::ffff:a9fe:a9fe'),
+    );
   });
 });
