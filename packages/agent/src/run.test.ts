@@ -128,3 +128,93 @@ describe('tool context', () => {
     expect(seen[0]?.transcriber).toBe(transcriber);
   });
 });
+
+/**
+ * A turn always says something.
+ *
+ * A model that does its work and then returns no text leaves an empty bubble
+ * in the conversation -- the browser visibly went and read a page, and the
+ * student is told nothing at all about what it found. Whatever else happens,
+ * a turn owes the student a sentence.
+ */
+describe('always answering', () => {
+  const deps = (chat: () => Promise<unknown>) =>
+    ({
+      llm: { chat },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools: new ToolRegistry(),
+    }) as unknown as AgentRunDeps;
+
+  const input = { userId: 'u1', agentId: 'a1', purpose: 'test', message: 'go' } as never;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+  it('says something even when the model returns nothing at all', async () => {
+    const { reply } = await runAgentTurn(
+      deps(async () => ({ content: '', toolCalls: [], usage, finishReason: 'stop' as const })),
+      input,
+    );
+    expect(reply.trim()).not.toBe('');
+  });
+
+  it('says something when the model returns only whitespace', async () => {
+    const { reply } = await runAgentTurn(
+      deps(async () => ({
+        content: '   \n  ',
+        toolCalls: [],
+        usage,
+        finishReason: 'stop' as const,
+      })),
+      input,
+    );
+    expect(reply.trim()).not.toBe('');
+  });
+
+  it('leaves a real answer exactly as the model wrote it', async () => {
+    const { reply } = await runAgentTurn(
+      deps(async () => ({
+        content: 'Dogs live 10-13 years.',
+        toolCalls: [],
+        usage,
+        finishReason: 'stop' as const,
+      })),
+      input,
+    );
+    expect(reply).toBe('Dogs live 10-13 years.');
+  });
+
+  it('mentions what it did when it has nothing else to say', async () => {
+    // It drove a browser and then went quiet: the fallback should at least
+    // account for the work the student watched happen.
+    const tools = new ToolRegistry();
+    tools.register({
+      id: 'browser_open',
+      description: 'opens a page',
+      inputSchema: z.object({}),
+      execute: async () => 'page text',
+    } as never);
+
+    let turn = 0;
+    const chat = async () => {
+      turn += 1;
+      return turn === 1
+        ? {
+            content: '',
+            toolCalls: [{ id: 'c1', name: 'browser_open', arguments: '{}' }],
+            usage,
+            finishReason: 'tool_calls' as const,
+          }
+        : { content: '', toolCalls: [], usage, finishReason: 'stop' as const };
+    };
+
+    const runDeps = {
+      llm: { chat },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools,
+    } as unknown as AgentRunDeps;
+
+    const { reply } = await runAgentTurn(runDeps, input);
+    expect(reply).toMatch(/browser_open/);
+  });
+});

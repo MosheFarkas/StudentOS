@@ -135,12 +135,31 @@ export async function runAgentTurn(
   // returning nothing, ask once more with tools withheld -- the model has all
   // the results it gathered and is forced to answer from them. A student
   // getting a partial answer beats a student getting silence.
-  if (!reply) {
+  if (!reply.trim()) {
     const final = await llm.chat(
       { messages },
       { userId: input.userId, agentId: input.agentId, signal: input.signal },
     );
     reply = final.content;
+  }
+
+  /*
+   * A turn always says something.
+   *
+   * Asking again usually produces an answer, and when it does not this is
+   * what stands between the student and an empty bubble -- which is the worst
+   * possible ending, because the work visibly happened. They watched a
+   * browser open a page and were then told nothing whatsoever about it.
+   *
+   * The tools are named because they are the only honest thing left to say:
+   * something was done, the model would not describe it, and the student
+   * should be told that rather than left to guess.
+   */
+  if (!reply.trim()) {
+    reply = toolsUsed.length
+      ? `I did the work (${[...new Set(toolsUsed)].join(', ')}) but could not put an answer ` +
+        'together from it. Ask me again and I will try to say what I found.'
+      : 'I could not come up with an answer to that. Try asking me again, or in another way.';
   }
 
   /*

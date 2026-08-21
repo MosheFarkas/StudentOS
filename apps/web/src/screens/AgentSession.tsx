@@ -40,6 +40,16 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
    */
   const lit = active || working;
   const [expanded, setExpanded] = useState(false);
+  /*
+   * Whether a carried frame has ever arrived for this conversation.
+   *
+   * In a browser tab there is no bridge, so `showing` -- which is fed by the
+   * app -- is always false, and the panel used to live only for as long as the
+   * request was in flight. It vanished the instant the reply landed, taking
+   * the page the agent had just been reading with it. This is the web's own
+   * answer to the same question: something was shown, so keep showing it.
+   */
+  const [sawFrame, setSawFrame] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
   const report = useCallback(() => {
@@ -112,9 +122,19 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
    * ask what is already on screen: the frames are the only signal there is.
    */
   if (!bridge) {
-    if (!working && !showing) return null;
+    /*
+     * Always mounted, so it keeps asking for frames and can say when one
+     * arrives -- a panel that only appeared once it was already needed would
+     * never be listening at the moment that mattered. Hidden rather than
+     * absent until there is something to see.
+     */
+    const present = working || showing || sawFrame;
     return (
-      <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>
+      <div
+        className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}${
+          present ? '' : ' agent-browser-unseen'
+        }`}
+      >
         <div className="agent-browser-bar">
           {expanded && (
             <button
@@ -137,7 +157,7 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
             {expanded ? 'Shrink' : 'Expand'}
           </button>
         </div>
-        <RemoteBrowser agentId={agentId} />
+        <RemoteBrowser agentId={agentId} onFrame={() => setSawFrame(true)} />
       </div>
     );
   }

@@ -25,7 +25,14 @@ interface Frame {
  * Nothing is stored at either end -- frames live in memory on the server for
  * seconds. See apps/api/src/live-session.ts.
  */
-export function RemoteBrowser({ agentId }: { agentId: string }) {
+export function RemoteBrowser({
+  agentId,
+  onFrame,
+}: {
+  agentId: string;
+  /** Told once there is something to show, so the panel can stay afterwards. */
+  onFrame?: () => void;
+}) {
   const [frame, setFrame] = useState<Frame | null>(null);
   const [gone, setGone] = useState(false);
   const surface = useRef<HTMLImageElement>(null);
@@ -35,6 +42,13 @@ export function RemoteBrowser({ agentId }: { agentId: string }) {
    * mid-hold on every repaint.
    */
   const since = useRef(0);
+  /*
+   * Held in a ref, not read from the closure. The poll is started once and
+   * must outlive re-renders -- taking the callback as a dependency would tear
+   * it down and abandon a held request every time the parent repainted.
+   */
+  const notify = useRef(onFrame);
+  notify.current = onFrame;
 
   useEffect(() => {
     let watching = true;
@@ -61,6 +75,7 @@ export function RemoteBrowser({ agentId }: { agentId: string }) {
           since.current = next.seq;
           setFrame(next);
           setGone(false);
+          notify.current?.();
         } catch {
           if (!watching) return;
           // Offline, or the turn is over and the server let the channel go.
