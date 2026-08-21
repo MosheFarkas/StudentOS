@@ -5,6 +5,7 @@ import { agentMessages } from '@contexto/db';
 import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
+import { beginTurn, endTurn } from '../turns-in-flight.js';
 import type { AppContext } from '../context.js';
 import {
   createAgent,
@@ -212,5 +213,61 @@ describe('deleting an agent', () => {
     await app.request(`/api/agents/${doomed.id}`, { method: 'DELETE', ...as(alice.token) });
 
     expect((await app.request(`/api/agents/${keeper.id}`, as(alice.token))).status).toBe(200);
+  });
+});
+
+/**
+ * Saying that a turn is still running.
+ *
+ * A turn outlives the request that started it, so a page loaded after a
+ * refresh has no memory of having asked. Without this the student sees their
+ * own question sitting unanswered and then an answer appearing minutes later
+ * from nowhere, which reads as the app having lost track.
+ */
+describe('a turn still running', () => {
+  it('says nothing is happening on a quiet conversation', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+    expect(await res.json()).toMatchObject({ pending: false });
+  });
+
+  it('says a turn is running while one is', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    beginTurn(agent.id);
+    try {
+      const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+      expect(await res.json()).toMatchObject({ pending: true });
+    } finally {
+      endTurn(agent.id);
+    }
+  });
+
+  it('goes quiet again once the turn ends', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    beginTurn(agent.id);
+    endTurn(agent.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+    expect(await res.json()).toMatchObject({ pending: false });
+  });
+
+  it("does not report another conversation's turn", async () => {
+    const alice = await createUser();
+    const busy = await createAgent(alice.id);
+    const quiet = await createAgent(alice.id);
+
+    beginTurn(busy.id);
+    try {
+      const res = await app.request(`/api/agents/${quiet.id}/messages`, as(alice.token));
+      expect(await res.json()).toMatchObject({ pending: false });
+    } finally {
+      endTurn(busy.id);
+    }
   });
 });

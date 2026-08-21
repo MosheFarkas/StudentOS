@@ -24,6 +24,12 @@ export function Chat({ agentId, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /*
+   * A turn running that this page did not start -- asked before a refresh, or
+   * from the other window. Without it the student sees a question of theirs
+   * sitting unanswered and then an answer appearing from nowhere.
+   */
+  const [pending, setPending] = useState(false);
   const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
@@ -45,7 +51,11 @@ export function Chat({ agentId, onBack }: Props) {
       setAgent((await detail.json()).agent);
 
       const history = await api.agents[':id'].messages.$get({ param: { id: agentId } });
-      if (history.ok) setMessages((await history.json()).messages);
+      if (history.ok) {
+        const body = await history.json();
+        setMessages(body.messages);
+        setPending(body.pending);
+      }
     })();
   }, [agentId]);
 
@@ -74,10 +84,11 @@ export function Chat({ agentId, onBack }: Props) {
     const pull = async () => {
       const res = await api.agents[':id'].messages.$get({ param: { id: agentId } });
       if (!live || !res.ok) return;
-      const next = (await res.json()).messages;
+      const body = await res.json();
+      setPending(body.pending);
       // Replaced only when something was actually said, so the list is not
       // rebuilt under the student every few seconds.
-      setMessages((prev) => (sameConversation(prev, next) ? prev : next));
+      setMessages((prev) => (sameConversation(prev, body.messages) ? prev : body.messages));
     };
 
     const timer = setInterval(() => void pull(), 4000);
@@ -194,7 +205,7 @@ export function Chat({ agentId, onBack }: Props) {
             */}
             <AgentSession agentId={agentId} working={sending} />
 
-            {sending && (
+            {(sending || pending) && (
               /*
                * What it is doing, not just that it is doing something. A
                * minute of "Thinking" while a browser signs into a school

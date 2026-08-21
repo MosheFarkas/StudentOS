@@ -96,6 +96,8 @@ function showWindow() {
       mainWindow.focus();
       return;
     }
+    // destroy() does not raise 'close', so the browser is rescued by hand.
+    detachSiteView();
     mainWindow.destroy();
   }
 
@@ -114,6 +116,16 @@ function showWindow() {
 
   if (linked) void mainWindow.loadURL(WEB_BASE);
   else void mainWindow.loadFile(join(here, 'renderer', 'index.html'));
+
+  /*
+   * Put the browser back if one was open when the last window went. It stays
+   * hidden until the conversation says where it goes, which is the same rule
+   * as when it first appeared.
+   */
+  if (activeSession?.view) {
+    mainWindow.contentView.addChildView(activeSession.view);
+    applySiteViewBounds();
+  }
 
   /*
    * Sign-in has to stay inside this window.
@@ -136,19 +148,21 @@ function showWindow() {
     return { action: 'deny' };
   });
 
+  /*
+   * Take the browser out of the window before the window goes.
+   *
+   * A view destroyed along with its window takes the page the agent ended on
+   * with it, so closing the app and coming back left an empty conversation
+   * where the evidence had been. Detached first, it outlives the window and
+   * goes back into the next one -- verified: the page, its title and its
+   * contents are all still there afterwards.
+   */
+  mainWindow.on('close', () => detachSiteView());
+
   mainWindow.on('closed', () => {
     mainWindow = null;
-    /*
-     * The browser was a child of that window and died with it.
-     *
-     * Forgetting it here is what stops the next window from being told there
-     * is a page on screen when there is not: the session object outlives the
-     * view inside it, so "is something showing" answered yes and the
-     * conversation drew a panel around nothing. An empty frame where the page
-     * used to be, which reads as the app having lost it.
-     */
-    activeSession?.destroy();
-    activeSession = null;
+    // Whatever the panel last reported was measured inside a window that no
+    // longer exists. The next one will say where it goes.
     siteViewBounds = null;
   });
 }
@@ -442,6 +456,16 @@ function attachSiteView(session) {
     portalId: session.portalId,
     agentId: session.agentId,
   });
+}
+
+/** Lift the browser out of the window without ending the session. */
+function detachSiteView() {
+  if (!activeSession?.view || !mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    mainWindow.contentView.removeChildView(activeSession.view);
+  } catch {
+    // The window is already tearing down; the view goes with it either way.
+  }
 }
 
 function applySiteViewBounds() {

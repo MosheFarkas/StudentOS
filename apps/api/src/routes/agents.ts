@@ -6,6 +6,7 @@ import { createAgentSchema, sendMessageSchema, ContextoError } from '@contexto/s
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
+import { turnRunning } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 export function createAgentRoutes(ctx: AppContext) {
@@ -77,7 +78,15 @@ export function createAgentRoutes(ctx: AppContext) {
           .where(eq(agentMessages.agentId, agent.id))
           .orderBy(asc(agentMessages.createdAt));
 
-        return c.json({ messages: rows.map(toMessage) });
+        /*
+         * Whether something is working on this conversation right now.
+         *
+         * A turn outlives the request that started it, so a page loaded after
+         * the student closed or refreshed has no local memory of asking. The
+         * answer arrives minutes later out of nowhere unless the conversation
+         * itself can say it is still thinking.
+         */
+        return c.json({ messages: rows.map(toMessage), pending: turnRunning(agent.id) });
       })
 
       /**
