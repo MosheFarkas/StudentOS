@@ -26,3 +26,6 @@ release/
 # ...but the desktop app's build resources ARE source: electron-builder reads
 # the icon from here at package time.
 !apps/desktop/build/
+
+# Intermediate for the app icon; scripts/make-icon.py regenerates it, icon.icns is the product.
+apps/desktop/build/icon.iconset/

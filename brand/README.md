@@ -24,18 +24,29 @@ for S in 16 32 48 192 512; do
 done
 ```
 
-Regenerate the desktop app icon. Same cropped square as above -- using
-`mark.png` directly spends half the icon on empty margin, which reads as a
-smaller app icon than every other app in the dock:
+Regenerate the desktop app icon:
 
 ```bash
-mkdir -p /tmp/icon.iconset
-for S in 16 32 128 256 512; do
-  sips -Z $S      -s format png /tmp/sq.png --out /tmp/icon.iconset/icon_${S}x${S}.png
-  sips -Z $((S*2)) -s format png /tmp/sq.png --out /tmp/icon.iconset/icon_${S}x${S}@2x.png
-done
-iconutil -c icns /tmp/icon.iconset -o apps/desktop/build/icon.icns
+python3 scripts/make-icon.py
 ```
+
+That script owns the app icon rather than a line of `sips` here, because it
+does three things a one-liner cannot. It cuts the mark out of the source and
+recomposes it at a chosen fraction of the tile -- the source has so much empty
+margin that a straight resize spends most of a 32px icon on white, which reads
+as a smaller app than everything beside it in the dock. It resamples every
+size once from the 8000px original with LANCZOS, where deriving the small
+sizes from a generated 1024 resamples twice and softens the thin white outline
+inside the mark first. And it draws the corner mask at 8x before shrinking it,
+because a rounded rectangle rasterised straight to 16px has ragged corners.
+
+The numbers worth knowing are at the top of the script: `MARK_HEIGHT` is the
+share of the tile the mark fills (0.75), and `CORNER` is the corner radius as
+a share of the tile (0.209, matching the tile this replaced). `MARK_BOX` is
+where the artwork actually sits in the source, measured rather than guessed.
+
+The web icons above are still generated with `sips` -- they are a favicon on
+a page, not a tile in a dock, and nothing has been wrong with them.
 
 Separate files per size, not one for the browser to downscale: a 512 squeezed
 into a 16px tab loses the thin white outline inside the mark.
