@@ -4,7 +4,6 @@ import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
 import type { AppContext } from '../context.js';
-import { LiveSessions } from '../live-session.js';
 import { and, desc, eq } from 'drizzle-orm';
 import { deviceLinkRequests, portalSnapshots } from '@contexto/db';
 import { resetRateLimits } from '../middleware/rate-limit.js';
@@ -40,9 +39,6 @@ beforeAll(async () => {
     db,
     auth: createAuth(db, env as never),
     telegram: undefined,
-    // Real, not stubbed: it is in-memory anyway, and the routes under test
-    // are the ones that read and write it.
-    live: new LiveSessions(),
   } as unknown as AppContext;
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });

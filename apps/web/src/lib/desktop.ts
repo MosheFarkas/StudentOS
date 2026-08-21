@@ -46,8 +46,6 @@ export interface DesktopBridge {
   setSiteViewBounds?(
     bounds: { x: number; y: number; width: number; height: number } | null,
   ): Promise<unknown>;
-  /** Which conversation is open, or null. Decides where a browser is drawn. */
-  setOpenChat?(agentId: string | null): Promise<unknown>;
   /*
    * These hand back a way to stop listening. An app built before they did
    * returns nothing, which is why the callers treat it as optional -- the

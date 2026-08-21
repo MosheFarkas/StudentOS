@@ -8,7 +8,6 @@ import { GoogleYoutubeMetadata } from './youtube.js';
 import { TranscriptApiSource } from './youtube-transcript.js';
 import { ChainedTranscriptSource, FreeTranscriptSource } from './youtube-transcript-free.js';
 import { createRelayEgress, createResidentialEgress, type Egress } from './egress.js';
-import { LiveSessions } from './live-session.js';
 import type { YoutubeTranscriptSource } from '@contexto/agent';
 import type { Env } from './env.js';
 
@@ -38,11 +37,6 @@ export interface AppContext {
   youtubeTranscripts: YoutubeTranscriptSource;
   /** Undefined when no residential proxy is configured. */
   residential: Egress | undefined;
-  /**
-   * Frames of the browser the agent is driving, and the clicks going back.
-   * In memory on purpose -- see live-session.ts.
-   */
-  live: LiveSessions;
 }
 
 export function createContext(env: Env): AppContext {
@@ -85,7 +79,6 @@ export function createContext(env: Env): AppContext {
     // Constructed unconditionally: without a key it still answers from
     // oEmbed, which needs none and works today.
     residential,
-    live: new LiveSessions(),
     youtube: new GoogleYoutubeMetadata(env.YOUTUBE_API_KEY),
     /*
      * Free first, paid second. The free route costs nothing when it works,

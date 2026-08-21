@@ -2,11 +2,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
 import {
-  endSession,
   link,
   pendingWork,
-  pullInput,
-  pushFrame,
   readConfig,
   refreshSession,
   reportWork,
@@ -22,7 +19,6 @@ import {
   autoSignIn,
   addSiteWithSignIn,
   observeSessions,
-  renderBrowsersHeadless,
   browsePage,
   oneAtATime,
   setWorkingForAgent,
@@ -64,19 +60,6 @@ const WORK_POLL_MS = 3 * 1000;
 let mainWindow = null;
 let tray = null;
 let syncing = false;
-
-/**
- * Which conversation the app window is showing, as the page reports it.
- *
- * The one thing that decides whether a browser can be drawn in the window: it
- * can only appear in the conversation that asked for it, so if the student is
- * looking at a different one -- or at the Sites list, or at nothing because
- * the window is shut -- there is no panel to put it in and nothing will
- * composite it. Rendering it there anyway produces a view that is invisible
- * and, because Chromium does not draw what it does not show, uncapturable:
- * the app shows nothing and so does the website.
- */
-let openChat = null;
 
 /*
  * One browser-driving pass at a time, across both loops.
@@ -164,7 +147,6 @@ function showWindow() {
      * conversation drew a panel around nothing. An empty frame where the page
      * used to be, which reads as the app having lost it.
      */
-    stopStreaming();
     activeSession?.destroy();
     activeSession = null;
     siteViewBounds = null;
@@ -316,15 +298,6 @@ handle('siteSession', () => ({
   agentId: activeSession?.agentId ?? null,
 }));
 
-/*
- * The page saying which conversation is on screen, or none. Sent on every
- * change, including on the way out of a chat.
- */
-handle('openChat', (agentId) => {
-  openChat = typeof agentId === 'string' && agentId ? agentId : null;
-  return { ok: true };
-});
-
 handle('siteViewBounds', (bounds) => {
   siteViewBounds = bounds
     ? {
@@ -448,100 +421,11 @@ ipcMain.on('site-view-clicked', () => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('site-view-clicked');
 });
 
-/**
- * Carry the browser to a website that cannot hold one.
- *
- * Inside the app the student sees the real view. In a browser tab they cannot
- * -- a page may not embed these sites, every portal refuses to be framed, and
- * the browser doing the work is on this machine anyway. So the pixels go out
- * and the clicks come back.
- *
- * Only ever the newest frame. A picture that arrived while the last one was
- * still uploading is already wrong, and sending it late would put the student
- * further behind rather than closer.
- */
-let streaming = null;
-
-function startStreaming(session) {
-  const config = readConfig();
-  if (!config.token || !session.agentId) return;
-
-  const creds = { apiBase: config.apiBase ?? API_BASE, token: config.token };
-  const agentId = session.agentId;
-  let alive = true;
-  let sending = false;
-  let latest = null;
-
-  const pump = async () => {
-    if (sending || !alive || !latest) return;
-    sending = true;
-    const frame = latest;
-    latest = null;
-    try {
-      await pushFrame(creds, agentId, frame);
-    } catch {
-      // A frame that does not arrive is one the website does not paint. The
-      // next repaint replaces it, and nothing about the work depends on it.
-    }
-    sending = false;
-    void pump();
-  };
-
-  void session.startScreencast((frame) => {
-    latest = frame;
-    void pump();
-  });
-
-  void (async () => {
-    while (alive) {
-      try {
-        for (const event of await pullInput(creds, agentId)) {
-          if (!alive) break;
-          await session.dispatchInput(event);
-        }
-      } catch {
-        // Offline, or the server restarted mid-hold. Wait before asking
-        // again so a broken connection is not a hot loop.
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    }
-  })();
-
-  streaming = {
-    stop: () => {
-      alive = false;
-      // Tells anyone watching that no more frames are coming, rather than
-      // leaving them holding a request for a browser that has gone.
-      void endSession(creds, agentId).catch(() => {});
-    },
-  };
-}
-
-function stopStreaming() {
-  streaming?.stop();
-  streaming = null;
-}
-
-/**
- * A browser the agent opened, wherever it is being rendered.
- *
- * Two things happen to it and they are independent: it goes into the window
- * if there is a window and a view to put there, and it is streamed out so a
- * website can show it. Streaming used to hang off the first, which meant that
- * closing the app window -- the ordinary state when the student is using the
- * website instead -- silently stopped the thing the website exists to show.
- */
-function showSession(session) {
-  attachSiteView(session);
-  startStreaming(session);
-}
-
 function attachSiteView(session) {
   if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
 
   // Whatever was left on screen from last time makes way for this.
   if (activeSession && activeSession !== session) {
-    stopStreaming();
     mainWindow.contentView.removeChildView(activeSession.view);
     activeSession.destroy();
   }
@@ -646,25 +530,7 @@ async function ensureSession() {
 }
 
 void app.whenReady().then(async () => {
-  observeSessions({ open: showSession, close: markSiteViewIdle });
-  /*
-   * Offscreen whenever there is no window on screen to draw into. Chromium
-   * will not composite -- and therefore cannot capture -- a view in a window
-   * that is not visible, so without this a student watching from the website
-   * with the app in the menu bar sees nothing at all.
-   */
-  renderBrowsersHeadless((agentId) => {
-    const windowUp =
-      mainWindow &&
-      !mainWindow.isDestroyed() &&
-      mainWindow.isVisible() &&
-      !mainWindow.isMinimized();
-    // Drawn in the window only when the window is up AND showing the very
-    // conversation this browser belongs to. Anything else -- shut, minimised,
-    // a different chat -- and it is rendered offscreen, where it can still be
-    // captured and sent to whatever the student is actually watching.
-    return !(windowUp && openChat === agentId);
-  });
+  observeSessions({ open: attachSiteView, close: markSiteViewIdle });
   attachSession();
   await ensureSession();
   showWindow();

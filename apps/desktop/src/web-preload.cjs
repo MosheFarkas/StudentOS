@@ -28,9 +28,6 @@ contextBridge.exposeInMainWorld('contextoDesktop', {
   // Where to put the browser the agent is driving. The page owns the layout;
   // the main process owns what is inside it.
   setSiteViewBounds: (bounds) => ipcRenderer.invoke('siteViewBounds', bounds),
-  // Which conversation is on screen. Decides whether a browser can be drawn
-  // in the window at all, or has to be rendered offscreen to be seen.
-  setOpenChat: (agentId) => ipcRenderer.invoke('openChat', agentId),
   /*
    * Both hand back a way to stop listening. Without one, every conversation
    * a student opens leaves another listener behind for the life of the

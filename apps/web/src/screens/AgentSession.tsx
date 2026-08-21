@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { desktop } from '../lib/desktop.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
-import { RemoteBrowser } from './RemoteBrowser.js';
 
 /**
  * The browser the agent is driving, sitting in the conversation.
@@ -40,16 +39,6 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
    */
   const lit = active || working;
   const [expanded, setExpanded] = useState(false);
-  /*
-   * Whether a carried frame has ever arrived for this conversation.
-   *
-   * In a browser tab there is no bridge, so `showing` -- which is fed by the
-   * app -- is always false, and the panel used to live only for as long as the
-   * request was in flight. It vanished the instant the reply landed, taking
-   * the page the agent had just been reading with it. This is the web's own
-   * answer to the same question: something was shown, so keep showing it.
-   */
-  const [sawFrame, setSawFrame] = useState(false);
   const frame = useRef<HTMLDivElement>(null);
 
   const report = useCallback(() => {
@@ -112,57 +101,7 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
     return () => void bridge?.setSiteViewBounds?.(null);
   }, [showing, bridge]);
 
-  /*
-   * In a browser tab there is no native view to position, so the frames the
-   * app is sending are painted instead. Same panel, same bar, same close
-   * button -- the difference is a picture you can click rather than the
-   * browser itself, which is as close as a web page is allowed to get.
-   *
-   * Shown whenever the agent is working, because unlike the app this cannot
-   * ask what is already on screen: the frames are the only signal there is.
-   */
-  if (!bridge) {
-    /*
-     * Always mounted, so it keeps asking for frames and can say when one
-     * arrives -- a panel that only appeared once it was already needed would
-     * never be listening at the moment that mattered. Hidden rather than
-     * absent until there is something to see.
-     */
-    const present = working || showing || sawFrame;
-    return (
-      <div
-        className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}${
-          present ? '' : ' agent-browser-unseen'
-        }`}
-      >
-        <div className="agent-browser-bar">
-          {expanded && (
-            <button
-              className="agent-browser-close"
-              onClick={() => setExpanded(false)}
-              aria-label="Close"
-            />
-          )}
-          <span className="agent-browser-label">
-            {portalId ?? 'on your computer'}
-            {lit && (
-              <span className="dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-            )}
-          </span>
-          <button className="agent-browser-grow" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Shrink' : 'Expand'}
-          </button>
-        </div>
-        <RemoteBrowser agentId={agentId} onFrame={() => setSawFrame(true)} />
-      </div>
-    );
-  }
-
-  if (!showing) return null;
+  if (!bridge || !showing) return null;
 
   return (
     <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>

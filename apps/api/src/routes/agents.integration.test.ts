@@ -6,7 +6,6 @@ import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
 import type { AppContext } from '../context.js';
-import { LiveSessions } from '../live-session.js';
 import {
   createAgent,
   createUser,
@@ -48,9 +47,6 @@ beforeAll(async () => {
     db,
     auth: createAuth(db, env as never),
     telegram: undefined,
-    // Real, not stubbed: it is in-memory anyway, and the routes under test
-    // are the ones that read and write it.
-    live: new LiveSessions(),
   } as unknown as AppContext;
 
   // Same error handler as the real server -- see src/errors.ts. Without it a
@@ -216,64 +212,5 @@ describe('deleting an agent', () => {
     await app.request(`/api/agents/${doomed.id}`, { method: 'DELETE', ...as(alice.token) });
 
     expect((await app.request(`/api/agents/${keeper.id}`, as(alice.token))).status).toBe(200);
-  });
-});
-
-/**
- * The live view, and the clicks going back into it.
- *
- * This channel carries pictures of a browser signed into a school portal, and
- * accepts input that is replayed in that same browser. Both directions are
- * scoped to the student who owns the conversation; getting that wrong would
- * let one student watch another's portal, or drive it.
- */
-describe('the live browser view', () => {
-  it("does not show another student's screen", async () => {
-    const alice = await createUser();
-    const bob = await createUser();
-    const agent = await createAgent(alice.id);
-
-    const res = await app.request(`/api/agents/${agent.id}/session/frame`, as(bob.token));
-    expect(res.status).toBe(404);
-  });
-
-  it("does not accept another student's clicks", async () => {
-    const alice = await createUser();
-    const bob = await createUser();
-    const agent = await createAgent(alice.id);
-
-    const res = await app.request(`/api/agents/${agent.id}/session/input`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${bob.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        events: [
-          { kind: 'mouse', type: 'mousePressed', x: 1, y: 1, button: 'left', clickCount: 1 },
-        ],
-      }),
-    });
-    expect(res.status).toBe(404);
-  });
-
-  it('says nothing-newer rather than hanging when the page is not repainting', async () => {
-    // The ordinary ending: a finished page emits no frames at all.
-    const alice = await createUser();
-    const agent = await createAgent(alice.id);
-
-    const res = await app.request(`/api/agents/${agent.id}/session/frame?wait=50`, as(alice.token));
-    expect(res.status).toBe(204);
-  });
-
-  it('refuses input it does not recognise, rather than passing it through', async () => {
-    // Replayed into a browser holding a school login, so the set of sayable
-    // things is a whitelist and not a pass-through.
-    const alice = await createUser();
-    const agent = await createAgent(alice.id);
-
-    const res = await app.request(`/api/agents/${agent.id}/session/input`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: [{ kind: 'navigate', url: 'https://evil.example' }] }),
-    });
-    expect(res.status).toBe(400);
   });
 });

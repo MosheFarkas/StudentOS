@@ -30,19 +30,6 @@ export function observeSessions({ open, close }) {
   onSessionClose = close;
 }
 
-/**
- * Whether a browser should be rendered offscreen rather than in the window.
- *
- * Asked per conversation at the moment one is opened, because the answer
- * depends on what the app is showing right now. Defaults to no, so the CLI
- * and the tests are unaffected.
- */
-let renderHeadless = () => false;
-
-export function renderBrowsersHeadless(decide) {
-  renderHeadless = decide ?? (() => false);
-}
-
 /** Set while doing work an agent asked for, so its browser can be shown there. */
 let workingForAgent = null;
 
@@ -67,13 +54,7 @@ export function showsInChat(session) {
 async function openBrowser(portalId) {
   if (process.versions.electron) {
     const { SiteSession } = await import('./site-session.mjs');
-    const session = new SiteSession({
-      portalId,
-      agentId: workingForAgent,
-      // Only worth rendering offscreen when someone might be watching from
-      // somewhere else; work with no conversation is watched by nobody.
-      headless: Boolean(workingForAgent) && renderHeadless(workingForAgent),
-    });
+    const session = new SiteSession({ portalId, agentId: workingForAgent });
     await session.launch();
     // Nowhere to show it, so the window is never told it exists. It still
     // runs, and still reads the portal; it just does so out of sight.

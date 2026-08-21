@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AgentSession } from './AgentSession.js';
-import { desktop } from '../lib/desktop.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
 import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { sameConversation } from '../lib/conversation.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
@@ -55,19 +55,43 @@ export function Chat({ agentId, onBack }: Props) {
 
   useEffect(() => {
     /*
-     * Tell the app which conversation is on screen.
+     * Keep this conversation level with the other window onto it.
      *
-     * It decides where a browser gets drawn. A browser may only appear in the
-     * conversation that asked for it, so if this is not that conversation
-     * there is no panel to hold it -- and a view with nowhere to go is not
-     * merely hidden, it is never composited, which means it cannot be
-     * captured for the website either. Saying which chat is open is what lets
-     * the app render it somewhere it can still be seen.
+     * The app and the website are the same page against the same account, and
+     * a student moves between them mid-conversation. Loading the history once
+     * on mount meant whichever one they were not typing into quietly went out
+     * of date: a question asked in the app never appeared on the website, and
+     * the answer to it never did either.
+     *
+     * Not while a turn of our own is in flight. The student's message is on
+     * screen optimistically and the reply is already on its way here; a poll
+     * landing in the middle would replace both with the server's older view
+     * of the same conversation.
      */
-    const bridge = desktop();
-    void bridge?.setOpenChat?.(agentId);
-    return () => void bridge?.setOpenChat?.(null);
-  }, [agentId]);
+    if (sending) return;
+    let live = true;
+
+    const pull = async () => {
+      const res = await api.agents[':id'].messages.$get({ param: { id: agentId } });
+      if (!live || !res.ok) return;
+      const next = (await res.json()).messages;
+      // Replaced only when something was actually said, so the list is not
+      // rebuilt under the student every few seconds.
+      setMessages((prev) => (sameConversation(prev, next) ? prev : next));
+    };
+
+    const timer = setInterval(() => void pull(), 4000);
+    // Coming back to the window is the moment it most obviously matters, and
+    // waiting out the interval there is the difference people notice.
+    const onFocus = () => void pull();
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      live = false;
+      clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [agentId, sending]);
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
