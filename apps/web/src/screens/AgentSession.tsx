@@ -19,8 +19,10 @@ import { useAgentSession } from '../lib/useAgentSession.js';
  * outside the rectangle handed to it. Hence the bar. A close button placed on
  * top of the frame is behind the site and might as well not exist.
  *
- * Clicking the page itself opens it. Nothing says so, because a browser that
- * grows when you press it does not need a label explaining that it will.
+ * Clicking the page opens it, and only opens it. Nothing says so, because a
+ * browser that grows when you press it does not need a label explaining that
+ * it will -- but a browser that shrinks when you press it is just broken, so
+ * the close button is the only way back.
  *
  * It stays after the work finishes, without the aura. The page the agent
  * ended on is the evidence of what it did, and a browser that vanishes with
@@ -50,9 +52,17 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
     if (!showing) setExpanded(false);
   }, [showing]);
 
-  // A click lands on the site, not on this page, so the view forwards it.
+  /*
+   * A click lands on the site, not on this page, so the view forwards it.
+   *
+   * It only ever opens. Toggling meant that once the browser was full-screen,
+   * every click on the page put it away again -- pressing a link, a search
+   * box, anything -- which makes an expanded browser impossible to actually
+   * use. Once it is open the clicks belong to the site; the way back out is
+   * the close button, which is why that button exists only while expanded.
+   */
   useEffect(() => {
-    const stop = bridge?.onSiteViewClick?.(() => setExpanded((open) => !open));
+    const stop = bridge?.onSiteViewClick?.(() => setExpanded(true));
     return () => stop?.();
   }, [bridge]);
 
@@ -101,12 +111,17 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
         seen and pressed.
       */}
       <div className="agent-browser-bar">
-        {/* Closes the expansion only. The browser stays where it was. */}
-        <button
-          className="agent-browser-close"
-          onClick={() => setExpanded(false)}
-          aria-label="Close"
-        />
+        {/*
+          Only while expanded, because closing the expansion is all it does.
+          Sitting there beforehand, it was a button that did nothing.
+        */}
+        {expanded && (
+          <button
+            className="agent-browser-close"
+            onClick={() => setExpanded(false)}
+            aria-label="Close"
+          />
+        )}
         <span className="agent-browser-label">
           {portalId}
           {lit && (
@@ -122,7 +137,7 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
       <div
         className="agent-browser-frame"
         ref={frame}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => setExpanded(true)}
         role="presentation"
       />
     </div>
