@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { WebContentsView } from 'electron';
+import { BrowserWindow, WebContentsView } from 'electron';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -22,41 +22,73 @@ const here = dirname(fileURLToPath(import.meta.url));
  * rather than a pipe to another process.
  */
 export class SiteSession {
-  /** @param {{ portalId: string, onFrame?: () => void }} options */
-  constructor({ portalId, agentId = null }) {
+  /** @param {{ portalId: string, agentId?: string|null, headless?: boolean }} options */
+  constructor({ portalId, agentId = null, headless = false }) {
     this.portalId = portalId;
     /** Which conversation this belongs to, or null for a scheduled sync. */
     this.agentId = agentId;
+    /**
+     * Rendered where nobody is looking.
+     *
+     * A view only produces pictures while something is compositing it, and
+     * nothing composites a view inside a window that is not on screen --
+     * measured: a hidden window yields zero frames, and capturePage on one
+     * hangs. So when the app has no window open and the student is watching
+     * from the website instead, the page is rendered in an offscreen window,
+     * which Chromium draws precisely so that it can be captured.
+     *
+     * The cost is that an offscreen window cannot also be shown inside the
+     * app -- it is not a child view -- which is exactly why this is a mode
+     * rather than the default.
+     */
+    this.headless = headless;
     /** Set by whoever is showing it, to keep the page up after the work ends. */
     this.keepView = false;
     this.view = null;
+    this.window = null;
     this.attached = false;
     this.listeners = new Map();
+    /** Set once someone wants pictures; the stream starts at the first page. */
+    this.onFrame = null;
+    this.casting = false;
+    this.everLoaded = false;
   }
 
   get webContents() {
-    return this.view?.webContents ?? null;
+    return (this.headless ? this.window?.webContents : this.view?.webContents) ?? null;
   }
 
   async launch() {
-    this.view = new WebContentsView({
-      webPreferences: {
-        /*
-         * The site is untrusted content and is treated as such: its own store,
-         * no node, an isolated world. The preload exposes nothing to the page
-         * -- it only reports that the student clicked, which is what lets the
-         * whole view act as one button rather than needing a strip along the
-         * top to press.
-         */
-        preload: join(here, 'site-view-preload.cjs'),
-        partition: `persist:site-${this.portalId}`,
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
+    /*
+     * The site is untrusted content and is treated as such: its own store,
+     * no node, an isolated world. The preload exposes nothing to the page
+     * -- it only reports that the student clicked, which is what lets the
+     * whole view act as one button rather than needing a strip along the
+     * top to press.
+     */
+    const webPreferences = {
+      preload: join(here, 'site-view-preload.cjs'),
+      partition: `persist:site-${this.portalId}`,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    };
 
-    const wc = this.view.webContents;
+    if (this.headless) {
+      this.window = new BrowserWindow({
+        show: false,
+        width: 1000,
+        height: 700,
+        webPreferences: { ...webPreferences, offscreen: true },
+      });
+      // Offscreen rendering paints on demand; without a rate it paints once
+      // and the stream looks frozen the moment anything moves.
+      this.window.webContents.setFrameRate(10);
+    } else {
+      this.view = new WebContentsView({ webPreferences });
+    }
+
+    const wc = this.webContents;
     wc.debugger.attach('1.3');
     this.attached = true;
 
@@ -93,7 +125,8 @@ export class SiteSession {
    * Every frame must be acknowledged or the protocol stops sending them.
    */
   async startScreencast(onFrame) {
-    if (!this.cdp) return;
+    if (!this.cdp || this.onFrame) return;
+    this.onFrame = onFrame;
 
     this.cdp.on('Page.screencastFrame', (params) => {
       // Acked first and unconditionally. A frame we fail to pass on is one
@@ -111,6 +144,17 @@ export class SiteSession {
         // A consumer that throws must not take the stream down with it.
       }
     });
+
+    // Deferred until there is a page. Asking a blank offscreen window to
+    // start casting never returns -- measured: the call sat unresolved until
+    // the window was destroyed, which took the whole feature down silently.
+    if (this.everLoaded) await this.beginCast();
+  }
+
+  /** Actually turn the stream on. Safe to call more than once. */
+  async beginCast() {
+    if (this.casting || !this.cdp || !this.onFrame) return;
+    this.casting = true;
 
     await this.cdp.send('Page.enable').catch(() => {});
     await this.cdp
@@ -203,7 +247,16 @@ export class SiteSession {
     });
 
     await wc.loadURL(url).catch(() => {});
-    return Promise.race([settled, new Promise((r) => setTimeout(() => r(false), timeoutMs))]);
+    const finished = await Promise.race([
+      settled,
+      new Promise((r) => setTimeout(() => r(false), timeoutMs)),
+    ]);
+
+    // There is a page now, so anything waiting to stream one can begin.
+    this.everLoaded = true;
+    void this.beginCast();
+
+    return finished;
   }
 
   /** Read something out of the page. */
@@ -245,9 +298,13 @@ export class SiteSession {
   destroy() {
     try {
       this.view?.webContents?.close();
+      // An offscreen window is a window: closing its contents is not enough,
+      // and one left behind keeps rendering a page nobody is watching.
+      if (this.window && !this.window.isDestroyed()) this.window.destroy();
     } catch {
       // Already gone.
     }
     this.view = null;
+    this.window = null;
   }
 }

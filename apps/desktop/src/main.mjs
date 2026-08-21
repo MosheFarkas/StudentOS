@@ -22,6 +22,7 @@ import {
   autoSignIn,
   addSiteWithSignIn,
   observeSessions,
+  renderBrowsersHeadless,
   browsePage,
   oneAtATime,
   setWorkingForAgent,
@@ -499,6 +500,20 @@ function stopStreaming() {
   streaming = null;
 }
 
+/**
+ * A browser the agent opened, wherever it is being rendered.
+ *
+ * Two things happen to it and they are independent: it goes into the window
+ * if there is a window and a view to put there, and it is streamed out so a
+ * website can show it. Streaming used to hang off the first, which meant that
+ * closing the app window -- the ordinary state when the student is using the
+ * website instead -- silently stopped the thing the website exists to show.
+ */
+function showSession(session) {
+  attachSiteView(session);
+  startStreaming(session);
+}
+
 function attachSiteView(session) {
   if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
 
@@ -516,7 +531,6 @@ function attachSiteView(session) {
   activeSession = session;
   mainWindow.contentView.addChildView(session.view);
   applySiteViewBounds();
-  startStreaming(session);
   mainWindow.webContents.send('site-session', {
     active: true,
     portalId: session.portalId,
@@ -610,7 +624,14 @@ async function ensureSession() {
 }
 
 void app.whenReady().then(async () => {
-  observeSessions({ open: attachSiteView, close: markSiteViewIdle });
+  observeSessions({ open: showSession, close: markSiteViewIdle });
+  /*
+   * Offscreen whenever there is no window on screen to draw into. Chromium
+   * will not composite -- and therefore cannot capture -- a view in a window
+   * that is not visible, so without this a student watching from the website
+   * with the app in the menu bar sees nothing at all.
+   */
+  renderBrowsersHeadless(() => !mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible());
   attachSession();
   await ensureSession();
   showWindow();
