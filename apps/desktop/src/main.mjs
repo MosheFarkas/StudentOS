@@ -138,6 +138,18 @@ function showWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    /*
+     * The browser was a child of that window and died with it.
+     *
+     * Forgetting it here is what stops the next window from being told there
+     * is a page on screen when there is not: the session object outlives the
+     * view inside it, so "is something showing" answered yes and the
+     * conversation drew a panel around nothing. An empty frame where the page
+     * used to be, which reads as the app having lost it.
+     */
+    activeSession?.destroy();
+    activeSession = null;
+    siteViewBounds = null;
   });
 }
 
