@@ -11,8 +11,15 @@ import { handleError } from './errors.js';
 import { createRoutes } from './routes/index.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
 import type { AppContext } from './context.js';
+import { LiveSessions } from './live-session.js';
 import { resetRateLimits } from './middleware/rate-limit.js';
-import { createUser, reset, testDb, TEST_DATABASE_URL } from './test-support/harness.js';
+import {
+  createAgent,
+  createUser,
+  reset,
+  testDb,
+  TEST_DATABASE_URL,
+} from './test-support/harness.js';
 import realMap from './test-support/portal-map.fixture.json' with { type: 'json' };
 
 /**
@@ -47,6 +54,9 @@ beforeAll(async () => {
     db,
     auth: createAuth(db, env as never),
     telegram: undefined,
+    // Real, not stubbed: it is in-memory anyway, and the routes under test
+    // are the ones that read and write it.
+    live: new LiveSessions(),
   } as unknown as AppContext;
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 });
@@ -523,5 +533,88 @@ describe('the agent browsing anything', () => {
       })
     ).json()) as unknown[];
     expect(work).toEqual([]);
+  });
+});
+
+/**
+ * The live view, end to end.
+ *
+ * The website cannot hold the browser, so the machine that can sends pictures
+ * of it and collects what the student does in return. Both hops are exercised
+ * here against the real routes, because the halves are written in different
+ * applications and a mismatch between them is invisible until someone opens a
+ * conversation and watches nothing happen.
+ */
+describe('carrying the browser to the website', () => {
+  it('sends a frame from the machine and shows it on the website', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    const agent = await createAgent(alice.id);
+
+    const sent = await app.request(`/api/devices/session/${agent.id}/frame`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${device.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: 'BASE64JPEG', width: 1000, height: 700 }),
+    });
+    expect(sent.status).toBe(204);
+
+    const shown = await app.request(`/api/agents/${agent.id}/session/frame?wait=50`, {
+      headers: { Authorization: `Bearer ${alice.token}` },
+    });
+    expect(shown.status).toBe(200);
+    expect(await shown.json()).toMatchObject({ data: 'BASE64JPEG', width: 1000, seq: 1 });
+  });
+
+  it('carries a click from the website back to the machine', async () => {
+    const alice = await createUser();
+    const device = await linkedDevice(alice.token);
+    const agent = await createAgent(alice.id);
+
+    const clicked = await app.request(`/api/agents/${agent.id}/session/input`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${alice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [
+          { kind: 'mouse', type: 'mousePressed', x: 120, y: 64, button: 'left', clickCount: 1 },
+        ],
+      }),
+    });
+    expect(clicked.status).toBe(204);
+
+    const collected = await app.request(`/api/devices/session/${agent.id}/input`, {
+      headers: { Authorization: `Bearer ${device.token}` },
+    });
+    expect(await collected.json()).toEqual({
+      events: [
+        { kind: 'mouse', type: 'mousePressed', x: 120, y: 64, button: 'left', clickCount: 1 },
+      ],
+    });
+  });
+
+  it("will not let a device stream into someone else's conversation", async () => {
+    // The agent id comes from the machine, so it is checked and not trusted.
+    const alice = await createUser();
+    const bob = await createUser();
+    const bobsDevice = await linkedDevice(bob.token);
+    const alicesAgent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/devices/session/${alicesAgent.id}/frame`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${bobsDevice.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: 'X', width: 10, height: 10 }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("will not let a device collect someone else's clicks", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const bobsDevice = await linkedDevice(bob.token);
+    const alicesAgent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/devices/session/${alicesAgent.id}/input`, {
+      headers: { Authorization: `Bearer ${bobsDevice.token}` },
+    });
+    expect(res.status).toBe(404);
   });
 });

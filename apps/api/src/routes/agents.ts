@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { agentMessages, agents } from '@contexto/db';
 import { createAgentSchema, sendMessageSchema, ContextoError } from '@contexto/shared';
@@ -69,6 +70,66 @@ export function createAgentRoutes(ctx: AppContext) {
         return c.body(null, 204);
       })
 
+      /*
+       * The live view of the browser, for a website that has no browser of
+       * its own to show.
+       *
+       * Held open until the page repaints. A finished page emits nothing at
+       * all, so a timeout is the ordinary ending rather than a fault, and 204
+       * says exactly that: nothing newer, ask again.
+       */
+      .get(
+        '/:id/session/frame',
+        auth,
+        // Declared rather than read loose, so the web client's types carry it
+        // and a rename here is a compile error there.
+        zValidator(
+          'query',
+          z.object({ since: z.coerce.number().optional(), wait: z.coerce.number().optional() }),
+        ),
+        async (c) => {
+          const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
+          const since = Number(c.req.valid('query').since ?? 0);
+          /*
+           * The caller may ask to be answered sooner, never later. A first poll
+           * that wants to paint something immediately should not have to sit
+           * through the full hold, and a caller cannot use this to pin a
+           * request open beyond what the server was willing to give.
+           */
+          const asked = Number(c.req.valid('query').wait ?? FRAME_WAIT_MS);
+          const wait = Number.isFinite(asked)
+            ? Math.min(Math.max(asked, 0), FRAME_WAIT_MS)
+            : FRAME_WAIT_MS;
+
+          const frame = await ctx.live.waitForFrame(
+            agent.id,
+            Number.isFinite(since) ? since : 0,
+            wait,
+          );
+          if (!frame) return c.body(null, 204);
+          return c.json(frame);
+        },
+      )
+
+      /*
+       * A click or a keystroke, on its way to the real browser.
+       *
+       * This drives a browser signed into the student's school portal, which
+       * is why it is scoped to their own agent and nothing else: the session
+       * that can send these is the same session that could already read
+       * everything behind that login.
+       */
+      .post(
+        '/:id/session/input',
+        auth,
+        zValidator('json', z.object({ events: z.array(inputEventSchema).max(32) })),
+        async (c) => {
+          const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
+          ctx.live.pushInput(agent.id, c.req.valid('json').events);
+          return c.body(null, 204);
+        },
+      )
+
       .get('/:id/messages', auth, async (c) => {
         const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
         const rows = await ctx.db
@@ -115,6 +176,47 @@ export function createAgentRoutes(ctx: AppContext) {
       })
   );
 }
+
+/**
+ * How long the website waits on a repaint before being told to ask again.
+ *
+ * Comfortably inside any proxy read timeout, and long enough that a page
+ * sitting still costs three requests a minute rather than three a second.
+ */
+const FRAME_WAIT_MS = 20 * 1000;
+
+/*
+ * What the website may send back into the real browser.
+ *
+ * Enumerated rather than passed through. These are replayed by a debugger
+ * attached to a browser holding a school login, so the set of things sayable
+ * over this channel is worth stating exactly: pointer, wheel, keys. Nothing
+ * that navigates, evaluates, or reaches the protocol underneath.
+ */
+const inputEventSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('mouse'),
+    type: z.enum(['mousePressed', 'mouseReleased', 'mouseMoved']),
+    x: z.number().finite(),
+    y: z.number().finite(),
+    button: z.enum(['left', 'none']),
+    clickCount: z.number().int().min(0).max(3),
+  }),
+  z.object({
+    kind: z.literal('wheel'),
+    x: z.number().finite(),
+    y: z.number().finite(),
+    deltaX: z.number().finite(),
+    deltaY: z.number().finite(),
+  }),
+  z.object({
+    kind: z.literal('key'),
+    type: z.enum(['keyDown', 'keyUp', 'char']),
+    key: z.string().max(32),
+    code: z.string().max(32),
+    text: z.string().max(8).optional(),
+  }),
+]);
 
 function toAgent(row: typeof agents.$inferSelect): Agent {
   return {

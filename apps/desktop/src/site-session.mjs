@@ -80,6 +80,102 @@ export class SiteSession {
     return this;
   }
 
+  /**
+   * Stream what the page looks like, frame by frame.
+   *
+   * A browser tab cannot be handed this view and is not allowed to embed the
+   * sites involved -- every portal worth showing refuses to be framed -- so
+   * the pixels are carried instead. This is the same mechanism DevTools uses
+   * to mirror a remote device, which is why it is a stream of JPEGs rather
+   * than a screenshot loop: frames arrive when the page actually repaints, so
+   * a page sitting still costs nothing at all.
+   *
+   * Every frame must be acknowledged or the protocol stops sending them.
+   */
+  async startScreencast(onFrame) {
+    if (!this.cdp) return;
+
+    this.cdp.on('Page.screencastFrame', (params) => {
+      // Acked first and unconditionally. A frame we fail to pass on is one
+      // dropped picture; a frame we fail to ack ends the stream.
+      void this.cdp
+        ?.send('Page.screencastFrameAck', { sessionId: params.sessionId })
+        .catch(() => {});
+      try {
+        onFrame({
+          data: params.data,
+          width: params.metadata?.deviceWidth ?? 0,
+          height: params.metadata?.deviceHeight ?? 0,
+        });
+      } catch {
+        // A consumer that throws must not take the stream down with it.
+      }
+    });
+
+    await this.cdp.send('Page.enable').catch(() => {});
+    await this.cdp
+      .send('Page.startScreencast', {
+        format: 'jpeg',
+        // Sized and compressed for a thing being watched, not archived. The
+        // student is checking that it is doing the right thing, not reading
+        // fine print -- and every byte here crosses their connection twice.
+        quality: 55,
+        maxWidth: 1000,
+        maxHeight: 700,
+        everyNthFrame: 1,
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Replay something the student did on the website, in the real page.
+   *
+   * Enumerated rather than forwarded. This is a debugger attached to a
+   * browser holding a school login, so what the far end may say is a short
+   * list -- pointer, wheel, keys -- and nothing that navigates or evaluates.
+   */
+  async dispatchInput(event) {
+    if (!this.cdp) return;
+    try {
+      if (event.kind === 'mouse') {
+        await this.cdp.send('Input.dispatchMouseEvent', {
+          type: event.type,
+          x: event.x,
+          y: event.y,
+          button: event.button,
+          clickCount: event.clickCount,
+        });
+      } else if (event.kind === 'wheel') {
+        await this.cdp.send('Input.dispatchMouseEvent', {
+          type: 'mouseWheel',
+          x: event.x,
+          y: event.y,
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+        });
+      } else if (event.kind === 'key') {
+        /*
+         * Only 'char' carries text, whatever the caller sent.
+         *
+         * The protocol inserts a character for any event that has `text`, so
+         * a keyDown-with-text followed by the matching char types it twice --
+         * measured, not guessed: one press of "h" produced "hh". Keys that
+         * print do so on char; keys that do not print, like Backspace and
+         * Enter, act on keyDown and need no text at all.
+         */
+        await this.cdp.send('Input.dispatchKeyEvent', {
+          type: event.type,
+          key: event.key,
+          code: event.code,
+          ...(event.type === 'char' && event.text ? { text: event.text } : {}),
+        });
+      }
+    } catch {
+      // The page navigated out from under it, or the session is closing.
+      // A lost click is not worth failing the work the agent is doing.
+    }
+  }
+
   /** Matches the shape the explorer already calls. */
   async openPage(url) {
     await this.navigate(url);

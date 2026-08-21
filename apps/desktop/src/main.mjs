@@ -2,8 +2,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { app, BrowserWindow, ipcMain, Menu, session, shell, Tray } from 'electron';
 import {
+  endSession,
   link,
   pendingWork,
+  pullInput,
+  pushFrame,
   readConfig,
   refreshSession,
   reportWork,
@@ -147,6 +150,7 @@ function showWindow() {
      * conversation drew a panel around nothing. An empty frame where the page
      * used to be, which reads as the app having lost it.
      */
+    stopStreaming();
     activeSession?.destroy();
     activeSession = null;
     siteViewBounds = null;
@@ -421,11 +425,86 @@ ipcMain.on('site-view-clicked', () => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('site-view-clicked');
 });
 
+/**
+ * Carry the browser to a website that cannot hold one.
+ *
+ * Inside the app the student sees the real view. In a browser tab they cannot
+ * -- a page may not embed these sites, every portal refuses to be framed, and
+ * the browser doing the work is on this machine anyway. So the pixels go out
+ * and the clicks come back.
+ *
+ * Only ever the newest frame. A picture that arrived while the last one was
+ * still uploading is already wrong, and sending it late would put the student
+ * further behind rather than closer.
+ */
+let streaming = null;
+
+function startStreaming(session) {
+  const config = readConfig();
+  if (!config.token || !session.agentId) return;
+
+  const creds = { apiBase: config.apiBase ?? API_BASE, token: config.token };
+  const agentId = session.agentId;
+  let alive = true;
+  let sending = false;
+  let latest = null;
+
+  const pump = async () => {
+    if (sending || !alive || !latest) return;
+    sending = true;
+    const frame = latest;
+    latest = null;
+    try {
+      await pushFrame(creds, agentId, frame);
+    } catch {
+      // A frame that does not arrive is one the website does not paint. The
+      // next repaint replaces it, and nothing about the work depends on it.
+    }
+    sending = false;
+    void pump();
+  };
+
+  void session.startScreencast((frame) => {
+    latest = frame;
+    void pump();
+  });
+
+  void (async () => {
+    while (alive) {
+      try {
+        for (const event of await pullInput(creds, agentId)) {
+          if (!alive) break;
+          await session.dispatchInput(event);
+        }
+      } catch {
+        // Offline, or the server restarted mid-hold. Wait before asking
+        // again so a broken connection is not a hot loop.
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    }
+  })();
+
+  streaming = {
+    stop: () => {
+      alive = false;
+      // Tells anyone watching that no more frames are coming, rather than
+      // leaving them holding a request for a browser that has gone.
+      void endSession(creds, agentId).catch(() => {});
+    },
+  };
+}
+
+function stopStreaming() {
+  streaming?.stop();
+  streaming = null;
+}
+
 function attachSiteView(session) {
   if (!mainWindow || mainWindow.isDestroyed() || !session?.view) return;
 
   // Whatever was left on screen from last time makes way for this.
   if (activeSession && activeSession !== session) {
+    stopStreaming();
     mainWindow.contentView.removeChildView(activeSession.view);
     activeSession.destroy();
   }
@@ -437,6 +516,7 @@ function attachSiteView(session) {
   activeSession = session;
   mainWindow.contentView.addChildView(session.view);
   applySiteViewBounds();
+  startStreaming(session);
   mainWindow.webContents.send('site-session', {
     active: true,
     portalId: session.portalId,

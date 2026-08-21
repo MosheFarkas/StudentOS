@@ -225,6 +225,37 @@ export async function pendingWork({ apiBase, token }) {
   return api(apiBase, '/api/devices/pending', { method: 'GET', token });
 }
 
+/**
+ * A picture of the page the agent is driving, for a website to show.
+ *
+ * Fire and forget from the caller's point of view: a frame that does not
+ * arrive is a frame the website simply does not paint, and the next repaint
+ * replaces it. Nothing about the work depends on these landing.
+ */
+export async function pushFrame({ apiBase, token }, agentId, frame) {
+  return api(apiBase, `/api/devices/session/${agentId}/frame`, { token, body: frame });
+}
+
+/**
+ * Collect whatever the student did on the website.
+ *
+ * Held open by the server until something happens or it gives up, so a click
+ * crosses in one hop instead of waiting for a poll to come round. That makes
+ * a long request the normal case here, not a hang.
+ */
+export async function pullInput({ apiBase, token }, agentId) {
+  const reply = await api(apiBase, `/api/devices/session/${agentId}/input`, {
+    method: 'GET',
+    token,
+  });
+  return reply?.events ?? [];
+}
+
+/** The browser is gone; stop anyone waiting on a frame that is not coming. */
+export async function endSession({ apiBase, token }, agentId) {
+  return api(apiBase, `/api/devices/session/${agentId}/end`, { token });
+}
+
 export async function reportWork({ apiBase, token }, requestId, outcome, result) {
   return api(apiBase, `/api/devices/pending/${requestId}/complete`, {
     token,

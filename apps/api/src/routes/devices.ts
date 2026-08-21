@@ -5,6 +5,7 @@ import { zValidator } from '@hono/zod-validator';
 import { and, desc, eq, gt, isNotNull, isNull, lt, ne, notInArray } from 'drizzle-orm';
 import { z } from 'zod';
 import {
+  agents,
   deviceLinkRequests,
   devices,
   disabledSites,
@@ -30,6 +31,48 @@ const SNAPSHOTS_KEPT = 5;
  * question asked long ago.
  */
 const REFRESH_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Ceiling on one frame of the live view.
+ *
+ * Generous for a JPEG of a page and nowhere near enough to be used as
+ * storage, which is the thing worth preventing.
+ */
+const MAX_FRAME_BYTES = 2 * 1024 * 1024;
+
+/**
+ * How long a collector waits before being answered with nothing.
+ *
+ * Long enough that an idle session costs a handful of requests a minute,
+ * short enough to sit comfortably inside any proxy's read timeout.
+ */
+const INPUT_WAIT_MS = 20 * 1000;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The agent named in the path, if it really belongs to the caller.
+ *
+ * A device is authenticated as its student, but the agent id arrives from the
+ * machine rather than from us, so it is checked rather than trusted. Without
+ * this, one linked laptop could stream frames into -- or collect a student's
+ * clicks out of -- any conversation on the server.
+ *
+ * The shape is checked first because an id that is not a uuid makes Postgres
+ * throw on the cast, which would surface as a 500 rather than the 404 that
+ * an unknown agent deserves.
+ */
+async function agentOfCaller(ctx: AppContext, userId: string, agentId: string): Promise<string> {
+  if (!UUID.test(agentId)) throw new ContextoError('not_found', 'Agent not found.');
+  const [row] = await ctx.db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.userId, userId)))
+    .limit(1);
+
+  if (!row) throw new ContextoError('not_found', 'Agent not found.');
+  return row.id;
+}
 
 /**
  * Ceiling on one pushed snapshot.
@@ -353,6 +396,57 @@ export function createDeviceRoutes(ctx: AppContext) {
           return c.json({ ok: true });
         },
       )
+
+      /*
+       * The live view, from the machine that has the browser.
+       *
+       * A frame is a JPEG of the page the agent is driving. It is held in
+       * memory for a few seconds and never written down -- see
+       * live-session.ts for why that is deliberate rather than lazy.
+       */
+      .post(
+        '/session/:agentId/frame',
+        device,
+        bodyLimit({
+          maxSize: MAX_FRAME_BYTES,
+          onError: () => {
+            throw new ContextoError('validation_failed', 'That frame is too large.');
+          },
+        }),
+        zValidator(
+          'json',
+          z.object({
+            data: z.string().max(MAX_FRAME_BYTES),
+            width: z.number().int().positive().max(8000),
+            height: z.number().int().positive().max(8000),
+          }),
+        ),
+        async (c) => {
+          const agentId = await agentOfCaller(ctx, c.get('userId'), c.req.param('agentId'));
+          ctx.live.putFrame(agentId, c.req.valid('json'));
+          // Opportunistic: no timer, so an idle server holds nothing open.
+          ctx.live.sweep();
+          return c.body(null, 204);
+        },
+      )
+
+      /*
+       * What the student did on the website, collected by the machine that
+       * can actually replay it. Held open, so a click crosses in one hop
+       * rather than waiting for the next poll to come round.
+       */
+      .get('/session/:agentId/input', device, async (c) => {
+        const agentId = await agentOfCaller(ctx, c.get('userId'), c.req.param('agentId'));
+        const events = await ctx.live.waitForInput(agentId, INPUT_WAIT_MS);
+        return c.json({ events });
+      })
+
+      /** The browser is gone. Readers stop waiting rather than hanging on. */
+      .post('/session/:agentId/end', device, async (c) => {
+        const agentId = await agentOfCaller(ctx, c.get('userId'), c.req.param('agentId'));
+        ctx.live.end(agentId);
+        return c.body(null, 204);
+      })
 
       /** Linked devices, for Settings. */
       .get('/', auth, async (c) => {

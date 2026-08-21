@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { desktop } from '../lib/desktop.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
+import { RemoteBrowser } from './RemoteBrowser.js';
 
 /**
  * The browser the agent is driving, sitting in the conversation.
@@ -101,7 +102,47 @@ export function AgentSession({ agentId, working }: { agentId: string; working: b
     return () => void bridge?.setSiteViewBounds?.(null);
   }, [showing, bridge]);
 
-  if (!bridge || !showing) return null;
+  /*
+   * In a browser tab there is no native view to position, so the frames the
+   * app is sending are painted instead. Same panel, same bar, same close
+   * button -- the difference is a picture you can click rather than the
+   * browser itself, which is as close as a web page is allowed to get.
+   *
+   * Shown whenever the agent is working, because unlike the app this cannot
+   * ask what is already on screen: the frames are the only signal there is.
+   */
+  if (!bridge) {
+    if (!working && !showing) return null;
+    return (
+      <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>
+        <div className="agent-browser-bar">
+          {expanded && (
+            <button
+              className="agent-browser-close"
+              onClick={() => setExpanded(false)}
+              aria-label="Close"
+            />
+          )}
+          <span className="agent-browser-label">
+            {portalId ?? 'on your computer'}
+            {lit && (
+              <span className="dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
+          </span>
+          <button className="agent-browser-grow" onClick={() => setExpanded(!expanded)}>
+            {expanded ? 'Shrink' : 'Expand'}
+          </button>
+        </div>
+        <RemoteBrowser agentId={agentId} />
+      </div>
+    );
+  }
+
+  if (!showing) return null;
 
   return (
     <div className={`agent-browser${expanded ? ' expanded' : ''}${lit ? ' working' : ''}`}>
