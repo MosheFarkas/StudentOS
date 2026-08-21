@@ -50,7 +50,19 @@ export function writeConfig(config) {
   chmodSync(path, 0o600);
 }
 
-function openInBrowser(url) {
+/**
+ * Open a page in whatever browser the student uses.
+ *
+ * Inert under test, and that is not belt-and-braces -- it is a bug fix. The
+ * linking test drives this function with the made-up host the suite uses, so
+ * every run spawned a real tab and left a blank x.test page sitting on the
+ * developer's desktop. A test must never reach out of the process it runs in.
+ *
+ * Returns whether it actually opened anything, so that is testable rather
+ * than something you find out by watching your own screen.
+ */
+export function openInBrowser(url) {
+  if (process.env['NODE_ENV'] === 'test') return false;
   const [command, args] =
     platform() === 'darwin'
       ? ['open', [url]]
@@ -58,6 +70,7 @@ function openInBrowser(url) {
         ? ['cmd', ['/c', 'start', '', url]]
         : ['xdg-open', [url]];
   spawn(command, args, { stdio: 'ignore', detached: true }).unref();
+  return true;
 }
 
 /**
@@ -136,12 +149,15 @@ export async function link({
   deviceName = hostname(),
   pollMs = 2000,
   timeoutMs = 600_000,
+  // Injectable so a test can watch where linking would send the student
+  // instead of sending them there.
+  open = openInBrowser,
 }) {
   const { requestId } = await api(apiBase, '/api/devices/link/start', { body: { deviceName } });
   const approvalUrl = new URL(`/link/${requestId}`, webBase).toString();
 
   console.log(`\n  Approve this computer at:\n    ${approvalUrl}\n`);
-  openInBrowser(approvalUrl);
+  open(approvalUrl);
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

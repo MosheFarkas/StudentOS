@@ -20,6 +20,7 @@ import {
   addSiteWithSignIn,
   observeSessions,
   browsePage,
+  oneAtATime,
   setWorkingForAgent,
   removePortal,
   status,
@@ -59,6 +60,20 @@ const WORK_POLL_MS = 3 * 1000;
 let mainWindow = null;
 let tray = null;
 let syncing = false;
+
+/*
+ * One browser-driving pass at a time, across both loops.
+ *
+ * The scheduled sync and the work poll each open browsers, and between them
+ * they share every piece of state that decides where a browser goes: the
+ * active session, the bounds it is drawn at, and which conversation it
+ * belongs to. Overlapping passes were the cause rather than a symptom -- a
+ * poll firing every three seconds picked up work that was still running, and
+ * the browser it opened destroyed the one halfway through reading a page, so
+ * the request the student was waiting on failed while its replacement quietly
+ * succeeded behind it.
+ */
+const drivingBrowser = oneAtATime();
 
 /**
  * One window, two states.
@@ -292,7 +307,10 @@ handle('siteViewBounds', (bounds) => {
  * ask for one. The window shows the last error per portal instead.
  */
 async function syncAll({ onlyStale = false } = {}) {
-  if (syncing) return;
+  return drivingBrowser(() => syncAllPass({ onlyStale }));
+}
+
+async function syncAllPass({ onlyStale }) {
   syncing = true;
   refreshTrayMenu();
   for (const portal of status().portals) {
@@ -507,7 +525,7 @@ void app.whenReady().then(async () => {
   buildTray();
   void syncAll({ onlyStale: true });
   setInterval(() => void syncAll(), SYNC_INTERVAL_MS);
-  setInterval(() => void doPendingWork(), WORK_POLL_MS);
+  setInterval(() => void drivingBrowser(doPendingWork), WORK_POLL_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) showWindow();

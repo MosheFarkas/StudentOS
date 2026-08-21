@@ -260,3 +260,54 @@ describe('sessionValid', () => {
     expect(ok).toBe(true);
   });
 });
+
+/**
+ * Nothing in a test may touch the machine running it.
+ *
+ * Linking opens the approval page in the student's own browser, and the test
+ * above exercises linking -- so every single run spawned a real tab pointing
+ * at the made-up host this suite uses. A blank x.test page, on the developer's
+ * desktop, forever. Two guards, because one was clearly not enough: the caller
+ * can hand in its own opener, and the real one refuses to run under test even
+ * if some future caller forgets to.
+ */
+describe('openInBrowser', () => {
+  it('does not spawn anything under test', async () => {
+    const { openInBrowser } = await import('./sync.mjs');
+    expect(openInBrowser('https://x.test/link/whatever')).toBe(false);
+  });
+
+  it('lets a caller supply its own opener, and hands it the approval page', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'contexto-open-'));
+    const beforeDir = process.env['CONTEXTO_CONFIG_DIR'];
+    const beforeFetch = globalThis.fetch;
+    process.env['CONTEXTO_CONFIG_DIR'] = dir;
+
+    const opened = [];
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        String(url).includes('/start')
+          ? JSON.stringify({ requestId: 'REQ-1' })
+          : JSON.stringify({ status: 'linked', token: 'D', deviceId: 'd', sessionToken: 'S' }),
+    });
+
+    try {
+      const { link } = await import(`./sync.mjs?opener-test`);
+      await link({
+        apiBase: 'https://x.test',
+        webBase: 'https://x.test',
+        deviceName: 'Test',
+        pollMs: 1,
+        open: (url) => opened.push(url),
+      });
+      expect(opened).toEqual(['https://x.test/link/REQ-1']);
+    } finally {
+      globalThis.fetch = beforeFetch;
+      if (beforeDir === undefined) delete process.env['CONTEXTO_CONFIG_DIR'];
+      else process.env['CONTEXTO_CONFIG_DIR'] = beforeDir;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

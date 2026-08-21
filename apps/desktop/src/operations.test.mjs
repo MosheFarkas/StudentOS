@@ -120,3 +120,61 @@ describe('showsInChat', () => {
     expect(showsInChat({ agentId: null })).toBe(false);
   });
 });
+
+/**
+ * One browser-driving pass at a time.
+ *
+ * The work poll fires every three seconds and an item stays pending until it
+ * is reported finished, so a page that takes ten seconds was picked up again
+ * while it was still being read -- and the second browser evicted the first,
+ * failing the very request the agent was waiting on. The student saw "could
+ * not load" above a page that had plainly loaded.
+ */
+describe('oneAtATime', () => {
+  it('runs the work', async () => {
+    const { oneAtATime } = await import('./operations.mjs');
+    const gate = oneAtATime();
+    let ran = 0;
+    expect(await gate(async () => void ran++)).toBe(true);
+    expect(ran).toBe(1);
+  });
+
+  it('skips a pass that starts while one is still going', async () => {
+    const { oneAtATime } = await import('./operations.mjs');
+    const gate = oneAtATime();
+    let started = 0;
+    let release;
+    const first = gate(async () => {
+      started++;
+      await new Promise((r) => (release = r));
+    });
+
+    expect(await gate(async () => void started++)).toBe(false);
+    expect(started).toBe(1);
+
+    release();
+    await first;
+  });
+
+  it('lets the next pass run once the last one is done', async () => {
+    const { oneAtATime } = await import('./operations.mjs');
+    const gate = oneAtATime();
+    await gate(async () => {});
+    let ran = 0;
+    expect(await gate(async () => void ran++)).toBe(true);
+    expect(ran).toBe(1);
+  });
+
+  it('does not wedge shut when the work throws', async () => {
+    // A portal that fails must not stop every later poll. This is the whole
+    // reason the flag is released in a finally rather than after the call.
+    const { oneAtATime } = await import('./operations.mjs');
+    const gate = oneAtATime();
+    await expect(
+      gate(async () => {
+        throw new Error('portal down');
+      }),
+    ).rejects.toThrow('portal down');
+    expect(await gate(async () => {})).toBe(true);
+  });
+});

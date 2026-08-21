@@ -72,35 +72,6 @@ async function openBrowser(portalId) {
   return browser;
 }
 
-/**
- * A gate that admits one pass at a time and turns the rest away.
- *
- * Everything that drives a browser shares one of these. There is a single
- * browser view, a single "which conversation is this for" flag, and a single
- * active session, and two passes running at once corrupt all three: the
- * newcomer's session evicts the incumbent's, destroying a page that was still
- * being read, and tagging it with whichever agent happened to be set.
- *
- * Turned away rather than queued. These are polls -- the next one is three
- * seconds behind, and the pending work will still be pending. A queue would
- * pile up a run for every tick that happened during a slow page.
- */
-export function oneAtATime() {
-  let busy = false;
-  return async (fn) => {
-    if (busy) return false;
-    busy = true;
-    try {
-      await fn();
-      return true;
-    } finally {
-      // In a finally, so one failing portal cannot wedge the gate shut and
-      // silently stop every poll for the life of the app.
-      busy = false;
-    }
-  };
-}
-
 /** Syncs currently running, keyed by portal. */
 const inFlight = new Map();
 
