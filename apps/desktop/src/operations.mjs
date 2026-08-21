@@ -31,11 +31,11 @@ export function observeSessions({ open, close }) {
 }
 
 /**
- * Whether browsers should be rendered offscreen rather than in the window.
+ * Whether a browser should be rendered offscreen rather than in the window.
  *
- * Asked at the moment one is opened, because the answer changes: it depends
- * on whether there is a window on screen right now to draw into. Defaults to
- * no, so the CLI and the tests are unaffected.
+ * Asked per conversation at the moment one is opened, because the answer
+ * depends on what the app is showing right now. Defaults to no, so the CLI
+ * and the tests are unaffected.
  */
 let renderHeadless = () => false;
 
@@ -72,7 +72,7 @@ async function openBrowser(portalId) {
       agentId: workingForAgent,
       // Only worth rendering offscreen when someone might be watching from
       // somewhere else; work with no conversation is watched by nobody.
-      headless: Boolean(workingForAgent) && renderHeadless(),
+      headless: Boolean(workingForAgent) && renderHeadless(workingForAgent),
     });
     await session.launch();
     // Nowhere to show it, so the window is never told it exists. It still

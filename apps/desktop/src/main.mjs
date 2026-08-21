@@ -65,6 +65,19 @@ let mainWindow = null;
 let tray = null;
 let syncing = false;
 
+/**
+ * Which conversation the app window is showing, as the page reports it.
+ *
+ * The one thing that decides whether a browser can be drawn in the window: it
+ * can only appear in the conversation that asked for it, so if the student is
+ * looking at a different one -- or at the Sites list, or at nothing because
+ * the window is shut -- there is no panel to put it in and nothing will
+ * composite it. Rendering it there anyway produces a view that is invisible
+ * and, because Chromium does not draw what it does not show, uncapturable:
+ * the app shows nothing and so does the website.
+ */
+let openChat = null;
+
 /*
  * One browser-driving pass at a time, across both loops.
  *
@@ -302,6 +315,15 @@ handle('siteSession', () => ({
   portalId: activeSession?.portalId ?? null,
   agentId: activeSession?.agentId ?? null,
 }));
+
+/*
+ * The page saying which conversation is on screen, or none. Sent on every
+ * change, including on the way out of a chat.
+ */
+handle('openChat', (agentId) => {
+  openChat = typeof agentId === 'string' && agentId ? agentId : null;
+  return { ok: true };
+});
 
 handle('siteViewBounds', (bounds) => {
   siteViewBounds = bounds
@@ -631,7 +653,18 @@ void app.whenReady().then(async () => {
    * that is not visible, so without this a student watching from the website
    * with the app in the menu bar sees nothing at all.
    */
-  renderBrowsersHeadless(() => !mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible());
+  renderBrowsersHeadless((agentId) => {
+    const windowUp =
+      mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.isVisible() &&
+      !mainWindow.isMinimized();
+    // Drawn in the window only when the window is up AND showing the very
+    // conversation this browser belongs to. Anything else -- shut, minimised,
+    // a different chat -- and it is rendered offscreen, where it can still be
+    // captured and sent to whatever the student is actually watching.
+    return !(windowUp && openChat === agentId);
+  });
   attachSession();
   await ensureSession();
   showWindow();

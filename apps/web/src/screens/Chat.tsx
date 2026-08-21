@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AgentSession } from './AgentSession.js';
+import { desktop } from '../lib/desktop.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
 import type { Agent, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
@@ -51,6 +52,22 @@ export function Chat({ agentId, onBack }: Props) {
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
+
+  useEffect(() => {
+    /*
+     * Tell the app which conversation is on screen.
+     *
+     * It decides where a browser gets drawn. A browser may only appear in the
+     * conversation that asked for it, so if this is not that conversation
+     * there is no panel to hold it -- and a view with nowhere to go is not
+     * merely hidden, it is never composited, which means it cannot be
+     * captured for the website either. Saying which chat is open is what lets
+     * the app render it somewhere it can still be seen.
+     */
+    const bridge = desktop();
+    void bridge?.setOpenChat?.(agentId);
+    return () => void bridge?.setOpenChat?.(null);
+  }, [agentId]);
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
