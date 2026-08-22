@@ -6,13 +6,82 @@
  * #50b0d0. Using the logo's own colours is what stops an interface looking
  * like it was themed by a different person than the one who made the mark.
  *
- * Serif headings for the same reason -- the wordmark is a serif, and this is
- * a product about coursework. Body text stays in the system sans, which is
- * what a student's own machine renders best at small sizes.
+ * Two faces, and the split between them carries meaning rather than taste.
+ * IBM Plex Sans sets the whole interface -- headings, settings, bars, buttons,
+ * the line under a question while the agent works. PT Serif sets one thing:
+ * what the agent says back. So the student can tell who is speaking from the
+ * letterforms, before reading a word or noticing which side the bubble is on.
+ *
+ * The headings used to be a serif, echoing the wordmark. They are not any
+ * more, on purpose: with a serif in the interface as well as in the replies,
+ * the serif stops meaning anything.
  *
  * Light only, deliberately. A half-finished dark mode looks worse than none,
  * and every surface here is a reading surface.
  */
+
+/*
+ * Typefaces, self-hosted.
+ *
+ * Not linked from Google. A stylesheet request from every page load tells a
+ * third party who is reading a page about a student's coursework, and the
+ * desktop shell would lose its type the moment fonts.gstatic.com is
+ * unreachable. Both faces are OFL-licensed, so shipping the files is allowed.
+ *
+ * Latin and latin-ext only. The families also offer Cyrillic, Greek and
+ * Vietnamese; nothing here is translated, and the unicode-range on each face
+ * means a browser fetches latin-ext only if a page actually needs it.
+ *
+ * IBM Plex Sans is the variable file: one download covers 400 through 600,
+ * which is every weight this interface asks for. Re-derive the files from
+ * https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400..600 and
+ * https://fonts.googleapis.com/css2?family=PT+Serif:wght@400
+ */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'PT Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/pt-serif-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'PT Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/pt-serif-latin-ext.woff2') format('woff2');
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
 
 :root {
   --ink: #0a1045;
@@ -40,10 +109,12 @@
   --radius-lg: 14px;
   --shadow: 0 1px 2px rgba(10, 16, 69, 0.06), 0 8px 24px rgba(10, 16, 69, 0.05);
 
-  --serif: ui-serif, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  /* The agent's voice, and nowhere else. */
+  --serif: 'PT Serif', ui-serif, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  /* Everything else: chrome, headings, settings, the line under a question. */
   --sans:
-    ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+    'IBM Plex Sans', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
 
   font-family: var(--sans);
   line-height: 1.55;
@@ -74,7 +145,6 @@ main {
 h1,
 h2,
 h3 {
-  font-family: var(--serif);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -611,7 +681,6 @@ hr {
 }
 
 .chat-header strong {
-  font-family: var(--serif);
   font-size: 1.1rem;
   font-weight: 600;
 }
@@ -644,11 +713,20 @@ hr {
   color: #fff;
 }
 
+/*
+ * The only serif in the interface.
+ *
+ * Everything the student operates is set in the sans; what the agent says
+ * back is set in the serif, so the two are told apart by the letterforms
+ * before anything else -- bubble side, colour and border are all saying it a
+ * second time.
+ */
 .message.assistant {
   align-self: flex-start;
   background: var(--surface);
   border: 1px solid var(--line);
   border-bottom-left-radius: 4px;
+  font-family: var(--serif);
 }
 
 .composer {
@@ -798,6 +876,7 @@ main:has(.preview-pane) .workspace {
 }
 
 .message a.chip {
+  font-family: var(--sans);
   display: inline-flex;
   align-items: baseline;
   gap: 0.35rem;

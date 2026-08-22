@@ -21,6 +21,21 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+
+    <!--
+      The interface's own face, fetched before the CSS that asks for it. Every
+      screen is set in this, so waiting for the stylesheet to be parsed first
+      is a visible swap from the system sans on every cold load. The serif is
+      not preloaded: it appears in one place, below the fold of a fresh
+      conversation, and can afford to arrive with the reply it sets.
+    -->
+    <link
+      rel="preload"
+      href="/fonts/ibm-plex-sans-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
   </head>
   <body>
     <div id="root"></div>
