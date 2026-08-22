@@ -75,9 +75,11 @@ const L3BOT = {
 const CBASE = `polygon(0px 0px, ${C1}px 0px, ${C1}px 160.5px, 276px 231.3px, 276px 665.8px, ${C1}px 739.85px, ${C1}px ${S}px, 0px ${S}px)`;
 // The purple middle band (between the two fold-3 lines, bounded by the purple silhouette).
 const BAND = `polygon(276px 231.3px, 282.6px 228.9px, ${C1}px 332.09px, ${C1}px 568.71px, 286.6px 669.7px, 276px 665.8px)`;
-// Fold 4: the whole landed band (with its flaps) folds left onto the blue bar,
-// about the purple's left edge (mid white gap, x=275).
-const A4X = 275;
+// The purple's left edge (mid white gap). There was once a fourth fold about
+// this axis, swinging the landed band and its flaps left onto the blue bar;
+// the animation drops it, and what is left is the band's origin. Kept as the
+// export writes it, so the next re-port stays a clean diff.
+const BAND_AXIS_X = 275;
 
 /** How hard the folded faces darken as they turn. */
 const SHADING = 0.9;
@@ -218,11 +220,10 @@ function Piece({ T }: { T: number }) {
   const a1 = MOTION.fold(cue('Second fold') + 0.02, cue('Merge 2') - 0.04)(T);
   const mp2 = MOTION.fade(0, 1, cue('Merge 2'), cue('Merge 2') + 0.16)(T);
   const barsOp = MOTION.fade(1, 0, cue('Merge 2') + 0.06, cue('Merge 2') + 0.18)(T);
-  // Fold 3: top and bottom fold inward onto the purple band. Toward the
-  // viewer, so the pieces visibly overlap it rather than vanishing behind.
-  const a3 = -MOTION.fold(cue('Third fold') + 0.02, cue('Fourth fold') - 0.1)(T);
-  // Fold 4: the landed band and its flaps fold left onto the blue bar.
-  const a4 = MOTION.fold(cue('Fourth fold') + 0.02, REVERSE_AT - 0.02)(T);
+  // Fold 3: top and bottom fold inward onto the purple band, and stay put.
+  // Toward the viewer, so the pieces visibly overlap it rather than vanishing
+  // behind. The last fold, and it has the rest of the run to make.
+  const a3 = -MOTION.fold(cue('Third fold') + 0.02, REVERSE_AT - 0.06)(T);
 
   const mSx = 1 + 0.24 * mp;
   const mSy = 1 - 0.08 * mp;
@@ -248,8 +249,7 @@ function Piece({ T }: { T: number }) {
           position: 'absolute',
           inset: 0,
           transformStyle: 'preserve-3d',
-          transformOrigin: `${A4X}px 450px`,
-          transform: `rotateY(${a4}deg)`,
+          transformOrigin: `${BAND_AXIS_X}px 450px`,
         }}
       >
         <div style={sliceStyle(0, C1, 0, S, undefined, BAND)} />

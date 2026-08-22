@@ -17,8 +17,7 @@ export const SCENES: readonly { name: string; dur: number }[] = [
   { name: 'Second fold', dur: 0.7 },
   { name: 'Merge 2', dur: 0.2 },
   { name: 'Third fold', dur: 0.7 },
-  { name: 'Fourth fold', dur: 0.7 },
-  { name: 'Reverse', dur: 3.2 },
+  { name: 'Reverse', dur: 2.5 },
 ];
 
 /** Each scene's start, as a running sum of the ones before it. */

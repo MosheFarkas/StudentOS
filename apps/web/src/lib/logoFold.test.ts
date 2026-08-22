@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUES, LOOP_SECONDS, REVERSE_AT, authoredTime } from './logoFold.js';
+import { CUES, LOOP_SECONDS, REVERSE_AT, SCENES, authoredTime } from './logoFold.js';
 
 /**
  * The fold's clock.
@@ -16,12 +16,26 @@ describe('the fold timeline', () => {
     expect(CUES['Second fold']).toBeCloseTo(0.9, 6);
     expect(CUES['Merge 2']).toBeCloseTo(1.6, 6);
     expect(CUES['Third fold']).toBeCloseTo(1.8, 6);
-    expect(CUES['Fourth fold']).toBeCloseTo(2.5, 6);
-    expect(CUES['Reverse']).toBeCloseTo(3.2, 6);
+    expect(CUES['Reverse']).toBeCloseTo(2.5, 6);
+  });
+
+  it('folds three times and no more', () => {
+    // The fourth fold -- the whole band swinging left onto the blue bar --
+    // was cut from the animation. Anything still reaching for its cue would
+    // silently get 0 and fire at the very start of the loop.
+    expect(CUES['Fourth fold']).toBeUndefined();
+    expect(SCENES.map((s) => s.name)).toEqual([
+      'The fold',
+      'Merge',
+      'Second fold',
+      'Merge 2',
+      'Third fold',
+      'Reverse',
+    ]);
   });
 
   it('runs as long as its scenes do', () => {
-    expect(LOOP_SECONDS).toBeCloseTo(6.4, 6);
+    expect(LOOP_SECONDS).toBeCloseTo(5, 6);
     expect(REVERSE_AT).toBeCloseTo(CUES['Reverse'] ?? 0, 6);
   });
 
@@ -32,7 +46,7 @@ describe('the fold timeline', () => {
   });
 
   it('mirrors the folding half back out again', () => {
-    for (const offset of [0.1, 0.8, 1.6, 2.4, 3.1]) {
+    for (const offset of [0.1, 0.8, 1.4, 1.9, 2.4]) {
       expect(authoredTime(REVERSE_AT + offset)).toBeCloseTo(REVERSE_AT - offset, 6);
     }
   });

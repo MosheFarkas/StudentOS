@@ -154,10 +154,11 @@ a {
  * of mark. The stage inside is the 900-unit space the fold was measured in,
  * scaled down and shifted so the artwork lands at 0,0.
  *
- * Not clipped, deliberately. The fourth fold swings the middle band left past
- * the artwork's own edge, and hiding the overflow would cut the fold in half
- * at its widest moment. The stage is absolutely positioned, so what it paints
- * outside the box costs the layout nothing.
+ * Not clipped, deliberately. The folding blocks lean a little past the
+ * artwork's own edge on their way over -- measured at 1.2% of the width, so
+ * a fraction of a pixel at the sizes shipped here -- and clipping would shave
+ * them at exactly the moment they are furthest out. The stage is absolutely
+ * positioned, so what it paints outside the box costs the layout nothing.
  */
 .logo-mark {
   position: relative;
