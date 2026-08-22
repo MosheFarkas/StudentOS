@@ -6,11 +6,35 @@ keeping both invites someone picking the wrong one.
 
 `mark.png` is the square mark on its own, also 8000px with alpha.
 
-Regenerate the wordmark:
+Regenerate the flat lockup, still used on the sign-in screen:
 
 ```bash
 sips -Z 1400 -s format png brand/lockup.png --out apps/web/public/logo.png
 ```
+
+Regenerate the two pieces the header uses:
+
+```bash
+python3 scripts/make-web-marks.py
+```
+
+The header is no longer one image. The mark folds into itself while the agent
+works (apps/web/src/screens/LogoMark.tsx), so it ships separately from the
+wordmark it sits beside -- `mark.png` and `wordmark.png`, framed so the two
+together look exactly like the lockup they were cut from.
+
+`mark.png` keeps the source's framing rather than being cropped to the
+artwork, and that is load-bearing: the fold's axes were measured against this
+exact framing, in a 900-unit space laid over the whole square. Cropping it
+would move every landing spot without moving the axis aimed at it. This is the
+opposite of what the icons below want, which is why they are generated
+separately from the same source.
+
+That script resamples in linear light for the reason set out below, and
+premultiplies alpha before doing it. The source stores black in its fully
+transparent pixels, so resizing colour without regard to coverage drags that
+black into every edge -- a dark fringe around the mark, worst at the 20-26px
+this asset exists to be drawn at.
 
 Regenerate the icons. The source has 50% empty margin, which at 32px throws
 away half the available pixels, so it is cropped to the artwork and padded

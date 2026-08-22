@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { AgentSession } from './AgentSession.js';
 import { useAgentSession } from '../lib/useAgentSession.js';
-import type { Agent, Message } from '@contexto/shared';
+import type { Agent, AgentActivity, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { sameConversation } from '../lib/conversation.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
+import { LogoMark } from './LogoMark.js';
+import { useReportWorking } from '../lib/working.js';
+import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
 
 interface Props {
   agentId: string;
@@ -30,6 +33,12 @@ export function Chat({ agentId, onBack }: Props) {
    * sitting unanswered and then an answer appearing from nowhere.
    */
   const [pending, setPending] = useState(false);
+  /*
+   * The step the turn is on, as last reported. Held rather than rendered
+   * directly: what the student reads is a phrase chosen to suit it, and tool
+   * names are not something to put in front of them.
+   */
+  const [activity, setActivity] = useState<AgentActivity | undefined>(undefined);
   const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
@@ -55,6 +64,7 @@ export function Chat({ agentId, onBack }: Props) {
         const body = await history.json();
         setMessages(body.messages);
         setPending(body.pending);
+        setActivity(body.activity);
       }
     })();
   }, [agentId]);
@@ -73,18 +83,36 @@ export function Chat({ agentId, onBack }: Props) {
      * of date: a question asked in the app never appeared on the website, and
      * the answer to it never did either.
      *
-     * Not while a turn of our own is in flight. The student's message is on
-     * screen optimistically and the reply is already on its way here; a poll
-     * landing in the middle would replace both with the server's older view
-     * of the same conversation.
+     * It runs during a turn of our own as well, but only for what the turn is
+     * doing -- the messages it brings back are ignored. The student's own
+     * message is on screen optimistically and the reply is already on its way
+     * here; a poll landing in the middle would replace both with the server's
+     * older view of the same conversation.
      */
-    if (sending) return;
     let live = true;
 
     const pull = async () => {
       const res = await api.agents[':id'].messages.$get({ param: { id: agentId } });
       if (!live || !res.ok) return;
       const body = await res.json();
+      /*
+       * Kept as the same object while the step is unchanged. A fresh one every
+       * poll would read as the agent having moved on, and the line would churn
+       * through words while it sat on one tool for a minute.
+       */
+      setActivity((prev) =>
+        activityKey(prev) === activityKey(body.activity) ? prev : body.activity,
+      );
+
+      /*
+       * Everything below is the server's view of a conversation this page is
+       * not currently changing. During a turn of our own, `sending` already
+       * says a turn is running and the reply is already on its way here --
+       * taking the server's `pending` as well would leave it set behind our
+       * back, and the line would sit under the finished answer for another
+       * four seconds insisting the agent was still working.
+       */
+      if (sending) return;
       setPending(body.pending);
       // Replaced only when something was actually said, so the list is not
       // rebuilt under the student every few seconds.
@@ -103,6 +131,27 @@ export function Chat({ agentId, onBack }: Props) {
       window.removeEventListener('focus', onFocus);
     };
   }, [agentId, sending]);
+
+  /*
+   * Whether this conversation has anything in flight. `sending` is a turn this
+   * page started; `pending` is one it found already running.
+   */
+  const working = sending || pending;
+  useReportWorking(working);
+
+  /*
+   * What the line says, and when it changes.
+   *
+   * Once per step, not on a timer: the phrase is chosen to suit the work, so
+   * changing it while the work has not changed would be saying something new
+   * about nothing new. A minute spent on one tool holds one phrase, and the
+   * mark beside it is what shows the turn is still alive.
+   */
+  const [phrase, setPhrase] = useState(() => pickPhrase(undefined));
+  useEffect(() => {
+    if (!working) return;
+    setPhrase((current) => pickPhrase(activity, { avoid: [current] }));
+  }, [working, activity]);
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -202,23 +251,25 @@ export function Chat({ agentId, onBack }: Props) {
             */}
             <AgentSession agentId={agentId} working={sending} />
 
-            {(sending || pending) && (
+            {working && (
               /*
                * What it is doing, not just that it is doing something. A
                * minute of "Thinking" while a browser signs into a school
                * account reads as a hang; naming the site makes the same wait
-               * legible.
+               * legible, and naming the step does the same for the rest.
+               *
+               * The browser wins when there is one. A phrase is what the line
+               * says when there is nothing specific to say, and "signing in to
+               * veracross" is about as specific as this gets.
                */
-              <p className="muted thinking">
-                {session.active && session.portalId
-                  ? `Signing in to ${session.portalId} and reading it`
-                  : 'Thinking'}
-                <span className="dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
+              <div className="muted thinking">
+                <LogoMark size={20} working />
+                <span>
+                  {session.active && session.portalId
+                    ? `Signing in to ${session.portalId} and reading it…`
+                    : phrase}
                 </span>
-              </p>
+              </div>
             )}
             <div ref={bottom} />
           </div>

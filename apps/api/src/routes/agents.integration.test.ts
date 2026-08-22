@@ -5,7 +5,7 @@ import { agentMessages } from '@contexto/db';
 import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
-import { beginTurn, endTurn } from '../turns-in-flight.js';
+import { beginTurn, endTurn, setActivity } from '../turns-in-flight.js';
 import type { AppContext } from '../context.js';
 import {
   createAgent,
@@ -266,6 +266,54 @@ describe('a turn still running', () => {
     try {
       const res = await app.request(`/api/agents/${quiet.id}/messages`, as(alice.token));
       expect(await res.json()).toMatchObject({ pending: false });
+    } finally {
+      endTurn(busy.id);
+    }
+  });
+
+  /*
+   * What it is doing, not just that it is doing something. The poll already
+   * carries whether a turn is running; carrying the step it is on is what
+   * lets the conversation name the work rather than spin a bare word through
+   * a minute of reading a student's mail.
+   */
+  it('says which tool the turn is on', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    beginTurn(agent.id);
+    setActivity(agent.id, { kind: 'tool', name: 'gmail_search' });
+    try {
+      const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+      expect(await res.json()).toMatchObject({
+        pending: true,
+        activity: { kind: 'tool', name: 'gmail_search' },
+      });
+    } finally {
+      endTurn(agent.id);
+    }
+  });
+
+  it('says nothing about the step on a quiet conversation', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+    const body = (await res.json()) as { activity?: unknown };
+    expect(body.activity ?? null).toBeNull();
+  });
+
+  it("does not report another conversation's step", async () => {
+    const alice = await createUser();
+    const busy = await createAgent(alice.id);
+    const quiet = await createAgent(alice.id);
+
+    beginTurn(busy.id);
+    setActivity(busy.id, { kind: 'tool', name: 'gmail_search' });
+    try {
+      const res = await app.request(`/api/agents/${quiet.id}/messages`, as(alice.token));
+      const body = (await res.json()) as { activity?: unknown };
+      expect(body.activity ?? null).toBeNull();
     } finally {
       endTurn(busy.id);
     }

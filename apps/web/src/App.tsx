@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from './lib/api.js';
 import { desktop } from './lib/desktop.js';
 import { MAC_DOWNLOAD } from './lib/download.js';
 import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, signOut, useSession } from './lib/auth.js';
+import { WorkingProvider } from './lib/working.js';
+import { LogoMark } from './screens/LogoMark.js';
 import { Agents } from './screens/Agents.js';
 import { Chat } from './screens/Chat.js';
 import { LinkDevice } from './screens/LinkDevice.js';
@@ -11,6 +13,12 @@ import { Settings } from './screens/Settings.js';
 
 export function App() {
   const { data: session, isPending } = useSession();
+  /*
+   * Set by whichever screen is open. Only the header reads it, and only to
+   * decide whether its mark is folding.
+   */
+  const [working, setWorking] = useState(false);
+  const report = useCallback((next: boolean) => setWorking(next), []);
   // View state lives in the URL now, so refresh and Back both behave.
   const route = useRoute();
 
@@ -88,60 +96,68 @@ export function App() {
   }
 
   return (
-    <main>
-      <header className="app-header">
-        <button
-          className="brand"
-          aria-label="Your agents"
-          onClick={() => navigate({ name: 'agents' })}
-        >
-          <img src="/logo.png" alt="ContextoAgent" />
-        </button>
-        <nav>
-          {route.name !== 'settings' && (
-            <button className="quiet" onClick={() => navigate({ name: 'settings' })}>
-              Settings
-            </button>
-          )}
-          <button className="quiet" onClick={() => void signOut()}>
-            Sign out
+    <WorkingProvider value={report}>
+      <main>
+        <header className="app-header">
+          <button
+            className="brand"
+            aria-label="Your agents"
+            onClick={() => navigate({ name: 'agents' })}
+          >
+            {/*
+              The lockup, split in two so only the mark moves. The sizes are
+              the proportions it had as a single image, so the header looks
+              exactly as it did until the agent starts working.
+            */}
+            <LogoMark size={25.6} working={working} />
+            <img className="brand-wordmark" src="/wordmark.png" alt="ContextoAgent" />
           </button>
-        </nav>
-      </header>
+          <nav>
+            {route.name !== 'settings' && (
+              <button className="quiet" onClick={() => navigate({ name: 'settings' })}>
+                Settings
+              </button>
+            )}
+            <button className="quiet" onClick={() => void signOut()}>
+              Sign out
+            </button>
+          </nav>
+        </header>
 
-      {route.name === 'agents' && (
-        <Agents onOpen={(agent) => navigate({ name: 'chat', agentId: agent.id })} />
-      )}
+        {route.name === 'agents' && (
+          <Agents onOpen={(agent) => navigate({ name: 'chat', agentId: agent.id })} />
+        )}
 
-      {route.name === 'chat' && (
-        /*
-         * Keyed, so moving between conversations builds a new one rather than
-         * repainting the old.
-         *
-         * Without it React kept a single Chat and only swapped the prop, so
-         * everything it was holding came along: a reply still in flight landed
-         * in whichever conversation was open by the time it arrived, the
-         * composer stayed disabled because some other chat was mid-turn, and a
-         * half-typed message followed you into a different agent. A
-         * conversation is not a repaint of another one.
-         */
-        <Chat
-          key={route.agentId}
-          agentId={route.agentId}
-          onBack={() => navigate({ name: 'agents' })}
-        />
-      )}
+        {route.name === 'chat' && (
+          /*
+           * Keyed, so moving between conversations builds a new one rather than
+           * repainting the old.
+           *
+           * Without it React kept a single Chat and only swapped the prop, so
+           * everything it was holding came along: a reply still in flight landed
+           * in whichever conversation was open by the time it arrived, the
+           * composer stayed disabled because some other chat was mid-turn, and a
+           * half-typed message followed you into a different agent. A
+           * conversation is not a repaint of another one.
+           */
+          <Chat
+            key={route.agentId}
+            agentId={route.agentId}
+            onBack={() => navigate({ name: 'agents' })}
+          />
+        )}
 
-      {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}
+        {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'agents' })} />}
 
-      {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
+        {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
 
-      {route.name === 'notFound' && (
-        <div className="panel">
-          <p>There&apos;s nothing at this address.</p>
-          <button onClick={() => navigate({ name: 'agents' })}>Go to your agents</button>
-        </div>
-      )}
-    </main>
+        {route.name === 'notFound' && (
+          <div className="panel">
+            <p>There&apos;s nothing at this address.</p>
+            <button onClick={() => navigate({ name: 'agents' })}>Go to your agents</button>
+          </div>
+        )}
+      </main>
+    </WorkingProvider>
   );
 }

@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: [
-      '{packages,apps}/*/src/**/*.test.ts',
+      '{packages,apps}/*/src/**/*.test.{ts,tsx}',
       'apps/relay/*.test.mjs',
       'apps/desktop/src/**/*.test.mjs',
     ],

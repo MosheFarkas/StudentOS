@@ -61,3 +61,19 @@ export const skillSummarySchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 export type SkillSummary = z.infer<typeof skillSummarySchema>;
+
+/**
+ * What a running turn is doing at this instant.
+ *
+ * `thinking` -- waiting on the model. `tool` -- running the named tool.
+ *
+ * Reported live and never persisted: it describes a moment inside a turn, and
+ * a moment that has passed is not worth a row. The conversation reads it to
+ * name the work on screen rather than spinning a bare "Thinking" through a
+ * minute of reading a student's mail.
+ */
+export const agentActivitySchema = z.union([
+  z.object({ kind: z.literal('thinking') }),
+  z.object({ kind: z.literal('tool'), name: z.string() }),
+]);
+export type AgentActivity = z.infer<typeof agentActivitySchema>;

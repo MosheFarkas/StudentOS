@@ -255,3 +255,102 @@ describe('a reply with no text field', () => {
     expect(reply.trim()).not.toBe('');
   });
 });
+
+/**
+ * Saying what it is doing, while it does it.
+ *
+ * A turn that calls tools can run for a minute, and until now the only thing
+ * the student could be told was that something was happening. The loop knows
+ * far more than that -- which tool it is about to run, and when it has gone
+ * back to the model -- and reporting it is what lets the conversation name the
+ * work instead of spinning.
+ *
+ * A notification, not a hook: whatever the caller does with it, the turn runs
+ * exactly as it would have.
+ */
+describe('reporting activity', () => {
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+  function depsCalling(toolIds: string[]) {
+    const tools = new ToolRegistry();
+    for (const id of toolIds) {
+      tools.register({
+        id,
+        description: 'a tool',
+        inputSchema: z.object({}),
+        execute: async () => 'ok',
+      } as never);
+    }
+    let turn = 0;
+    return {
+      llm: {
+        async chat() {
+          turn += 1;
+          return turn === 1
+            ? {
+                content: '',
+                toolCalls: toolIds.map((name, i) => ({ id: `c${i}`, name, arguments: '{}' })),
+                usage,
+                finishReason: 'tool_calls' as const,
+              }
+            : { content: 'done', toolCalls: [], usage, finishReason: 'stop' as const };
+        },
+      },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools,
+    } as unknown as AgentRunDeps;
+  }
+
+  const input = (onActivity: unknown) =>
+    ({ userId: 'u1', agentId: 'a1', purpose: 'test', message: 'go', onActivity }) as never;
+
+  it('says it is thinking before it asks the model', async () => {
+    const seen: unknown[] = [];
+    await runAgentTurn(
+      depsCalling([]),
+      input((a: unknown) => seen.push(a)),
+    );
+
+    expect(seen[0]).toEqual({ kind: 'thinking' });
+  });
+
+  it('names each tool before running it', async () => {
+    const seen: unknown[] = [];
+    await runAgentTurn(
+      depsCalling(['google_calendar_list']),
+      input((a: unknown) => seen.push(a)),
+    );
+
+    expect(seen).toContainEqual({ kind: 'tool', name: 'google_calendar_list' });
+  });
+
+  it('reports tools in the order the model asked for them', async () => {
+    const seen: string[] = [];
+    await runAgentTurn(
+      depsCalling(['gmail_search', 'google_drive_list']),
+      input((a: { kind: string; name?: string }) => {
+        if (a.kind === 'tool' && a.name) seen.push(a.name);
+      }),
+    );
+
+    expect(seen).toEqual(['gmail_search', 'google_drive_list']);
+  });
+
+  it('goes back to thinking after the tools have run', async () => {
+    // The student watched it read their mail; what follows is the model
+    // working out what to say about it, and saying so is the honest report.
+    const seen: string[] = [];
+    await runAgentTurn(
+      depsCalling(['gmail_search']),
+      input((a: { kind: string }) => seen.push(a.kind)),
+    );
+
+    expect(seen).toEqual(['thinking', 'tool', 'thinking']);
+  });
+
+  it('runs the turn normally when nobody is listening', async () => {
+    const { reply } = await runAgentTurn(depsCalling(['gmail_search']), input(undefined));
+    expect(reply).toBe('done');
+  });
+});

@@ -6,7 +6,7 @@ import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
-import { beginTurn, endTurn } from './turns-in-flight.js';
+import { beginTurn, endTurn, setActivity } from './turns-in-flight.js';
 
 /**
  * Run one agent turn and persist both sides of it.
@@ -68,6 +68,12 @@ export async function runTurnForAgent(
         youtubeTranscripts: ctx.youtubeTranscripts,
         ...(ctx.residential ? { residentialFetch: ctx.residential.fetch } : {}),
         portals: new DbPortalSnapshots(ctx.db),
+        /*
+         * Every step the turn takes, handed to the registry the poll reads.
+         * This is the whole of what makes the line under a question say what
+         * the agent is doing rather than only that it is doing something.
+         */
+        onActivity: (activity) => setActivity(agent.id, activity),
         ...(signal ? { signal } : {}),
       },
     );

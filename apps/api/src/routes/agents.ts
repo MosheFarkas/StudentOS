@@ -6,7 +6,7 @@ import { createAgentSchema, sendMessageSchema, ContextoError } from '@contexto/s
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
-import { turnRunning } from '../turns-in-flight.js';
+import { turnActivity, turnRunning } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 export function createAgentRoutes(ctx: AppContext) {
@@ -86,7 +86,16 @@ export function createAgentRoutes(ctx: AppContext) {
          * answer arrives minutes later out of nowhere unless the conversation
          * itself can say it is still thinking.
          */
-        return c.json({ messages: rows.map(toMessage), pending: turnRunning(agent.id) });
+        return c.json({
+          messages: rows.map(toMessage),
+          pending: turnRunning(agent.id),
+          /*
+           * And what it is on, when something is. Absent rather than null on
+           * a quiet conversation: there is no step, and a shape saying there
+           * is one that happens to be empty invites the client to render it.
+           */
+          activity: turnActivity(agent.id),
+        });
       })
 
       /**

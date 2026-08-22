@@ -1,3 +1,4 @@
+import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
@@ -46,6 +47,14 @@ export interface AgentRunInput {
   residentialFetch?: typeof globalThis.fetch;
   /** Portal snapshots pushed up by the student's linked desktop companion. */
   portals?: PortalSnapshotSource;
+  /**
+   * Told what the turn is doing, each time that changes.
+   *
+   * A notification and nothing more: the turn does not wait on it, read it
+   * back, or behave differently for having one. What the caller does with it
+   * -- hold it for a poll to collect, drop it -- is the caller's business.
+   */
+  onActivity?: (activity: AgentActivity) => void;
   signal?: AbortSignal;
 }
 
@@ -116,6 +125,7 @@ export async function runAgentTurn(
   let reply = '';
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
+    input.onActivity?.({ kind: 'thinking' });
     const response = await llm.chat(
       { messages, tools: toolDefinitions },
       { userId: input.userId, agentId: input.agentId, signal: input.signal },
@@ -136,6 +146,7 @@ export async function runAgentTurn(
 
     for (const call of response.toolCalls) {
       toolsUsed.push(call.name);
+      input.onActivity?.({ kind: 'tool', name: call.name });
       const result = await tools.execute(call.name, call.arguments, toolContext);
       messages.push({
         role: 'tool',

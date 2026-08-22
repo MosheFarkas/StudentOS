@@ -126,12 +126,43 @@ a {
   cursor: pointer;
 }
 
-/* Height-constrained: the lockup is very wide, and letting it set its own
-   size pushes the nav off a phone screen. */
-.brand img {
-  height: 30px;
+/*
+ * The lockup, as two pieces rather than one image, because only the mark
+ * animates. Every number is the proportion it had inside the flat lockup at
+ * the 30px height that used to be set here, so the header is unchanged until
+ * the mark starts folding: the mark is 25.6px tall, the wordmark 16.2px, the
+ * gap between them 2.8px, and the wordmark sits 2.6px above the mark's
+ * baseline exactly as it was drawn.
+ */
+.brand {
+  align-items: flex-end;
+  gap: 2.8px;
+}
+
+.brand-wordmark {
+  height: 16.2px;
   width: auto;
   display: block;
+  margin-bottom: 2.6px;
+}
+
+/*
+ * The folding mark.
+ *
+ * Sized to the artwork rather than to its texture: the source square has
+ * transparent margin on every side, and a caller asking for 20px means 20px
+ * of mark. The stage inside is the 900-unit space the fold was measured in,
+ * scaled down and shifted so the artwork lands at 0,0.
+ *
+ * Not clipped, deliberately. The fourth fold swings the middle band left past
+ * the artwork's own edge, and hiding the overflow would cut the fold in half
+ * at its widest moment. The stage is absolutely positioned, so what it paints
+ * outside the box costs the layout nothing.
+ */
+.logo-mark {
+  position: relative;
+  display: block;
+  flex: none;
 }
 
 .app-header nav {
@@ -943,6 +974,21 @@ a.button {
   50% {
     opacity: 0.35;
   }
+}
+
+/*
+ * The line under a question while the agent works. The mark carries the fact
+ * that something is happening, and the phrase beside it says what.
+ */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Not a <p>: the mark is built from divs, which a paragraph cannot legally
+     contain. React builds the DOM directly so it renders anyway, but it warns
+     about it on every turn and an HTML parser would close the <p> early. This
+     is the margin it had while it was one. */
+  margin: 0 0 0.75rem;
 }
 
 .dots {
