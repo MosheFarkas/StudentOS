@@ -31,19 +31,38 @@ python3 scripts/make-icon.py
 ```
 
 That script owns the app icon rather than a line of `sips` here, because it
-does three things a one-liner cannot. It cuts the mark out of the source and
-recomposes it at a chosen fraction of the tile -- the source has so much empty
-margin that a straight resize spends most of a 32px icon on white, which reads
-as a smaller app than everything beside it in the dock. It resamples every
-size once from the 8000px original with LANCZOS, where deriving the small
-sizes from a generated 1024 resamples twice and softens the thin white outline
-inside the mark first. And it draws the corner mask at 8x before shrinking it,
-because a rounded rectangle rasterised straight to 16px has ragged corners.
+does four things a one-liner cannot.
 
-The numbers worth knowing are at the top of the script: `MARK_HEIGHT` is the
-share of the tile the mark fills (0.75), and `CORNER` is the corner radius as
-a share of the tile (0.209, matching the tile this replaced). `MARK_BOX` is
-where the artwork actually sits in the source, measured rather than guessed.
+It cuts the mark out of the source and recomposes it at a chosen fraction of
+the tile -- the source has so much empty margin that a straight resize spends
+most of a 32px icon on white, which reads as a smaller app than everything
+beside it in the dock.
+
+It resamples in linear light. Averaging pixels in sRGB averages numbers that
+are not proportional to light, and the energy lost turns up wherever a
+saturated colour meets white, which is most of this mark's edges. Measured on
+this artwork: a downscale to 32px loses 2.75% of the image's luminance in
+sRGB and 0.54% in linear. The error grows as the target shrinks, so it is
+worst exactly where the icon is hardest to read.
+
+It resamples every size once from the 8000px original, where deriving the
+small sizes from a generated 1024 resamples twice and softens the thin white
+outline inside the mark first.
+
+And it draws the corner mask at 8x before shrinking it, because a rounded
+rectangle rasterised straight to 16px has ragged corners. That one alone is
+left in sRGB -- coverage is already proportional to area, so putting it
+through the transfer function would be wrong.
+
+The numbers worth knowing are at the top of the script. `MARK_HEIGHT` is the
+share of the tile's height the mark fills (0.82). The mark is portrait, 0.768
+as wide as tall, so height binds and the width is always narrower again --
+0.82 tall is 63% wide. Useful range is about 0.75 to 0.90: below that it reads
+as a small mark in a large white square, and by 0.94 it grazes the top and
+bottom edges, losing its corners to the tile's rounding at 1.0. `CORNER` is
+the corner radius as a share of the tile (0.209, matching the tile this
+replaced), and `MARK_BOX` is where the artwork actually sits in the source,
+measured rather than guessed.
 
 The web icons above are still generated with `sips` -- they are a favicon on
 a page, not a tile in a dock, and nothing has been wrong with them.
