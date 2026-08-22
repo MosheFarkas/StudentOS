@@ -26,9 +26,17 @@ SOURCE = os.path.join(ROOT, 'brand', 'mark-white.png')
 # Where the coloured artwork sits in the source, measured rather than guessed.
 MARK_BOX = (1524, 775, 6485, 7234)
 
-# Share of the tile's height the mark fills. The source sat at 0.617, which is
-# a lot of white; macOS glyphs generally sit nearer three quarters.
-MARK_HEIGHT = 0.75
+# Share of the tile's height the mark fills.
+#
+# The mark is portrait -- 0.768 as wide as it is tall -- so height is the
+# binding dimension and the width that results is always narrower still. At
+# 0.75 it came out 58% of the tile's width, which still read as a small mark
+# in a large white square. 0.88 gives 68%.
+#
+# This is the ceiling worth using rather than a preference: by 0.94 the mark
+# is grazing the top and bottom edges, and at 1.0 its corners disappear into
+# the tile's own rounding.
+MARK_HEIGHT = 0.88
 
 # Matches the tile already shipping: full-bleed, corners at 20.9%.
 CORNER = 0.209
