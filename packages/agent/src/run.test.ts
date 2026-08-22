@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { currentTimeSection, runAgentTurn } from './run.js';
+import { RESPONDING } from './prompts/documents.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { ToolContext } from './tools/types.js';
 import type { AgentRunDeps } from './run.js';
@@ -352,5 +353,66 @@ describe('reporting activity', () => {
   it('runs the turn normally when nobody is listening', async () => {
     const { reply } = await runAgentTurn(depsCalling(['gmail_search']), input(undefined));
     expect(reply).toBe('done');
+  });
+});
+
+/**
+ * The prompt documents actually reach the model.
+ *
+ * buildSystemPrompt is private, so nothing outside this file would notice a
+ * section being dropped from it. The document could be perfect, tested, and
+ * never sent.
+ */
+describe('the assembled system prompt', () => {
+  /** Records the messages the turn sends, then replies. */
+  function capturing(seen: { role: string; content: string }[]) {
+    return {
+      llm: {
+        async chat({ messages }: { messages: { role: string; content: string }[] }) {
+          seen.push(...messages);
+          return {
+            content: 'done',
+            toolCalls: [],
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            finishReason: 'stop' as const,
+          };
+        },
+      },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools: new ToolRegistry(),
+    } as unknown as AgentRunDeps;
+  }
+
+  async function systemPrompt(): Promise<string> {
+    const seen: { role: string; content: string }[] = [];
+    await runAgentTurn(capturing(seen), {
+      userId: 'u1',
+      agentId: 'a1',
+      purpose: 'keep me on top of chemistry',
+      message: 'go',
+    } as never);
+    return seen.find((m) => m.role === 'system')?.content ?? '';
+  }
+
+  it('carries the responding document', async () => {
+    expect(await systemPrompt()).toContain(RESPONDING.body);
+  });
+
+  it('puts it above anything that varies between agents or turns', async () => {
+    // Providers cache on a prefix match, and this document is identical for
+    // every agent on the platform. Below the purpose it caches per agent;
+    // below the clock it stops caching at all.
+    const prompt = await systemPrompt();
+    expect(prompt.indexOf(RESPONDING.body)).toBeLessThan(
+      prompt.indexOf('keep me on top of chemistry'),
+    );
+    expect(prompt.indexOf(RESPONDING.body)).toBeLessThan(prompt.indexOf('Their timezone is'));
+  });
+
+  it('does not still carry the instruction the document replaced', async () => {
+    // "Be direct and useful; skip preamble" moved into responding.md. Left in
+    // both places it would drift, and the two copies would disagree.
+    expect(await systemPrompt()).not.toContain('skip preamble');
   });
 });

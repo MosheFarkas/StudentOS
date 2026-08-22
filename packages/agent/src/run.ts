@@ -1,5 +1,6 @@
 import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
+import { RESPONDING } from './prompts/documents.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
@@ -257,7 +258,16 @@ function buildSystemPrompt(
 ): string {
   const sections = [
     'You are a personal agent built by a student, for themselves. You belong to ' +
-      'them, not to their school. Be direct and useful; skip preamble.',
+      'them, not to their school.',
+    /*
+     * How to talk to them.
+     *
+     * Second, and above the purpose, because it is the same for every agent on
+     * the platform: the longer the identical prefix, the more of it a provider
+     * can serve from cache. It also has to sit above the volatile sections for
+     * the same reason -- see the note on ordering above.
+     */
+    RESPONDING.body,
     `Your purpose, in their words: ${purpose}`,
     /*
      * Temporal grounding.
