@@ -1,0 +1,112 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Vault } from './vault.js';
+
+/**
+ * ContextoVault on disk.
+ *
+ * Files are the truth here rather than a projection of rows, which buys the
+ * property the whole idea rests on -- a student could one day be handed the
+ * folder and open it in Obsidian -- and costs the care that comes with running
+ * a filesystem as a database.
+ */
+
+describe('Vault', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-vault-'));
+    vault = new Vault(root, 'agent-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const note = (over: Partial<Parameters<Vault['write']>[0]> = {}) => ({
+    name: 'chemistry',
+    kind: 'entity' as const,
+    source: 'classroom' as const,
+    description: 'Course',
+    body: 'Chemistry, with [[mr-ali]].',
+    ...over,
+  });
+
+  it('round-trips every field', async () => {
+    await vault.write(note({ externalId: 'course-123' }));
+    const read = await vault.read('entity', 'chemistry');
+
+    expect(read).toEqual({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      externalId: 'course-123',
+      body: 'Chemistry, with [[mr-ali]].',
+    });
+  });
+
+  it('writes something a person can read', async () => {
+    // The point of files. If this is not legible in a text editor, the vault
+    // may as well have been a table.
+    await vault.write(note());
+    const raw = readFileSync(join(root, 'agent-1', 'entities', 'chemistry.md'), 'utf8');
+
+    expect(raw).toContain('---');
+    expect(raw).toContain('name: chemistry');
+    expect(raw).toContain('Chemistry, with [[mr-ali]].');
+  });
+
+  it('separates entities from episodes on disk', async () => {
+    await vault.write(note());
+    await vault.write(note({ name: '2026-08-23-mock', kind: 'episode', body: 'Panicked.' }));
+
+    expect((await vault.list('entity')).map((n) => n.name)).toEqual(['chemistry']);
+    expect((await vault.list('episode')).map((n) => n.name)).toEqual(['2026-08-23-mock']);
+  });
+
+  it('returns null for a note that is not there', async () => {
+    expect(await vault.read('entity', 'nonexistent')).toBeNull();
+  });
+
+  it('lists nothing for an agent with no vault yet', async () => {
+    // The common case on the first run. A missing directory is not an error.
+    expect(await new Vault(root, 'never-seen').list('entity')).toEqual([]);
+  });
+
+  it('overwrites a note in place rather than accumulating copies', async () => {
+    await vault.write(note({ body: 'First.' }));
+    await vault.write(note({ body: 'Second.' }));
+
+    expect(await vault.list('entity')).toHaveLength(1);
+    expect((await vault.read('entity', 'chemistry'))?.body).toBe('Second.');
+  });
+
+  it("keeps one agent out of another agent's vault", async () => {
+    await vault.write(note());
+    expect(await new Vault(root, 'agent-2').list('entity')).toEqual([]);
+  });
+
+  it('refuses a name that would escape the vault', async () => {
+    /*
+     * Belt and braces. slugForNote already makes this impossible, so reaching
+     * here means a caller skipped it or somebody loosened the slug rules --
+     * which is exactly when a second check earns its place.
+     */
+    for (const escape of ['../outside', 'a/b', '..', '/etc/passwd']) {
+      await expect(vault.write(note({ name: escape }))).rejects.toThrow(/name/i);
+    }
+  });
+
+  it('ignores a file that is not a note', async () => {
+    // Obsidian leaves .obsidian directories about, and a student handed the
+    // folder may put anything in it.
+    mkdirSync(join(root, 'agent-1', 'entities'), { recursive: true });
+    writeFileSync(join(root, 'agent-1', 'entities', 'notes.txt'), 'not a note');
+    writeFileSync(join(root, 'agent-1', 'entities', 'broken.md'), 'no frontmatter here');
+
+    await vault.write(note());
+    expect((await vault.list('entity')).map((n) => n.name)).toEqual(['chemistry']);
+  });
+});
