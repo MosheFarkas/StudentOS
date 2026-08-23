@@ -37,11 +37,11 @@ function memoryWith(contents: { content: string; hoursAgo: number }[]): MemorySt
 }
 
 function profileStore(current: string, updatedAt: Date | null) {
-  const saved: { profile: string }[] = [];
+  const saved: { profile: string; at: Date }[] = [];
   const store: ProfileStore = {
     read: async () => ({ profile: current, updatedAt }),
-    save: async (_agentId, profile) => {
-      saved.push({ profile });
+    save: async (_agentId, profile, at) => {
+      saved.push({ profile, at });
     },
     stale: async () => [],
   };
@@ -119,7 +119,8 @@ describe('updating the profile', () => {
     });
 
     expect(result.changed).toBe(false);
-    expect(saved).toHaveLength(0);
+    // Still written back, with a fresh timestamp -- see the watermark test.
+    expect(saved[0]?.profile).toBe('Takes chemistry.');
   });
 
   it('holds an over-long rewrite to the budget before saving it', async () => {
@@ -156,7 +157,7 @@ describe('updating the profile', () => {
       profiles: store,
     });
 
-    expect(saved).toHaveLength(0);
+    expect(saved[0]?.profile ?? '').toBe('');
     expect(result.changed).toBe(false);
   });
 
@@ -175,6 +176,33 @@ describe('updating the profile', () => {
     );
   });
 
+  it('advances the watermark even when it decides nothing is worth keeping', async () => {
+    /*
+     * Found in production. Two agents had memories, an empty profile, and a
+     * null profile_updated_at, because the writer read them, decided there was
+     * nothing durable, and returned without saving. Nothing moved -- so they
+     * stayed stale, and the job re-read the same exchanges to reach the same
+     * conclusion every hour, for ever. At four agents that is invisible; at a
+     * thousand students it is tens of thousands of calls a day for nothing.
+     *
+     * The timestamp means "when we last considered this", not "when this last
+     * changed". Looking has to count.
+     */
+    const { store, saved } = profileStore('Takes chemistry.', at(48));
+    const llm = llmReturning('Takes chemistry.');
+
+    const result = await run({
+      llm,
+      memory: memoryWith([{ content: 'Student: whats 2+2\nAgent: 4.', hoursAgo: 1 }]),
+      profiles: store,
+    });
+
+    expect(result.changed).toBe(false);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.profile).toBe('Takes chemistry.');
+    expect(saved[0]?.at.getTime()).toBeGreaterThan(at(48).getTime());
+  });
+
   it('keeps the old profile when the model returns nothing usable', async () => {
     // An empty completion must not wipe what the agent already knew.
     const { store, saved } = profileStore('Takes chemistry.', at(48));
@@ -186,7 +214,7 @@ describe('updating the profile', () => {
       profiles: store,
     });
 
-    expect(saved).toHaveLength(0);
+    expect(saved[0]?.profile).toBe('Takes chemistry.');
     expect(result.changed).toBe(false);
   });
 });

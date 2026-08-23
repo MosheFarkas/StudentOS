@@ -27,11 +27,14 @@ export const agents = pgTable(
      */
     profile: text('profile').notNull().default(''),
     /**
-     * When the profile last changed.
+     * When this agent's memory was last considered -- a watermark, not a
+     * change log.
      *
-     * The writer reads only the exchanges since this, so a conversation that
-     * taught it nothing costs one cheap call rather than a rewrite from the
-     * whole history. Null until the first one is written.
+     * It advances on every pass, including the ones that decide nothing is
+     * worth keeping, which is most of them. Advancing it only on a change
+     * leaves an agent permanently stale and re-read on every wake of the job,
+     * for ever. Null until the first pass. The writer reads only the exchanges
+     * after it.
      */
     profileUpdatedAt: timestamp('profile_updated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

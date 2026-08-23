@@ -25,32 +25,49 @@ export class PostgresProfileStore implements ProfileStore {
   }
 
   /**
-   * Agents whose memory has moved on since their profile was written.
+   * Agents worth spending a model call on.
    *
-   * An EXISTS rather than a join and a group-by: the question is whether there
-   * is at least one newer exchange, and Postgres can stop at the first one it
-   * finds instead of counting them all.
+   * Two conditions, both EXISTS rather than joins: the question is whether at
+   * least one row qualifies, and Postgres can stop at the first one it finds
+   * instead of counting them all.
+   *
+   * The quiet period is not politeness. The profile lives in the cached part
+   * of the system prompt, so rewriting it between one turn and the next
+   * invalidates that prefix for every remaining turn of the conversation --
+   * the same reason Hermes freezes its memory snapshot for the length of a
+   * session. Waiting for quiet also means the writer reads a finished
+   * conversation rather than half of one.
    */
-  async stale(limit: number): Promise<{ agentId: string; userId: string }[]> {
-    const rows = await this.db
+  async stale(limit: number, quietForMs: number): Promise<{ agentId: string; userId: string }[]> {
+    const quietSince = new Date(Date.now() - quietForMs);
+
+    return this.db
       .select({ agentId: agents.id, userId: agents.userId })
       .from(agents)
       .where(
-        sql`exists (${this.db
-          .select({ one: sql`1` })
-          .from(agentMemories)
-          .where(
-            and(
-              eq(agentMemories.agentId, agents.id),
-              or(
-                isNull(agents.profileUpdatedAt),
-                gt(agentMemories.occurredAt, agents.profileUpdatedAt),
+        and(
+          // Something has happened that the last pass did not see.
+          sql`exists (${this.db
+            .select({ one: sql`1` })
+            .from(agentMemories)
+            .where(
+              and(
+                eq(agentMemories.agentId, agents.id),
+                or(
+                  isNull(agents.profileUpdatedAt),
+                  gt(agentMemories.occurredAt, agents.profileUpdatedAt),
+                ),
               ),
-            ),
-          )})`,
+            )})`,
+          // And nothing has happened recently enough to still be in progress.
+          sql`not exists (${this.db
+            .select({ one: sql`1` })
+            .from(agentMemories)
+            .where(
+              and(eq(agentMemories.agentId, agents.id), gt(agentMemories.occurredAt, quietSince)),
+            )})`,
+        ),
       )
       .limit(limit);
-
-    return rows;
   }
 }

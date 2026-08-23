@@ -82,6 +82,17 @@ const MINUTE = 60_000;
  */
 const BATCH_SIZE = 50;
 
+/**
+ * How long an agent must have been silent before its profile is rewritten.
+ *
+ * The profile sits in the cached part of the system prompt, so a rewrite
+ * between one turn and the next costs that conversation its cache for every
+ * remaining turn. Fifteen minutes is comfortably longer than a pause for
+ * thought and comfortably shorter than the hourly cadence, so an ordinary
+ * conversation is written up on the next wake rather than the one after.
+ */
+const QUIET_FOR = 15 * MINUTE;
+
 interface Job {
   name: string;
   intervalMs: number;
@@ -96,7 +107,7 @@ const jobs: Job[] = [
     intervalMs: 60 * MINUTE,
     async run() {
       const ctx = context();
-      const stale = await ctx.profiles.stale(BATCH_SIZE);
+      const stale = await ctx.profiles.stale(BATCH_SIZE, QUIET_FOR);
       if (stale.length === 0) return;
 
       let changed = 0;

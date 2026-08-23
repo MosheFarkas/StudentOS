@@ -105,10 +105,17 @@ export async function updateStudentProfile(
    */
   const describesNothing = /^\(?\s*(?:empty|none|nothing|no (?:profile|document|information))\b/i;
 
-  if (written === '' || written === capProfile(current) || describesNothing.test(written)) {
-    return { changed: false };
-  }
+  const keep = written === '' || written === capProfile(current) || describesNothing.test(written);
 
-  await profiles.save(options.agentId, written, now);
-  return { changed: true };
+  /*
+   * Write back either way, because the timestamp is a watermark.
+   *
+   * It records when this agent's memory was last CONSIDERED, not when the
+   * document last changed. Leaving it alone on a pass that decided nothing was
+   * worth keeping leaves the agent permanently stale, and the job re-reads the
+   * same exchanges to reach the same conclusion on every wake. Production had
+   * two agents in exactly that state within an hour of this shipping.
+   */
+  await profiles.save(options.agentId, keep ? capProfile(current) : written, now);
+  return { changed: !keep };
 }

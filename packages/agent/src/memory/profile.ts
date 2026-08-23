@@ -77,10 +77,11 @@ export interface ProfileStore {
   read(agentId: string): Promise<{ profile: string; updatedAt: Date | null } | null>;
   save(agentId: string, profile: string, at: Date): Promise<void>;
   /**
-   * Agents whose memory has moved on since their profile was written.
+   * Agents whose memory has moved on since it was last considered, and who
+   * have been quiet long enough that a rewrite will not land mid-conversation.
    *
    * Batched, because a query returning every agent works right up until it
    * very suddenly does not.
    */
-  stale(limit: number): Promise<{ agentId: string; userId: string }[]>;
+  stale(limit: number, quietForMs: number): Promise<{ agentId: string; userId: string }[]>;
 }
