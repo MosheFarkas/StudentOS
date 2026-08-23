@@ -337,9 +337,15 @@ function shortlistFor(
    * one hop out is free and is exactly the general thing the writing rules ask
    * to be linked alongside the specific one.
    */
+  const known = new Set(entities);
   const withNeighbours = new Set(direct);
   for (const name of direct) {
-    for (const neighbour of neighbours.get(name) ?? []) withNeighbours.add(neighbour);
+    for (const neighbour of neighbours.get(name) ?? []) {
+      // Only notes that exist. A wikilink can point at something that was
+      // never written, and offering it asks the model to choose a target that
+      // is then silently discarded.
+      if (known.has(neighbour)) withNeighbours.add(neighbour);
+    }
   }
 
   return [...withNeighbours].slice(0, 30);
