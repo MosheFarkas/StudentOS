@@ -42,6 +42,15 @@ export interface RecordMemoryInput {
 export interface MemoryStore {
   record(input: RecordMemoryInput): Promise<EpisodicMemory>;
   recall(agentId: string, options?: RecallOptions): Promise<RecalledMemory>;
+  /**
+   * Everything the agent knows, reachable on demand.
+   *
+   * `recall` is a small recency window, because it is paid for on every turn.
+   * This is the other half: the agent asks for what it needs, when it needs
+   * it, and the rest of its history costs nothing until then. Without this,
+   * bounding the window would simply amputate the agent's memory.
+   */
+  search(agentId: string, query: string, limit?: number): Promise<EpisodicMemory[]>;
   /** Episodic entries not yet covered by a summary. Used by the rollup job. */
   unsummarized(agentId: string, before: Date): Promise<EpisodicMemory[]>;
   saveSummary(input: Omit<MemorySummary, 'id' | 'createdAt'>): Promise<MemorySummary>;

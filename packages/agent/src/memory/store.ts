@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, lt, notInArray, sql } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
 import { agentMemories, agentMemorySummaries } from '@contexto/db';
 import type {
@@ -10,7 +10,20 @@ import type {
   RecordMemoryInput,
 } from './types.js';
 
-const DEFAULT_RECALL_LIMIT = 20;
+/*
+ * How many past exchanges ride along on every turn.
+ *
+ * This is the whole of the agent's conversational continuity -- a turn sends
+ * the system prompt and one message, never a transcript -- so it cannot go to
+ * zero. It is also the only part of the prompt that is not cached, now that
+ * everything static has been moved out of the way, which makes it the entire
+ * per-turn variable cost.
+ *
+ * Twenty measured at about 1,700 tokens on every turn. Eight covers a session's
+ * worth of back-and-forth for roughly 600, and anything older is reachable
+ * through memory_search rather than lost.
+ */
+const DEFAULT_RECALL_LIMIT = 8;
 const DEFAULT_SUMMARY_LIMIT = 5;
 
 /**
@@ -42,6 +55,30 @@ export class PostgresMemoryStore implements MemoryStore {
 
     if (!row) throw new Error('Failed to record memory');
     return toEpisodic(row);
+  }
+
+  /**
+   * Substring match over an agent's own entries, newest first.
+   *
+   * ILIKE rather than full-text search, deliberately. Postgres text search
+   * would need a tsvector column, an index, and a migration; at the volume one
+   * student's agent accumulates this scans a few hundred rows on an indexed
+   * agent_id and returns in single-digit milliseconds. When that stops being
+   * true the signature does not change -- which is the point of it being here
+   * rather than inline in a tool.
+   */
+  async search(agentId: string, query: string, limit = 8): Promise<EpisodicMemory[]> {
+    const term = query.trim();
+    if (!term) return [];
+
+    const rows = await this.db
+      .select()
+      .from(agentMemories)
+      .where(and(eq(agentMemories.agentId, agentId), ilike(agentMemories.content, `%${term}%`)))
+      .orderBy(desc(agentMemories.occurredAt))
+      .limit(limit);
+
+    return rows.map(toEpisodic);
   }
 
   async recall(agentId: string, options: RecallOptions = {}): Promise<RecalledMemory> {

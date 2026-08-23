@@ -112,6 +112,7 @@ export async function runAgentTurn(
     userId: input.userId,
     agentId: input.agentId,
     signal: input.signal,
+    memory,
     ...(input.google ? { google: input.google } : {}),
     ...(input.transcriber ? { transcriber: input.transcriber } : {}),
     ...(input.youtube ? { youtube: input.youtube } : {}),

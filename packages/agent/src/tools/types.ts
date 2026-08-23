@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { MemoryStore } from '../memory/types.js';
 import type { ScopeGroup } from './google/scopes.js';
 import type { AudioTranscriber } from './transcribe.js';
 import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './web/youtube.js';
@@ -32,6 +33,14 @@ export interface Tool<TInput = unknown, TOutput = unknown> {
 export interface ToolContext {
   userId: string;
   agentId: string;
+  /**
+   * The agent's own history, for looking past the recency window.
+   *
+   * Optional so a deployment without a store still builds; memory_search
+   * reports its absence rather than returning nothing found, which would be
+   * indistinguishable from a genuine miss.
+   */
+  memory?: MemoryStore;
   /**
    * Present only for tools that need Google APIs, and only once the student has
    * granted the relevant scope group. Undefined means "not connected" -- a tool
