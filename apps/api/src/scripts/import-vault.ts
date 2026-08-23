@@ -105,10 +105,7 @@ async function main(): Promise<void> {
       } else {
         const found = await collectSchoolMail(toolContext, { domain });
         for (const reason of found.skipped) console.log(`  skipped ${reason}`);
-        console.log(
-          `Mail: ${found.messages.length} messages from ${domain}` +
-            (found.overCap > 0 ? ` (${found.overCap} more over the cap)` : ''),
-        );
+        console.log(`Mail: ${found.found} found at ${domain}, ${found.messages.length} fetched`);
 
         const entities = (await vault.list('entity')).map((note) => note.name);
         const mail = await importMail(

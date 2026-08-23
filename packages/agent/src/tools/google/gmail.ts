@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Tool } from '../types.js';
+import type { Tool, ToolContext, ToolUnavailable } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, isUnavailable } from './client.js';
 import { GMAIL_LABELS_SCOPE, GMAIL_MODIFY_SCOPE, GMAIL_READ_SCOPE } from './scopes.js';
@@ -203,6 +203,53 @@ export const searchMail: Tool<z.infer<typeof searchInput>, unknown> = {
 const readInput = z.object({
   messageId: z.string().min(1).describe('From gmail_search'),
 });
+
+/**
+ * Every message id matching a query, following the pages.
+ *
+ * The tool above caps at 25 on purpose: a conversation should never drag a
+ * mailbox into context. An import wants the opposite, and Gmail has always
+ * paged -- the response type simply never declared nextPageToken, so it was
+ * dropped and the cap looked like the API's rather than ours.
+ *
+ * Not a tool. Nothing the model can call should be able to enumerate an
+ * inbox; this exists for the vault importer, which runs deliberately and
+ * against a query the student's own domain already bounds.
+ */
+export async function listAllMessageIds(
+  ctx: ToolContext,
+  query: string,
+  max: number,
+): Promise<string[] | ToolUnavailable> {
+  const token = await ctx.google?.getAccessToken('gmail');
+  if (!token) return unavailable(NOT_CONNECTED);
+
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      q: query,
+      // Gmail allows 500 a page, so a year of school mail is a few requests
+      // rather than a few hundred.
+      maxResults: String(Math.min(500, max - ids.length)),
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const listed = await googleFetch<{
+      messages?: { id: string }[];
+      nextPageToken?: string;
+    }>(`${GMAIL}/messages?${params.toString()}`, token, {
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    if (isUnavailable(listed)) return listed;
+
+    for (const message of listed.messages ?? []) ids.push(message.id);
+    pageToken = listed.nextPageToken;
+  } while (pageToken && ids.length < max);
+
+  return ids;
+}
 
 export const readMail: Tool<z.infer<typeof readInput>, unknown> = {
   id: 'gmail_read_message',

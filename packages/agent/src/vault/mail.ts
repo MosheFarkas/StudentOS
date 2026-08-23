@@ -160,29 +160,27 @@ export async function importMail(
     return name;
   };
 
-  for (const message of messages) {
-    // Gmail ids are stable, so a second run is a lookup -- checked before the
-    // model call, because the point is not to pay twice for the same message.
-    if (already.has(message.messageId)) continue;
+  /*
+   * Extract concurrently, write in order.
+   *
+   * A complete year is hundreds of messages and one model call each, which is
+   * ten minutes sequentially. The writes stay serial because the vault has
+   * state -- name uniqueness, which people already exist -- and racing on it
+   * would produce exactly the duplicates the ids were meant to prevent.
+   */
+  const pending = messages.filter((message) => !already.has(message.messageId));
+  const extracted = await pooled(pending, EXTRACT_CONCURRENCY, async (message) => ({
+    message,
+    parsed: parseExtraction(
+      // No tools. Not an omission -- the containment argument rests on it.
+      (await llm.chat({ messages: chatFor(message, entities), tools: undefined }, { userId }))
+        .content,
+    ),
+  }));
 
+  for (const { message, parsed } of extracted) {
     const sender = parseSender(message.from);
-    const shortlist = shortlistFor(message, entities);
 
-    const chat: ChatMessage[] = [
-      { role: 'system', content: `${VAULT_WRITING.body}\n\n---\n\n${ASK}` },
-      {
-        role: 'user',
-        content:
-          `Names you may link to:\n${shortlist.join('\n') || '(none)'}\n\n` +
-          `From: ${message.from}\nSubject: ${message.subject}\nDate: ${message.date}\n\n` +
-          message.body.slice(0, 6000),
-      },
-    ];
-
-    // No tools. Not an omission -- the containment argument rests on it.
-    const response = await llm.chat({ messages: chat }, { userId });
-
-    const parsed = parseExtraction(response.content);
     if (!parsed) {
       result.skipped += 1;
       continue;
@@ -255,6 +253,41 @@ export async function importMail(
   }
 
   return result;
+}
+
+/** How many extractions run at once. Enough to be quick, few enough to be polite. */
+const EXTRACT_CONCURRENCY = 6;
+
+/** Run tasks with a small pool, preserving input order in the result. */
+async function pooled<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(size, items.length) }, async () => {
+      while (true) {
+        const index = next++;
+        const item = items[index];
+        if (item === undefined) return;
+        out[index] = await fn(item);
+      }
+    }),
+  );
+  return out;
+}
+
+/** The one prompt this pass sends, built per message. */
+function chatFor(message: SchoolMessage, entities: string[]): ChatMessage[] {
+  const shortlist = shortlistFor(message, entities);
+  return [
+    { role: 'system', content: `${VAULT_WRITING.body}\n\n---\n\n${ASK}` },
+    {
+      role: 'user',
+      content:
+        `Names you may link to:\n${shortlist.join('\n') || '(none)'}\n\n` +
+        `From: ${message.from}\nSubject: ${message.subject}\nDate: ${message.date}\n\n` +
+        message.body.slice(0, 6000),
+    },
+  ];
 }
 
 /**

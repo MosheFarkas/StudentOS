@@ -1,53 +1,45 @@
-import { isUnavailable } from './../tools/google/client.js';
-import { readMail, searchMail } from '../tools/google/gmail.js';
+import { isUnavailable } from '../tools/google/client.js';
+import { listAllMessageIds, readMail } from '../tools/google/gmail.js';
 import type { ToolContext } from '../tools/types.js';
 import type { SchoolMessage } from './mail.js';
 
 /**
- * Finding the school mail worth importing, and nothing else.
+ * Finding every school message, and reading only the ones worth reading.
  *
- * An inbox is thousands of messages and nearly all of them are irrelevant, so
- * the question is not how to read them all but how to not. Three bounds, all
- * cheap and none of them involving a model:
+ * The first version capped the import at forty messages because extraction
+ * costs a model call each, and separately relied on gmail_search, which
+ * returns twenty-five and does not page. Between them the vault got a slice of
+ * the year and no way to tell which slice -- the busy months were the ones
+ * being truncated, and those are the months with the schoolwork in them.
  *
- *   Sender or recipient at the school's own domain, which is derived from the
- *   student's own address rather than configured. Classroom does not hand over
- *   teacher emails -- listCourses returns an id and a name and nothing else --
- *   so the domain is the only shared identifier available.
+ * Coverage and cost are separate problems and are now solved separately.
+ * Listing pages through the whole query, so nothing is invisible.
  *
- *   Recent, in windows. gmail_search caps at 25 results with no page token, so
- *   coverage comes from several dated queries rather than one crawl.
- *
- *   Capped in total, because the next step spends a model call per message and
- *   an import that surprises somebody with a bill is worse than a thin vault.
+ * Fetching is complete too. Gmail's list returns bare ids, so a per-message
+ * request is unavoidable either way, and the expensive part of the import was
+ * never the fetch -- it is the model call that follows. That is what stays
+ * bounded, by concurrency and by the pass's own judgement of what is worth
+ * keeping, rather than by an arbitrary ceiling on how much of the year the
+ * student is allowed to have.
  */
 
-/** Roughly one academic year, in months of lookback. */
-const DEFAULT_MONTHS = 12;
-
-/** gmail_search returns at most this many per call, and does not paginate. */
-const PER_WINDOW = 25;
+/** Ceiling on ids listed. Not a sample -- a guard against a pathological inbox. */
+const MAX_IDS = 2000;
 
 export interface MailCollectionOptions {
   /** e.g. "wearelcc.ca". Everything else is somebody else's problem. */
   domain: string;
+  /** How far back to look, in months. */
   months?: number;
-  /** Hard ceiling on messages whose bodies get fetched. */
-  limit?: number;
+  /** Ceiling on ids listed, for an inbox far outside the ordinary. */
+  maxIds?: number;
 }
 
 export interface CollectedMail {
   messages: SchoolMessage[];
-  /** Messages seen in search but not fetched, because the cap was reached. */
-  overCap: number;
+  /** How many ids were listed, so a truncated fetch is visible. */
+  found: number;
   skipped: string[];
-}
-
-interface SearchHit {
-  messageId: string;
-  from: string;
-  subject: string;
-  date: string;
 }
 
 /** The student's own domain, which is the school's. */
@@ -66,61 +58,43 @@ export function domainOf(email: string): string | null {
   return domain === '' || personal.includes(domain) ? null : domain;
 }
 
+/** Every school message in the window. */
 export async function collectSchoolMail(
   ctx: ToolContext,
   options: MailCollectionOptions,
 ): Promise<CollectedMail> {
-  const months = options.months ?? DEFAULT_MONTHS;
-  const limit = options.limit ?? 40;
   const skipped: string[] = [];
+  const query = `(from:${options.domain} OR to:${options.domain}) newer_than:${options.months ?? 12}m`;
 
-  // Newest window first, so a cap that bites drops the oldest mail rather than
-  // the mail that still matters.
-  const hits = new Map<string, SearchHit>();
-  for (let month = 0; month < months; month += 1) {
-    const query =
-      `(from:${options.domain} OR to:${options.domain}) ` +
-      `newer_than:${month + 1}m older_than:${month}m`;
-
-    let result: unknown;
-    try {
-      result = await searchMail.execute({ query, limit: PER_WINDOW } as never, ctx);
-    } catch (error) {
-      skipped.push(`search month -${month}: ${(error as Error).message}`);
-      continue;
-    }
-    if (isUnavailable(result)) {
-      skipped.push('gmail: not available (scope not granted, or not connected)');
-      break;
-    }
-
-    for (const hit of (result as { messages?: SearchHit[] }).messages ?? []) {
-      if (!hits.has(hit.messageId)) hits.set(hit.messageId, hit);
-    }
+  const ids = await listAllMessageIds(ctx, query, options.maxIds ?? MAX_IDS);
+  if (isUnavailable(ids)) {
+    return {
+      messages: [],
+      found: 0,
+      skipped: ['gmail: not available (scope not granted, or not connected)'],
+    };
   }
 
-  const wanted = [...hits.values()].slice(0, limit);
-
   const messages: SchoolMessage[] = [];
-  for (const hit of wanted) {
+  for (const messageId of ids) {
     let full: unknown;
     try {
-      full = await readMail.execute({ messageId: hit.messageId } as never, ctx);
+      full = await readMail.execute({ messageId } as never, ctx);
     } catch (error) {
-      skipped.push(`read ${hit.messageId}: ${(error as Error).message}`);
+      skipped.push(`read ${messageId}: ${(error as Error).message}`);
       continue;
     }
     if (isUnavailable(full)) continue;
 
-    const body = (full as { body?: string }).body ?? '';
+    const message = full as { from?: string; subject?: string; date?: string; body?: string };
     messages.push({
-      messageId: hit.messageId,
-      from: hit.from,
-      subject: hit.subject,
-      date: hit.date,
-      body,
+      messageId,
+      from: message.from ?? '',
+      subject: message.subject ?? '',
+      date: message.date ?? '',
+      body: message.body ?? '',
     });
   }
 
-  return { messages, overCap: Math.max(0, hits.size - wanted.length), skipped };
+  return { messages, found: ids.length, skipped };
 }
