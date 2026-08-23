@@ -90,6 +90,42 @@ describe('importing a snapshot', () => {
     expect(topic?.body).toContain('[[chemistry]]');
   });
 
+  it('links an assignment to its topic as well as its course', async () => {
+    /*
+     * The edge that makes the vault a graph rather than a star.
+     *
+     * Measured on a real account: 236 notes, twelve of which had any inbound
+     * link at all, because assignments pointed at courses and nothing pointed
+     * at anything else. Sixty-eight topic notes had none, which made them dead
+     * weight. Classroom returns topicId on coursework and the tool layer was
+     * dropping it.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        topics: [{ course: 'Chemistry', name: 'Organic', topicId: 't-1' }],
+        coursework: [
+          {
+            id: 'w-1',
+            course: 'Chemistry',
+            title: 'Titration writeup',
+            due: '2026-09-14',
+            topicId: 't-1',
+          },
+        ],
+      }),
+    );
+
+    const work = await vault.read('entity', 'titration-writeup');
+    expect(work?.body).toContain('[[chemistry]]');
+    expect(work?.body).toContain('[[organic]]');
+  });
+
+  it('still works for an assignment filed under no topic', async () => {
+    await importClassroom(vault, snapshot());
+    expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
+  });
+
   it('imports no prose written by a teacher', async () => {
     /*
      * Stage one deliberately maps structure and nothing else. Descriptions and

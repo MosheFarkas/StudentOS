@@ -102,6 +102,22 @@ export async function importClassroom(
     return note ? `Part of [[${note}]].` : `Part of ${courseName}.`;
   };
 
+  // --- Topics first: coursework links to them, so they must exist to link to. ---
+  const topicNote = new Map<string, string>();
+  for (const topic of snapshot.topics) {
+    const name = nameFor(topic.topicId, topic.name);
+    topicNote.set(topic.topicId, name);
+
+    await save({
+      name,
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Topic',
+      externalId: topic.topicId,
+      body: `${topic.name}.\n\n${linkToCourse(topic.course)}`,
+    });
+  }
+
   // --- Coursework, with whatever is known about submitting it. ---
   const submissionFor = new Map(snapshot.submissions.map((s) => [s.courseWorkId, s]));
 
@@ -110,6 +126,11 @@ export async function importClassroom(
     const previous = byExternalId.get(work.id);
 
     const lines = [`${work.title}.`, '', linkToCourse(work.course)];
+
+    // The unit it belongs to, when the teacher filed it under one. Without
+    // this every topic note has no inbound link and is dead weight.
+    const topic = work.topicId ? topicNote.get(work.topicId) : undefined;
+    if (topic) lines.push(`Part of [[${topic}]].`);
     if (work.due) lines.push(`Due: ${work.due}`);
 
     /*
@@ -153,18 +174,6 @@ export async function importClassroom(
       description: 'Assignment',
       externalId: work.id,
       body: lines.join('\n'),
-    });
-  }
-
-  // --- Topics: what a course is made of. ---
-  for (const topic of snapshot.topics) {
-    await save({
-      name: nameFor(topic.topicId, topic.name),
-      kind: 'entity',
-      source: 'classroom',
-      description: 'Topic',
-      externalId: topic.topicId,
-      body: `${topic.name}.\n\n${linkToCourse(topic.course)}`,
     });
   }
 

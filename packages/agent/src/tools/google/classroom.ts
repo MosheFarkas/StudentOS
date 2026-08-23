@@ -83,6 +83,7 @@ interface CourseWorkList {
     dueDate?: { year: number; month: number; day: number };
     dueTime?: { hours?: number; minutes?: number };
     alternateLink?: string;
+    topicId?: string;
   }[];
 }
 
@@ -90,6 +91,15 @@ export interface Assignment {
   id: string;
   course: string;
   title: string;
+  /**
+   * Which unit of the course this belongs to, when the teacher filed it.
+   *
+   * Classroom returns it and this was dropping it. It is the only edge in the
+   * imported data that does not point at a course, and without it ContextoVault
+   * is a star -- every assignment pointing at its course and nothing pointing
+   * at anything else.
+   */
+  topicId?: string;
   due: string | null;
   link?: string;
 }
@@ -148,6 +158,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
           course: course.name ?? 'Unknown course',
           title: item.title ?? '(untitled)',
           due: formatDue(item.dueDate, item.dueTime),
+          ...(item.topicId ? { topicId: item.topicId } : {}),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
         });
       }
