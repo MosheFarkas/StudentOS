@@ -40,10 +40,6 @@ async function main(): Promise<void> {
   }
 
   const owned = await ctx.db.select().from(agents).where(eq(agents.userId, owner.id));
-  if (owned.length === 0) {
-    console.error(`${email} has no agents`);
-    process.exit(1);
-  }
 
   const grant = await getGoogleGrant(ctx.db, owner.id);
   if (!grant.scope) {
@@ -54,25 +50,38 @@ async function main(): Promise<void> {
 
   const root = process.env.VAULT_ROOT ?? '/srv/contexto/vaults';
 
+  /*
+   * Collected once, per account rather than per agent.
+   *
+   * The Google connection belongs to the person, not to an agent, so a school
+   * account with the Classroom data and no agent on it is a perfectly ordinary
+   * state -- and worth being able to look at, which is why collection happens
+   * whether or not there is anywhere to write the result.
+   */
+  const toolContext: ToolContext = {
+    userId: owner.id,
+    agentId: owned[0]?.id ?? 'inspection-only',
+    google: new BetterAuthGoogleTokenProvider(ctx.auth, owner.id, grant.groups, grant.scope),
+  };
+
+  const { snapshot, skipped } = await collectClassroomSnapshot(toolContext);
+  console.log(
+    `Classroom: ${snapshot.courses.length} courses, ${snapshot.coursework.length} assignments, ` +
+      `${snapshot.topics.length} topics, ${snapshot.submissions.length} submissions`,
+  );
+  for (const reason of skipped) console.log(`  skipped ${reason}`);
+  for (const course of snapshot.courses) console.log(`  course: ${course.name}`);
+
+  if (owned.length === 0) {
+    console.log('\nNo agents on this account, so nothing was written.');
+    process.exit(0);
+  }
+
   for (const agent of owned) {
-    console.log(`--- ${agent.name} (${agent.id}) ---`);
-
-    const toolContext: ToolContext = {
-      userId: owner.id,
-      agentId: agent.id,
-      google: new BetterAuthGoogleTokenProvider(ctx.auth, owner.id, grant.groups, grant.scope),
-    };
-
-    const { snapshot, skipped } = await collectClassroomSnapshot(toolContext);
-    console.log(
-      `Classroom: ${snapshot.courses.length} courses, ${snapshot.coursework.length} assignments, ` +
-        `${snapshot.topics.length} topics, ${snapshot.submissions.length} submissions`,
-    );
-    for (const reason of skipped) console.log(`  skipped ${reason}`);
-
     const result = await importClassroom(new Vault(root, agent.id), snapshot);
+    console.log(`\n--- ${agent.name} (${agent.id}) ---`);
     console.log(`Vault: ${result.written} notes written, ${result.updated} updated`);
-    console.log(`       ${root}/${agent.id}\n`);
+    console.log(`       ${root}/${agent.id}`);
   }
 
   process.exit(0);
