@@ -21,13 +21,11 @@ export {
 } from './memory/profile.js';
 export { PostgresProfileStore } from './memory/profile-store.js';
 
+export { UNTRUSTED_RULE, untrustedNote } from './untrusted.js';
 export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/vault.js';
+export { renderNotes } from './vault/render.js';
 export { slugForNote } from './vault/slug.js';
-export {
-  importClassroom,
-  type ClassroomSnapshot,
-  type ImportResult,
-} from './vault/classroom.js';
+export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';
