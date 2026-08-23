@@ -9,7 +9,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "eval": "tsx src/evals/run.ts",
-    "eval:cache": "tsx src/evals/cache.ts"
+    "eval:cache": "tsx src/evals/cache.ts",
+    "eval:memory": "tsx src/evals/memory.ts"
   },
   "dependencies": {
     "@contexto/db": "workspace:*",

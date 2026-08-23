@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, ilike, lt, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, lt, notInArray, or, sql } from 'drizzle-orm';
+import { queryTerms, rankByTermMatches } from './search.js';
 import type { Database } from '@contexto/db';
 import { agentMemories, agentMemorySummaries } from '@contexto/db';
 import type {
@@ -68,17 +69,31 @@ export class PostgresMemoryStore implements MemoryStore {
    * rather than inline in a tool.
    */
   async search(agentId: string, query: string, limit = 8): Promise<EpisodicMemory[]> {
-    const term = query.trim();
-    if (!term) return [];
+    const terms = queryTerms(query);
+    if (terms.length === 0) return [];
 
+    /*
+     * Any term, not all of them, and the ranking happens after.
+     *
+     * SQL narrows to plausible rows; rankByTermMatches decides the order,
+     * shared with the eval's store so the two cannot disagree. Ranking in SQL
+     * would mean rebuilding the same scoring in a second language for no gain
+     * at the number of rows one student produces.
+     */
     const rows = await this.db
       .select()
       .from(agentMemories)
-      .where(and(eq(agentMemories.agentId, agentId), ilike(agentMemories.content, `%${term}%`)))
+      .where(
+        and(
+          eq(agentMemories.agentId, agentId),
+          or(...terms.map((term) => ilike(agentMemories.content, `%${term}%`))),
+        ),
+      )
       .orderBy(desc(agentMemories.occurredAt))
-      .limit(limit);
+      // Over-fetch: SQL cannot tell which of these match the most terms.
+      .limit(limit * 5);
 
-    return rows.map(toEpisodic);
+    return rankByTermMatches(rows.map(toEpisodic), terms).slice(0, limit);
   }
 
   async recall(agentId: string, options: RecallOptions = {}): Promise<RecalledMemory> {
