@@ -91,10 +91,30 @@ export async function importMail(
   { llm }: MailImportDeps,
   { vault, messages, entities, userId }: MailImportOptions,
 ): Promise<MailImportResult> {
-  const already = new Set(
-    (await vault.list('episode')).map((note) => note.externalId).filter(Boolean),
-  );
+  const existing = await vault.list('episode');
+  const already = new Set(existing.map((note) => note.externalId).filter(Boolean));
   const allowed = new Set(entities);
+
+  /*
+   * Episode names have to be unique, and their ingredients are not.
+   *
+   * A name is the day plus the subject, and Classroom notifications reuse both
+   * -- so two records of different things silently became one file. Found on a
+   * real inbox as twenty written and eighteen on disk, where the count was the
+   * only trace. An episode is a record of something that happened; losing one
+   * loses the thing.
+   */
+  const takenNames = new Set(existing.map((note) => note.name));
+  const uniqueName = (base: string): string => {
+    if (!takenNames.has(base)) {
+      takenNames.add(base);
+      return base;
+    }
+    let suffix = 2;
+    while (takenNames.has(`${base}-${suffix}`)) suffix += 1;
+    takenNames.add(`${base}-${suffix}`);
+    return `${base}-${suffix}`;
+  };
   const result: MailImportResult = { written: 0, skipped: 0 };
 
   for (const message of messages) {
@@ -129,7 +149,7 @@ export async function importMail(
     const day = isoDay(message.date);
 
     await vault.write({
-      name: slugForNote(`${day} ${message.subject}`),
+      name: uniqueName(slugForNote(`${day} ${message.subject}`)),
       kind: 'episode',
       source: 'gmail',
       description: `Email from ${message.from}`.slice(0, 120),

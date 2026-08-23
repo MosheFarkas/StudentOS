@@ -111,6 +111,25 @@ describe('importing school mail', () => {
     expect(request?.tools).toBeUndefined();
   });
 
+  it('keeps two messages that share a subject on the same day', async () => {
+    /*
+     * Found on a real inbox: twenty episodes written, eighteen files on disk.
+     * An episode is named for its day and subject, and Classroom notifications
+     * reuse both -- so two records of different things quietly became one, and
+     * the count was the only trace. Episodes are meant to be immutable; losing
+     * one is losing what happened.
+     */
+    const result = await run(llmReturning(kept()), [
+      message({ messageId: 'm-1' }),
+      message({ messageId: 'm-2' }),
+    ]);
+
+    expect(result.written).toBe(2);
+    const episodes = await vault.list('episode');
+    expect(episodes).toHaveLength(2);
+    expect(new Set(episodes.map((e) => e.externalId)).size).toBe(2);
+  });
+
   it('writes nothing when the pass returns something unparseable', async () => {
     // A refusal, a truncation, or a model talked into replying in prose all
     // arrive the same way. None of them is a note.
