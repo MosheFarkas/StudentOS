@@ -26,6 +26,7 @@ export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/v
 export { renderNotes } from './vault/render.js';
 export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
+export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';

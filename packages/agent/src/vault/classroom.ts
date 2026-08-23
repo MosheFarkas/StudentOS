@@ -131,7 +131,13 @@ export async function importClassroom(
 
     const submission = submissionFor.get(work.id);
     if (submission) {
-      const state = submission.state === 'TURNED_IN' ? 'Turned in' : submission.state;
+      /*
+       * The tool has already turned Classroom's enum into words -- "turned in",
+       * "not turned in", "graded and returned" -- so this capitalises whatever
+       * arrives rather than matching one value. Matching TURNED_IN looked right
+       * and would have silently taken the fallback path on every real account.
+       */
+      const state = submission.state.charAt(0).toUpperCase() + submission.state.slice(1);
       const late = submission.late ? ', late' : '';
       const grade =
         submission.grade === null

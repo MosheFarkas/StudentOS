@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "import-vault": "tsx src/scripts/import-vault.ts"
   },
   "dependencies": {
     "@contexto/agent": "workspace:*",

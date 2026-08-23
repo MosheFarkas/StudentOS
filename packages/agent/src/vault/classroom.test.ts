@@ -59,7 +59,9 @@ describe('importing a snapshot', () => {
           {
             course: 'Chemistry',
             assignment: 'Titration writeup',
-            state: 'TURNED_IN',
+            // What the tool actually returns -- SUBMISSION_STATES maps the raw
+            // Classroom enum to words before this ever reaches the vault.
+            state: 'turned in',
             late: true,
             grade: 18,
             maxPoints: 20,
@@ -74,6 +76,7 @@ describe('importing a snapshot', () => {
     const work = await vault.read('entity', 'titration-writeup');
     expect(work?.body).toContain('18');
     expect(work?.body.toLowerCase()).toContain('late');
+    expect(work?.body).toContain('Turned in');
   });
 
   it('makes a note per topic, linked to its course', async () => {
