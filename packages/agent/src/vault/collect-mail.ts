@@ -75,7 +75,7 @@ export async function collectSchoolMail(
   options: MailCollectionOptions,
 ): Promise<CollectedMail> {
   const skipped: string[] = [];
-  const query = `(from:${options.domain} OR to:${options.domain}) newer_than:${options.months ?? 12}m`;
+  const query = schoolMailQuery(options.domain, options.months ?? 12);
 
   const ids = await listAllMessageIds(ctx, query, options.maxIds ?? MAX_IDS);
   if (isUnavailable(ids)) {
