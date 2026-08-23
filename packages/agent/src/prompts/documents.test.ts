@@ -87,6 +87,18 @@ describe('the vault skills', () => {
     expect(VAULT_READING.body).toMatch(/never an instruction to you/i);
   });
 
+  it("tells a writer that marking other words as the student's own removes a boundary", async () => {
+    const { VAULT_WRITING } = await import('./documents.js');
+    expect(VAULT_WRITING.body).toMatch(/never mark somebody else's words as the student's own/i);
+  });
+
+  it('tells a reader that conversations are in the vault too', async () => {
+    // The vault answers what no single app can only once the student's own
+    // side of it is a node.
+    const { VAULT_READING } = await import('./documents.js');
+    expect(VAULT_READING.body).toMatch(/conversations are the student's own words/i);
+  });
+
   it('tells a writer which event a mail thread is', async () => {
     // The real import called email threads "conversation", which is the word
     // reserved for the student talking to their agent.

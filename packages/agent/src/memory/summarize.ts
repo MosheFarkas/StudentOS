@@ -28,6 +28,23 @@ export interface ProfileWriterDeps {
   profiles: ProfileStore;
 }
 
+export interface ProfileWriterResult {
+  changed: boolean;
+  /**
+   * The exchanges this pass considered, oldest first.
+   *
+   * Handed back so the conversation importer can write the same burst into the
+   * vault without reading it again or duplicating the watermark logic. A
+   * conversation is not a row anywhere -- it is exactly this: what was said
+   * between one quiet period and the next.
+   */
+  exchanges: string[];
+  /** Newest entry considered. Stable id for the burst, so a rerun is a lookup. */
+  newestId?: string;
+  /** When the last of it happened. */
+  occurred?: string;
+}
+
 export interface ProfileWriterOptions {
   agentId: string;
   /** The agent's owner. Inference is billed to them, not to a shared key. */
@@ -46,7 +63,7 @@ export interface ProfileWriterOptions {
 export async function updateStudentProfile(
   { llm, memory, profiles }: ProfileWriterDeps,
   options: ProfileWriterOptions,
-): Promise<{ changed: boolean }> {
+): Promise<ProfileWriterResult> {
   const now = options.now ?? new Date();
   const existing = await profiles.read(options.agentId);
   const current = existing?.profile ?? '';
@@ -55,7 +72,13 @@ export async function updateStudentProfile(
   const { recent } = await memory.recall(options.agentId, { limit: MAX_EXCHANGES_PER_PASS });
   const fresh = since ? recent.filter((entry) => entry.occurredAt > since) : recent;
 
-  if (fresh.length === 0) return { changed: false };
+  if (fresh.length === 0) return { changed: false, exchanges: [] };
+
+  const newest = fresh[fresh.length - 1];
+  const considered = {
+    exchanges: fresh.map((entry) => entry.content),
+    ...(newest ? { newestId: newest.id, occurred: newest.occurredAt.toISOString() } : {}),
+  };
 
   const exchanges = fresh.map((entry) => entry.content).join('\n\n');
 
@@ -117,5 +140,5 @@ export async function updateStudentProfile(
    * two agents in exactly that state within an hour of this shipping.
    */
   await profiles.save(options.agentId, keep ? capProfile(current) : written, now);
-  return { changed: !keep };
+  return { changed: !keep, ...considered };
 }

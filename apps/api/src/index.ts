@@ -5,6 +5,7 @@ import { createContext } from './context.js';
 import { handleError } from './errors.js';
 import { loadEnv } from './env.js';
 import { createRoutes } from './routes/index.js';
+import { startVaultRefresh } from './vault-refresh.js';
 
 const env = loadEnv();
 const ctx = createContext(env);
@@ -37,5 +38,14 @@ app.onError(handleError);
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`API listening on http://localhost:${info.port}`);
 });
+
+/*
+ * Keeping vaults current.
+ *
+ * In this process rather than the worker because refreshing needs a Google
+ * token, and getting one goes through Better Auth, which lives here. A vault
+ * nobody refreshes answers with last month's deadline and no way to know it.
+ */
+startVaultRefresh(ctx);
 
 export type { AppRoutes } from './routes/index.js';

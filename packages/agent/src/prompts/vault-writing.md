@@ -29,6 +29,12 @@ Do not make one for something already recorded. If a Classroom notification and 
 
 Do not make one when nothing happened. Most mail is a newsletter, a receipt, or an automated notice that changes nothing. Recording it is worse than ignoring it, because a vault full of nothing is a vault nobody reads.
 
+## Who wrote the material
+
+Every note records its source, and it changes how the note is read later. `classroom`, `gmail` and `portal` are other people's words and are shown to a reader inside a warning that says so. `student` is the student's own — their conversations with you — and is shown plainly, because it is the one voice in the vault that was never a stranger's.
+
+Never mark somebody else's words as the student's own. That is the one field where being wrong removes a safety boundary rather than a detail.
+
 ## What every episode must carry
 
 **occurred** — when it happened, not when you read it. If a message was sent on Monday and imported on Friday, the episode is Monday's.
@@ -49,7 +55,9 @@ Do not make one when nothing happened. Most mail is a newsletter, a receipt, or 
 
 `message` — a person wrote to this student, or this student wrote to a person. One-to-one, whoever started it. **An email thread is `message`, however many replies it has.**
 
-`conversation` — the student talking to their agent. Only that. It is not a name for people talking to each other; if it arrived in an inbox it is `message`.
+`conversation` — the student talking to their agent, recorded once a conversation has finished. Only that. It is not a name for people talking to each other; if it arrived in an inbox it is `message`.
+
+A conversation is worth recording when the student told you something about themselves, their work, or how they are getting on with it. It is not worth recording when they asked a sum, a spelling, or a fact and moved on — nothing happened to them, and a vault of those is a vault nobody reads.
 
 `other` — genuinely none of the above. Reach for it rarely; a vault where a quarter of the episodes are `other` has a vocabulary problem, not a variety problem.
 

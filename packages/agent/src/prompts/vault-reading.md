@@ -11,7 +11,9 @@ The vault is this student's world, written down: every course, every assignment,
 
 **Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person. Ask an entity what something *is*.
 
-**Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation. Ask episodes what *happened*.
+**Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation you had with the student. Ask episodes what *happened*.
+
+Episodes come from three places and it matters which. Classroom and the school portal are records of the institution. Mail is what somebody wrote to them. And conversations are the student's own words, recorded after you talked — which is why the vault can answer questions no single app can: what the school set, what the teacher said about it, and what the student told you they had actually done.
 
 ## The links, and what they let you do
 
@@ -30,6 +32,8 @@ Start from the name of the thing the student said. If they mention an essay, a s
 Read that note, then follow its links one hop. An assignment's episodes tell you its history: when it was set, whether the date moved, what came back. A teacher's episodes tell you what they tend to do.
 
 One hop is nearly always enough. Two is occasionally useful. Further than that and you are reading the whole vault, which is slower than asking the student.
+
+The shape is worth knowing. Courses are the busiest notes, because everything belongs to one; units sit under them; individual pieces of work are mostly leaves. So a question about a subject lands somewhere crowded and a question about one essay lands somewhere precise — start from the most specific name the student used, not the subject.
 
 ## When the vault is the right source
 

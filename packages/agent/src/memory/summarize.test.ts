@@ -60,6 +60,42 @@ const llmReturning = (content: string) => ({
 const run = (deps: { llm: unknown; memory: MemoryStore; profiles: ProfileStore }) =>
   updateStudentProfile(deps as never, { agentId: 'a1', userId: 'u1' });
 
+describe('handing the conversation on', () => {
+  it('returns the exchanges it considered, so they are not read twice', async () => {
+    /*
+     * A conversation is not a row anywhere. It is exactly the burst of
+     * exchanges between one quiet period and the next -- which this pass has
+     * already worked out from the watermark. Returning it lets the vault
+     * record the same burst without a second read or a second copy of the
+     * watermark logic.
+     */
+    const { store } = profileStore('', null);
+    const result = await run({
+      llm: llmReturning('Takes chemistry.'),
+      memory: memoryWith([
+        { content: 'Student: a\nAgent: b', hoursAgo: 2 },
+        { content: 'Student: c\nAgent: d', hoursAgo: 1 },
+      ]),
+      profiles: store,
+    });
+
+    expect(result.exchanges).toEqual(['Student: a\nAgent: b', 'Student: c\nAgent: d']);
+    expect(result.newestId).toBeDefined();
+    expect(result.occurred).toBeDefined();
+  });
+
+  it('returns nothing to record when there were no new exchanges', async () => {
+    const { store } = profileStore('Takes chemistry.', at(1));
+    const result = await run({
+      llm: llmReturning('anything'),
+      memory: memoryWith([{ content: 'Student: old\nAgent: b', hoursAgo: 48 }]),
+      profiles: store,
+    });
+
+    expect(result.exchanges).toEqual([]);
+  });
+});
+
 describe('updating the profile', () => {
   it('writes what the model returns', async () => {
     const { store, saved } = profileStore('', null);

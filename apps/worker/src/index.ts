@@ -15,7 +15,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDatabase } from '@contexto/db';
 import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from '@contexto/llm';
-import { PostgresMemoryStore, PostgresProfileStore, updateStudentProfile } from '@contexto/agent';
+import {
+  PostgresMemoryStore,
+  PostgresProfileStore,
+  Vault,
+  importConversation,
+  updateStudentProfile,
+} from '@contexto/agent';
 
 /**
  * Everything the jobs share, built once.
@@ -54,6 +60,9 @@ function buildContext() {
 
   return {
     db,
+    // Absent when the deployment has no vaults, in which case conversations
+    // simply are not recorded there and nothing else changes.
+    vaultRoot: process.env.VAULT_ROOT,
     memory: new PostgresMemoryStore(db),
     profiles: new PostgresProfileStore(db),
     llm: new LlmRegistry({
@@ -111,6 +120,7 @@ const jobs: Job[] = [
       if (stale.length === 0) return;
 
       let changed = 0;
+      let recorded = 0;
       for (const { agentId, userId } of stale) {
         try {
           /*
@@ -127,6 +137,36 @@ const jobs: Job[] = [
             { agentId, userId },
           );
           if (result.changed) changed += 1;
+
+          /*
+           * The same burst, written into the vault as an episode.
+           *
+           * A conversation is not a row anywhere -- it is the exchanges
+           * between one quiet period and the next, which the profile pass has
+           * already worked out. Recording it here puts the student's own words
+           * on the same timeline as their school, which is the only reason the
+           * vault holds more than one source.
+           *
+           * Only for a vault that already exists: an agent whose student has
+           * imported nothing gets a profile and no episodes, rather than a
+           * vault containing conversations and no school.
+           */
+          if (ctx.vaultRoot && result.exchanges.length > 0 && result.newestId) {
+            const vault = new Vault(ctx.vaultRoot, agentId);
+            if (await vault.has()) {
+              const written = await importConversation(
+                { llm },
+                {
+                  vault,
+                  exchanges: result.exchanges,
+                  conversationId: result.newestId,
+                  occurred: result.occurred ?? new Date().toISOString(),
+                  userId,
+                },
+              );
+              recorded += written.written;
+            }
+          }
         } catch (error) {
           // One student's expired key must not stop every other student's
           // memory from being written.
@@ -134,7 +174,10 @@ const jobs: Job[] = [
         }
       }
 
-      console.log(`Profiles: ${stale.length} checked, ${changed} rewritten`);
+      console.log(
+        `Profiles: ${stale.length} checked, ${changed} rewritten, ` +
+          `${recorded} conversations recorded`,
+      );
     },
   },
 ];
