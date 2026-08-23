@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { agentMessages, agents } from '@contexto/db';
-import { createAgentSchema, sendMessageSchema, ContextoError } from '@contexto/shared';
+import {
+  createAgentSchema,
+  sendMessageSchema,
+  updateProfileSchema,
+  ContextoError,
+} from '@contexto/shared';
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
@@ -60,6 +65,30 @@ export function createAgentRoutes(ctx: AppContext) {
 
       .get('/:id', auth, async (c) => {
         const row = await ownedAgent(c.get('userId'), c.req.param('id'));
+        return c.json({ agent: toAgent(row) });
+      })
+
+      /*
+       * Correcting what the agent thinks it knows.
+       *
+       * Deliberately a full replace rather than an append: the student is
+       * editing a document, not filing a correction, and the writer will
+       * rewrite it from here anyway. Clearing it to empty is a first-class
+       * outcome -- "forget what you think you know about me" is the whole
+       * reason a person needs to see this at all.
+       *
+       * The watermark moves with it, so the next pass builds on what they
+       * wrote rather than re-deriving what they just deleted.
+       */
+      .patch('/:id/profile', auth, zValidator('json', updateProfileSchema), async (c) => {
+        await ownedAgent(c.get('userId'), c.req.param('id'));
+        const [row] = await ctx.db
+          .update(agents)
+          .set({ profile: c.req.valid('json').profile.trim(), profileUpdatedAt: new Date() })
+          .where(eq(agents.id, c.req.param('id')))
+          .returning();
+
+        if (!row) throw new ContextoError('internal_error', 'Failed to update the profile.');
         return c.json({ agent: toAgent(row) });
       })
 
@@ -139,6 +168,7 @@ function toAgent(row: typeof agents.$inferSelect): Agent {
     id: row.id,
     name: row.name,
     purpose: row.purpose,
+    profile: row.profile,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

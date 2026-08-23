@@ -115,7 +115,16 @@ beforeEach(async () => {
         activity: serverPending ? reported : undefined,
       };
     } else {
-      body = { agent: { id: 'a1', name: 'Tutor', purpose: 'help', createdAt: '', updatedAt: '' } };
+      body = {
+        agent: {
+          id: 'a1',
+          name: 'Tutor',
+          purpose: 'help',
+          profile: '',
+          createdAt: '',
+          updatedAt: '',
+        },
+      };
     }
     return new Response(JSON.stringify(body), {
       status: 200,

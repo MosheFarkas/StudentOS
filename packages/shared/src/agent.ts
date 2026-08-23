@@ -9,10 +9,29 @@ export const agentSchema = z.object({
    * labelled "system prompt".
    */
   purpose: z.string(),
+  /**
+   * What the agent has worked out about this student, in its own words.
+   *
+   * Written by the summarisation job, never by the student directly -- but
+   * shown to them and erasable by them, because a memory a person cannot read
+   * or correct is one they have no reason to trust.
+   */
+  profile: z.string(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
 export type Agent = z.infer<typeof agentSchema>;
+
+/**
+ * Editing what the agent remembers about you.
+ *
+ * Bounded to the same budget the writer works to, so a student cannot paste in
+ * something that would be silently trimmed the moment it is read back.
+ */
+export const updateProfileSchema = z.object({
+  profile: z.string().max(1400),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 export const createAgentSchema = z.object({
   name: z.string().min(1).max(80),

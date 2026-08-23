@@ -319,3 +319,84 @@ describe('a turn still running', () => {
     }
   });
 });
+
+/**
+ * Reading and correcting what the agent thinks it knows.
+ *
+ * The profile is written by a background job from a student's own
+ * conversations and then pinned in the system prompt, which means a wrong line
+ * in it is quietly wrong in every future conversation. Being able to see it
+ * and delete it is the difference between memory and surveillance.
+ */
+describe('the student profile', () => {
+  it('comes back with the agent, empty until the job has written one', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}`, as(alice.token));
+    const body = (await res.json()) as { agent: { profile: string } };
+
+    expect(body.agent.profile).toBe('');
+  });
+
+  it('can be corrected by the student it describes', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/profile`, {
+      method: 'PATCH',
+      headers: { ...as(alice.token).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'Takes chemistry. Revises by rewriting notes.' }),
+    });
+    const body = (await res.json()) as { agent: { profile: string } };
+
+    expect(res.status).toBe(200);
+    expect(body.agent.profile).toBe('Takes chemistry. Revises by rewriting notes.');
+  });
+
+  it('can be cleared entirely', async () => {
+    // "Forget what you think you know about me" is the whole point of showing
+    // it, so an empty string has to be a real answer rather than a validation
+    // error.
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/profile`, {
+      method: 'PATCH',
+      headers: { ...as(alice.token).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: '' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { agent: { profile: string } }).agent.profile).toBe('');
+  });
+
+  it('refuses more than the writer is allowed to keep', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/profile`, {
+      method: 'PATCH',
+      headers: { ...as(alice.token).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'x'.repeat(1401) }),
+    });
+
+    // Accepting it would mean silently trimming it on the next read, so the
+    // student would see something they did not write.
+    expect(res.status).toBe(400);
+  });
+
+  it("cannot be read or written through another student's agent", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/profile`, {
+      method: 'PATCH',
+      headers: { ...as(bob.token).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ profile: 'Bob was here.' }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+});
