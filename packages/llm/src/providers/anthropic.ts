@@ -126,9 +126,27 @@ export class AnthropicProvider implements LlmProvider {
   }
 }
 
-/** Anthropic takes the system prompt as a top-level field, not a message. */
-function splitSystem(messages: ChatMessage[]): {
-  system: string | undefined;
+/**
+ * Anthropic takes the system prompt as a top-level field, not a message.
+ *
+ * It comes back as a block array rather than a string so the last block can
+ * carry a cache breakpoint. Anthropic caches nothing without one -- unlike
+ * OpenAI, where prefix caching is automatic -- and the omission is invisible:
+ * the request succeeds, the answer is fine, and `cache_read_input_tokens`
+ * comes back as zero forever. Reading that as "this student's prompt does not
+ * cache well" rather than "we never asked" is the trap this closes.
+ *
+ * The breakpoint sits at the end of the system prompt because Anthropic orders
+ * the cacheable prefix tools, then system, then messages -- so one breakpoint
+ * here covers both the tool schemas and everything buildSystemPrompt
+ * assembled. Below the minimum cacheable length the breakpoint is ignored
+ * rather than rejected, so there is nothing to guard.
+ *
+ * Exported for tests: a breakpoint that silently stops being sent costs money
+ * without failing anything.
+ */
+export function splitSystem(messages: ChatMessage[]): {
+  system: Anthropic.TextBlockParam[] | undefined;
   messages: Anthropic.MessageParam[];
 } {
   const systemParts = messages.filter((m) => m.role === 'system').map((m) => m.content);
@@ -165,7 +183,16 @@ function splitSystem(messages: ChatMessage[]): {
     });
 
   return {
-    system: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+    system:
+      systemParts.length > 0
+        ? [
+            {
+              type: 'text',
+              text: systemParts.join('\n\n'),
+              cache_control: { type: 'ephemeral' },
+            },
+          ]
+        : undefined,
     messages: rest,
   };
 }

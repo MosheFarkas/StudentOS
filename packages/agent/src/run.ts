@@ -99,11 +99,13 @@ export async function runAgentTurn(
   ]);
 
   const messages: ChatMessage[] = [
+    // Static for the whole conversation, so it caches. Anything that changes
+    // between turns goes in the user message instead -- see buildTurnContext.
+    { role: 'system', content: buildSystemPrompt(input.purpose, availableSkills) },
     {
-      role: 'system',
-      content: buildSystemPrompt(input.purpose, recalled, availableSkills, input.timezone),
+      role: 'user',
+      content: buildUserMessage(buildTurnContext(recalled, input.timezone), input.message),
     },
-    { role: 'user', content: input.message },
   ];
 
   const toolContext: ToolContext = {
@@ -250,34 +252,26 @@ export const SIGN_IN_SECTION =
   'has no saved sign-in, say so plainly and tell them where to add it: the ContextoAgent app, ' +
   'Settings, Connections, Sites.';
 
-function buildSystemPrompt(
+/**
+ * Exported for the eval harness, which needs to assemble the real prompt with
+ * and without a given document to measure what that document is worth.
+ */
+export function buildSystemPrompt(
   purpose: string,
-  recalled: Awaited<ReturnType<MemoryStore['recall']>>,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
-  timezone: string | undefined,
 ): string {
-  const sections = [
+  /*
+   * Tier 1 -- universal. Byte-identical for every agent on the platform.
+   *
+   * This is the only run of text a provider can serve from cache across
+   * different students, so it goes first and nothing that varies is allowed
+   * above it. Adding a section here is close to free; adding one below is not.
+   */
+  const universal = [
     'You are a personal agent built by a student, for themselves. You belong to ' +
       'them, not to their school.',
-    /*
-     * How to talk to them.
-     *
-     * Second, and above the purpose, because it is the same for every agent on
-     * the platform: the longer the identical prefix, the more of it a provider
-     * can serve from cache. It also has to sit above the volatile sections for
-     * the same reason -- see the note on ordering above.
-     */
+    /* How to talk to them. Measured at 15% -> 100% clean replies; see src/evals. */
     RESPONDING.body,
-    `Your purpose, in their words: ${purpose}`,
-    /*
-     * Temporal grounding.
-     *
-     * A model has no clock and no location. Without this it cannot resolve
-     * "tomorrow", "this week", or "3pm" into the ISO timestamps the calendar
-     * tools require -- so it asks the student what timezone they are in, every
-     * time, which reads as the agent being broken.
-     */
-    currentTimeSection(timezone),
     /*
      * How signing in works here, because the honest default is wrong.
      *
@@ -292,12 +286,55 @@ function buildSystemPrompt(
     SIGN_IN_SECTION,
   ];
 
+  /*
+   * Tier 2 -- per agent. Stable for one student across a whole conversation.
+   */
+  const perAgent = [`Your purpose, in their words: ${purpose}`];
+
   if (skills.length > 0) {
-    sections.push(
+    perAgent.push(
       'Skills you have learned:\n' +
         skills.map((s) => `- ${s.name}: ${s.description}\n  ${s.instructions}`).join('\n'),
     );
   }
+
+  return [...universal, ...perAgent].join('\n\n');
+}
+
+/**
+ * Everything that changes between turns, kept out of the system prompt.
+ *
+ * This lives apart from buildSystemPrompt for one measured reason. On the
+ * Responses API the system prompt is cached as a whole blob keyed on its exact
+ * text, not as a prefix: appending six tokens to a 3,613-token prompt took
+ * `cached_tokens` from 3,610 to zero. The message list, by contrast, does
+ * prefix-match. So a clock that ticks every minute and a memory block that
+ * changes every turn do not merely strand the sections below them -- while
+ * they sit in the system prompt, nothing in it caches, ever.
+ *
+ * Moving them into the turn's own message makes the system prompt
+ * byte-identical from one turn to the next, which is the only condition under
+ * which any of it caches at all. See src/evals/cache.ts for the measurement,
+ * and the probe that established the blob behaviour.
+ *
+ * The block is labelled because it rides along with the student's message and
+ * must not be read as something the student typed.
+ */
+export function buildTurnContext(
+  recalled: Awaited<ReturnType<MemoryStore['recall']>>,
+  timezone: string | undefined,
+): string {
+  const sections = [
+    /*
+     * Temporal grounding.
+     *
+     * A model has no clock and no location. Without this it cannot resolve
+     * "tomorrow", "this week", or "3pm" into the ISO timestamps the calendar
+     * tools require -- so it asks the student what timezone they are in, every
+     * time, which reads as the agent being broken.
+     */
+    currentTimeSection(timezone),
+  ];
 
   if (recalled.summaries.length > 0) {
     sections.push(
@@ -313,6 +350,15 @@ function buildSystemPrompt(
   }
 
   return sections.join('\n\n');
+}
+
+/**
+ * The student's message, with this turn's context riding in front of it.
+ *
+ * Exported so the eval harness sends exactly what production sends.
+ */
+export function buildUserMessage(context: string, message: string): string {
+  return `<turn_context>\n${context}\n</turn_context>\n\n${message}`;
 }
 
 /**

@@ -365,7 +365,7 @@ describe('reporting activity', () => {
  */
 describe('the assembled system prompt', () => {
   /** Records the messages the turn sends, then replies. */
-  function capturing(seen: { role: string; content: string }[]) {
+  function capturing(seen: { role: string; content: string }[], recent: Recalled = []) {
     return {
       llm: {
         async chat({ messages }: { messages: { role: string; content: string }[] }) {
@@ -378,36 +378,84 @@ describe('the assembled system prompt', () => {
           };
         },
       },
-      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      memory: {
+        recall: async () => ({ summaries: [], recent }),
+        record: async () => ({}),
+      },
       skills: { list: async () => [] },
       tools: new ToolRegistry(),
     } as unknown as AgentRunDeps;
   }
 
-  async function systemPrompt(): Promise<string> {
+  type Recalled = { kind: string; content: string }[];
+
+  async function messagesFor(recent: Recalled): Promise<{ role: string; content: string }[]> {
     const seen: { role: string; content: string }[] = [];
-    await runAgentTurn(capturing(seen), {
+    await runAgentTurn(capturing(seen, recent), {
       userId: 'u1',
       agentId: 'a1',
       purpose: 'keep me on top of chemistry',
       message: 'go',
+      timezone: 'Europe/London',
     } as never);
-    return seen.find((m) => m.role === 'system')?.content ?? '';
+    return seen;
+  }
+
+  async function systemPrompt(recent: Recalled = []): Promise<string> {
+    return (await messagesFor(recent)).find((m) => m.role === 'system')?.content ?? '';
+  }
+
+  async function userMessage(recent: Recalled = []): Promise<string> {
+    return (await messagesFor(recent)).find((m) => m.role === 'user')?.content ?? '';
   }
 
   it('carries the responding document', async () => {
     expect(await systemPrompt()).toContain(RESPONDING.body);
   });
 
-  it('puts it above anything that varies between agents or turns', async () => {
-    // Providers cache on a prefix match, and this document is identical for
-    // every agent on the platform. Below the purpose it caches per agent;
-    // below the clock it stops caching at all.
+  /*
+   * The property the whole prompt layout exists to protect.
+   *
+   * On the Responses API the system prompt is cached as a whole blob keyed on
+   * its exact text -- appending six tokens to a 3,613-token prompt measured
+   * `cached_tokens` dropping from 3,610 to zero. So a system prompt containing
+   * a clock, or anything else that moves, does not cache partially. It does
+   * not cache at all, on any turn, forever.
+   *
+   * A comment asking future editors to keep volatile text out cannot fail.
+   * These can.
+   */
+  it('keeps the clock and the memory out of the system prompt', async () => {
     const prompt = await systemPrompt();
-    expect(prompt.indexOf(RESPONDING.body)).toBeLessThan(
-      prompt.indexOf('keep me on top of chemistry'),
-    );
-    expect(prompt.indexOf(RESPONDING.body)).toBeLessThan(prompt.indexOf('Their timezone is'));
+    expect(prompt).not.toContain('Right now it is');
+    expect(prompt).not.toContain('Recently:');
+  });
+
+  it('sends a byte-identical system prompt when only the memory has changed', async () => {
+    const first = await systemPrompt([{ kind: 'conversation', content: 'Student: a\nAgent: b' }]);
+    const second = await systemPrompt([
+      { kind: 'conversation', content: 'Student: a\nAgent: b' },
+      { kind: 'conversation', content: 'Student: c\nAgent: d' },
+    ]);
+    expect(second).toBe(first);
+  });
+
+  it('still gives the model the clock and the memory, in the turn instead', async () => {
+    // Moving them must not lose them: an agent that cannot resolve "tomorrow"
+    // is broken in a way no caching win would justify.
+    const user = await userMessage([{ kind: 'conversation', content: 'Student: a\nAgent: b' }]);
+    expect(user).toContain('Right now it is');
+    expect(user).toContain('Their timezone is');
+    expect(user).toContain('Recently:');
+    expect(user).toContain('Student: a');
+  });
+
+  it('marks the context off from what the student actually typed', async () => {
+    // It rides in the user message, so without a boundary the model reads the
+    // memory dump as something the student wrote.
+    const user = await userMessage([]);
+    expect(user).toMatch(/<turn_context>[\s\S]*<\/turn_context>/);
+    expect(user.indexOf('</turn_context>')).toBeLessThan(user.indexOf('go'));
   });
 
   it('does not still carry the instruction the document replaced', async () => {
