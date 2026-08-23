@@ -9,10 +9,17 @@
 export * from './memory/types.js';
 export { PostgresMemoryStore } from './memory/store.js';
 export {
-  summarizeAgentMemory,
-  type SummarizeOptions,
-  type SummarizerDeps,
+  updateStudentProfile,
+  type ProfileWriterOptions,
+  type ProfileWriterDeps,
 } from './memory/summarize.js';
+export {
+  PROFILE_CHAR_LIMIT,
+  capProfile,
+  profileSection,
+  type ProfileStore,
+} from './memory/profile.js';
+export { PostgresProfileStore } from './memory/profile-store.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';

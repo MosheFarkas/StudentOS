@@ -7,6 +7,8 @@ import { runAgentTurn } from '../run.js';
 import type { AgentRunDeps } from '../run.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { searchMemory } from '../tools/memory.js';
+import { updateStudentProfile } from '../memory/summarize.js';
+import type { ProfileStore } from '../memory/profile.js';
 import { queryTerms, rankByTermMatches } from '../memory/search.js';
 import type { EpisodicMemory, MemoryStore, RecallOptions } from '../memory/types.js';
 import { MEMORY_CASES } from './memory-cases.js';
@@ -82,6 +84,30 @@ function seededStore(history: string[], queries: { q: string; hits: number }[]):
   };
 }
 
+/**
+ * Write a profile from this case's history, with the real writer.
+ *
+ * Hand-writing the profile would measure a document we invented rather than
+ * the one the job produces, which is the only one that will ever exist.
+ */
+async function profileFor(apiKey: string, testCase: MemoryCase): Promise<string> {
+  const provider = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
+  let written = '';
+  const profiles: ProfileStore = {
+    read: async () => ({ profile: '', updatedAt: null }),
+    save: async (_agentId, profile) => {
+      written = profile;
+    },
+    stale: async () => [],
+  };
+
+  await updateStudentProfile(
+    { llm: provider, memory: seededStore(testCase.history, []), profiles },
+    { agentId: 'eval', userId: 'eval' },
+  );
+  return written;
+}
+
 interface Outcome {
   testCase: MemoryCase;
   reply: string;
@@ -91,7 +117,11 @@ interface Outcome {
   queries: { q: string; hits: number }[];
 }
 
-async function runCase(apiKey: string, testCase: MemoryCase): Promise<Outcome> {
+async function runCase(
+  apiKey: string,
+  testCase: MemoryCase,
+  profile?: string,
+): Promise<Outcome> {
   const provider = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
   const tools = new ToolRegistry();
   tools.register(searchMemory as never);
@@ -111,6 +141,7 @@ async function runCase(apiKey: string, testCase: MemoryCase): Promise<Outcome> {
     purpose: 'keep me on top of my a-levels and stop me missing deadlines',
     message: testCase.question,
     timezone: 'Europe/London',
+    ...(profile ? { profile } : {}),
     onActivity: (a: AgentActivity) => {
       if (a.kind === 'tool' && a.name) used.push(a.name);
     },
@@ -152,6 +183,17 @@ async function main(): Promise<void> {
 
   const results = await pooled(MEMORY_CASES, 4, (c) => runCase(apiKey, c));
 
+  // Second arm: the same cases, with a profile the writer produced from the
+  // same history. The question stage two has to answer is whether a bounded
+  // always-on document beats searching for everything.
+  console.log('writing profiles...');
+  const profiles = await pooled(MEMORY_CASES, 4, (c) => profileFor(apiKey, c));
+  const withProfile = await pooled(
+    MEMORY_CASES.map((c, i) => ({ c, profile: profiles[i] ?? '' })),
+    4,
+    ({ c, profile }) => runCase(apiKey, c, profile),
+  );
+
   const categories: MemoryCategory[] = [
     'continuity',
     'extraction',
@@ -161,30 +203,36 @@ async function main(): Promise<void> {
     'abstention',
   ];
 
-  console.log('CATEGORY         PASSED   SEARCHED');
+  const score = (rows: Outcome[], category: MemoryCategory) => {
+    const mine = rows.filter((r) => r.testCase.category === category);
+    return `${mine.filter((r) => r.passed).length}/${mine.length}`;
+  };
+
+  console.log('CATEGORY          SEARCH ONLY   + PROFILE');
   for (const category of categories) {
-    const mine = results.filter((r) => r.testCase.category === category);
-    if (mine.length === 0) continue;
-    const passed = mine.filter((r) => r.passed).length;
-    const searched = mine.filter((r) => r.searched).length;
+    if (!results.some((r) => r.testCase.category === category)) continue;
     console.log(
-      category.padEnd(16) +
-        `${passed}/${mine.length}`.padStart(6) +
-        `${searched}/${mine.length}`.padStart(11),
+      category.padEnd(17) +
+        score(results, category).padStart(11) +
+        score(withProfile, category).padStart(12),
     );
   }
 
-  const passed = results.filter((r) => r.passed).length;
-  const searched = results.filter((r) => r.searched).length;
+  const searchedWith = withProfile.filter((r) => r.searched).length;
   console.log(
-    `\nTOTAL            ${passed}/${results.length}` +
-      `      ${searched}/${results.length}   (${Math.round((passed / results.length) * 100)}% recall, ` +
-      `${Math.round((searched / results.length) * 100)}% reached for the tool)`,
+    `\nreached for memory_search: ${results.filter((r) => r.searched).length}/${results.length}` +
+      ` without a profile, ${searchedWith}/${withProfile.length} with one`,
   );
+  const avgProfile = Math.round(profiles.reduce((n, p) => n + (p?.length ?? 0), 0) / profiles.length);
+  console.log(`average profile: ${avgProfile}/1400 characters`);
 
-  const failures = results.filter((r) => !r.passed);
+  const pct = (rows: Outcome[]) =>
+    `${rows.filter((r) => r.passed).length}/${rows.length} (${Math.round((rows.filter((r) => r.passed).length / rows.length) * 100)}%)`;
+  console.log(`\nTOTAL            ${pct(results).padStart(10)}${pct(withProfile).padStart(13)}`);
+
+  const failures = withProfile.filter((r) => !r.passed);
   if (failures.length > 0) {
-    console.log('\nFAILURES');
+    console.log('\nSTILL FAILING WITH A PROFILE');
     for (const f of failures) {
       console.log(`  ${f.testCase.id.padEnd(18)} ${f.testCase.category.padEnd(14)} ${f.why}`);
       const shown = f.queries.map((q) => `"${q.q}"->${q.hits}`).join('  ') || 'none';

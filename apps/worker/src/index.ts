@@ -10,7 +10,77 @@
  * real there is somewhere obvious to put it.
  */
 
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createDatabase } from '@contexto/db';
+import { CredentialVault, EnvMasterKeyProvider, LlmRegistry, QuotaService } from '@contexto/llm';
+import { PostgresMemoryStore, PostgresProfileStore, updateStudentProfile } from '@contexto/agent';
+
+/**
+ * Everything the jobs share, built once.
+ *
+ * Deliberately not imported from apps/api: the worker is a separate process
+ * with a separate lifetime, and reaching into another app's context would tie
+ * a background job's startup to an HTTP server's.
+ */
+function loadDotEnv(): void {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (true) {
+    const candidate = join(dir, '.env');
+    if (existsSync(candidate)) {
+      process.loadEnvFile(candidate);
+      return;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return;
+    dir = parent;
+  }
+}
+
+function buildContext() {
+  loadDotEnv();
+
+  const url = process.env.DATABASE_URL;
+  const masterKeyValue = process.env.MASTER_ENCRYPTION_KEY;
+  if (!url || !masterKeyValue) {
+    throw new Error('Worker needs DATABASE_URL and MASTER_ENCRYPTION_KEY');
+  }
+
+  const db = createDatabase({ url });
+  const vault = new CredentialVault(db, new EnvMasterKeyProvider(masterKeyValue));
+  const quotaCap = process.env.PLATFORM_MONTHLY_TOKEN_QUOTA;
+  const quota = new QuotaService(db, quotaCap ? Number(quotaCap) : undefined);
+
+  return {
+    db,
+    memory: new PostgresMemoryStore(db),
+    profiles: new PostgresProfileStore(db),
+    llm: new LlmRegistry({
+      vault,
+      quota,
+      ...(process.env.PLATFORM_OPENAI_API_KEY
+        ? { platformApiKey: process.env.PLATFORM_OPENAI_API_KEY }
+        : {}),
+    }),
+  };
+}
+
+let shared: ReturnType<typeof buildContext> | undefined;
+function context(): ReturnType<typeof buildContext> {
+  shared ??= buildContext();
+  return shared;
+}
+
 const MINUTE = 60_000;
+
+/**
+ * Agents per pass.
+ *
+ * A query returning every agent works right up until it very suddenly does
+ * not, and a pass that runs long holds a model call open per agent.
+ */
+const BATCH_SIZE = 50;
 
 interface Job {
   name: string;
@@ -25,14 +95,35 @@ const jobs: Job[] = [
     // actually accumulates, which you will not know until real students use it.
     intervalMs: 60 * MINUTE,
     async run() {
-      // TODO(memory): for each agent with unsummarised entries older than the
-      // retention window, call summarizeAgentMemory from @contexto/agent.
-      //
-      // Two things to get right when implementing:
-      //   - Bill each summarisation to the agent's OWNER, not a shared key.
-      //     See the note in packages/agent/src/memory/summarize.ts.
-      //   - Iterate agents in batches. A single query returning every agent
-      //     works until it very suddenly does not.
+      const ctx = context();
+      const stale = await ctx.profiles.stale(BATCH_SIZE);
+      if (stale.length === 0) return;
+
+      let changed = 0;
+      for (const { agentId, userId } of stale) {
+        try {
+          /*
+           * Billed to the agent's owner, not to a shared key.
+           *
+           * The registry resolves per user, so a student on their own API key
+           * pays for their own summarisation and a platform-tier student is
+           * metered against their own quota. On a shared key this cost is
+           * invisible until it is the largest line on the bill.
+           */
+          const llm = await ctx.llm.resolve(userId);
+          const result = await updateStudentProfile(
+            { llm, memory: ctx.memory, profiles: ctx.profiles },
+            { agentId, userId },
+          );
+          if (result.changed) changed += 1;
+        } catch (error) {
+          // One student's expired key must not stop every other student's
+          // memory from being written.
+          console.error(`Profile update failed for agent ${agentId}`, error);
+        }
+      }
+
+      console.log(`Profiles: ${stale.length} checked, ${changed} rewritten`);
     },
   },
 ];

@@ -60,6 +60,8 @@ export async function runTurnForAgent(
         userId,
         agentId: agent.id,
         purpose: agent.purpose,
+        // What the summarisation job has learned about them, if anything yet.
+        profile: agent.profile,
         message: content,
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),
         google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),

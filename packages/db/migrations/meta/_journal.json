@@ -78,6 +78,13 @@
       "when": 1787258994295,
       "tag": "0010_ambiguous_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1787500843056,
+      "tag": "0011_lonely_makkari",
+      "breakpoints": true
     }
   ]
 }

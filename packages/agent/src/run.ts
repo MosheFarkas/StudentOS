@@ -1,6 +1,7 @@
 import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import { RESPONDING } from './prompts/documents.js';
+import { profileSection } from './memory/profile.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
@@ -28,6 +29,12 @@ export interface AgentRunInput {
   agentId: string;
   /** The agent's student-authored purpose. Anchors the system prompt. */
   purpose: string;
+  /**
+   * What the agent durably knows about this student, written by the
+   * summarisation job between conversations. Absent for an agent that has not
+   * learned anything yet.
+   */
+  profile?: string;
   message: string;
   /**
    * IANA timezone. Defaults to UTC.
@@ -101,7 +108,7 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     // Static for the whole conversation, so it caches. Anything that changes
     // between turns goes in the user message instead -- see buildTurnContext.
-    { role: 'system', content: buildSystemPrompt(input.purpose, availableSkills) },
+    { role: 'system', content: buildSystemPrompt(input.purpose, availableSkills, input.profile) },
     {
       role: 'user',
       content: buildUserMessage(buildTurnContext(recalled, input.timezone), input.message),
@@ -260,6 +267,7 @@ export const SIGN_IN_SECTION =
 export function buildSystemPrompt(
   purpose: string,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
+  profile?: string,
 ): string {
   /*
    * Tier 1 -- universal. Byte-identical for every agent on the platform.
@@ -291,6 +299,18 @@ export function buildSystemPrompt(
    * Tier 2 -- per agent. Stable for one student across a whole conversation.
    */
   const perAgent = [`Your purpose, in their words: ${purpose}`];
+
+  /*
+   * What it has learned about them.
+   *
+   * Per-agent rather than volatile: the summarisation job rewrites it between
+   * conversations, never during one, so it stays byte-identical for the whole
+   * of a conversation and keeps its place in the cached prefix.
+   */
+  const knownAboutStudent = profileSection(profile ?? '');
+  if (knownAboutStudent) {
+    perAgent.push(knownAboutStudent);
+  }
 
   if (skills.length > 0) {
     perAgent.push(

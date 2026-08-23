@@ -114,3 +114,12 @@ export function loadPromptDocument(name: string, dir = DOCUMENTS_DIR): PromptDoc
  * the formatting sections of this document are what should be revisited.
  */
 export const RESPONDING = loadPromptDocument('responding');
+
+/**
+ * How the summarisation job decides what is worth keeping about a student.
+ *
+ * Never loaded on a turn. It is the system prompt for the background pass that
+ * rewrites the profile between conversations, which is why it costs nothing
+ * per turn despite being long.
+ */
+export const PROFILE_DOC = loadPromptDocument('profile');

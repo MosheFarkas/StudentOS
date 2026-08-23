@@ -1,70 +1,88 @@
-import type { LlmRegistry } from '@contexto/llm';
+import type { ChatMessage, LlmProvider } from '@contexto/llm';
+import { PROFILE_DOC } from '../prompts/documents.js';
+import { PROFILE_CHAR_LIMIT, capProfile, type ProfileStore } from './profile.js';
 import type { MemoryStore } from './types.js';
 
 /**
- * Rolls episodic memory up into periodic summaries.
+ * Deciding what is worth keeping about a student.
  *
- * STRUCTURE ONLY -- the model call is not wired up. Run from apps/worker.
+ * This runs between conversations, never during one. The profile it writes is
+ * pinned in the cached part of the system prompt, so rewriting it mid-turn
+ * would invalidate that prefix for the rest of the conversation -- Hermes
+ * calls the alternative a frozen snapshot, and the same property falls out of
+ * doing the work in a background job.
  *
- * Why this job is the load-bearing part of the memory design: episodic memory
- * grows without bound, but the context window does not. Summaries are what keep
- * the cost of a turn flat as an agent accumulates months of history. Without
- * this job, memory works beautifully for two weeks and then gets expensive and
- * then stops fitting.
+ * What it replaces: the agent had no durable memory of a person at all. The
+ * last eight exchanges rode along on every turn and everything older was
+ * reachable only if the agent thought to search for it, which for a stated
+ * preference it never does -- there is no question to ask. "I revise by
+ * rewriting my notes", said once, was simply gone.
  */
 
-export interface SummarizeOptions {
-  agentId: string;
-  /** Only summarise entries older than this, so recent memory stays verbatim. */
-  before: Date;
-  /** Skip if fewer than this many entries are pending -- avoids noise rollups. */
-  minEntries?: number;
-}
+/** How many recent exchanges the writer will look at in one pass. */
+const MAX_EXCHANGES_PER_PASS = 40;
 
-export interface SummarizerDeps {
+export interface ProfileWriterDeps {
+  llm: Pick<LlmProvider, 'chat'>;
   memory: MemoryStore;
-  llm: LlmRegistry;
-  /** Whose quota the summarisation call is billed against. */
-  userId: string;
+  profiles: ProfileStore;
 }
 
-const DEFAULT_MIN_ENTRIES = 10;
+export interface ProfileWriterOptions {
+  agentId: string;
+  /** The agent's owner. Inference is billed to them, not to a shared key. */
+  userId: string;
+  now?: Date;
+}
 
-export async function summarizeAgentMemory(
-  { memory, llm, userId }: SummarizerDeps,
-  options: SummarizeOptions,
-): Promise<{ summarized: number }> {
-  const pending = await memory.unsummarized(options.agentId, options.before);
-  const minEntries = options.minEntries ?? DEFAULT_MIN_ENTRIES;
+/**
+ * Rewrite one agent's profile from the exchanges since it was last written.
+ *
+ * Returns without spending anything when nothing has happened since, which is
+ * the common case by a wide margin: a job on a timer that pays for a model
+ * call every time it wakes has a bill that scales with uptime rather than with
+ * use.
+ */
+export async function updateStudentProfile(
+  { llm, memory, profiles }: ProfileWriterDeps,
+  options: ProfileWriterOptions,
+): Promise<{ changed: boolean }> {
+  const now = options.now ?? new Date();
+  const existing = await profiles.read(options.agentId);
+  const current = existing?.profile ?? '';
+  const since = existing?.updatedAt ?? null;
 
-  if (pending.length < minEntries) {
-    return { summarized: 0 };
-  }
+  const { recent } = await memory.recall(options.agentId, { limit: MAX_EXCHANGES_PER_PASS });
+  const fresh = since ? recent.filter((entry) => entry.occurredAt > since) : recent;
 
-  void llm;
-  void userId;
+  if (fresh.length === 0) return { changed: false };
 
-  // TODO(memory): the actual rollup.
-  //
-  //   1. Group `pending` into periods (daily is a reasonable starting point;
-  //      per-conversation may work better and is worth testing).
-  //   2. For each period, call llm.chat() with a summarisation prompt.
-  //   3. memory.saveSummary({ ..., sourceMemoryIds: ids }) -- passing every id
-  //      in the period is what makes re-running this job idempotent.
-  //
-  // The prompt is the whole game here and deserves real iteration. Two things
-  // to design for from the start:
-  //
-  //   - Summarise for a READER THAT IS THE AGENT ITSELF, later, with none of
-  //     this context. Preserve specifics -- names, dates, decisions, stated
-  //     preferences. Generic recaps ("discussed coursework") are worthless and
-  //     you will not notice they are worthless until recall quality drops.
-  //   - Decide explicitly what is allowed to be forgotten. A summariser that
-  //     never drops anything is just a slower copy of the episodic log.
-  //
-  // Bill this to the student whose agent it is -- see `userId` above. Doing it
-  // on an unattributed key means summarisation cost is invisible until it is
-  // the largest line on the bill.
+  const messages: ChatMessage[] = [
+    { role: 'system', content: PROFILE_DOC.body },
+    {
+      role: 'user',
+      content:
+        `The document as it stands [${current.length}/${PROFILE_CHAR_LIMIT} characters]:\n` +
+        `${current || '(empty -- nothing known about this student yet)'}\n\n` +
+        'Exchanges since it was last written, oldest first:\n' +
+        `${fresh.map((entry) => entry.content).join('\n\n')}\n\n` +
+        'Return the whole document, rewritten. Return it exactly as it stands if none of ' +
+        'this is worth keeping.',
+    },
+  ];
 
-  return { summarized: 0 };
+  const response = await llm.chat({ messages }, { userId: options.userId });
+  const written = capProfile(typeof response.content === 'string' ? response.content : '');
+
+  /*
+   * An empty completion must not wipe what the agent already knew.
+   *
+   * A refusal, a safety filter, or a truncated response all arrive as an empty
+   * string, and treating that as "the student is now a blank" would silently
+   * destroy months of accumulated memory with nothing to notice it.
+   */
+  if (written === '' || written === capProfile(current)) return { changed: false };
+
+  await profiles.save(options.agentId, written, now);
+  return { changed: true };
 }

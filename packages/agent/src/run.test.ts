@@ -389,7 +389,10 @@ describe('the assembled system prompt', () => {
 
   type Recalled = { kind: string; content: string }[];
 
-  async function messagesFor(recent: Recalled): Promise<{ role: string; content: string }[]> {
+  async function messagesFor(
+    recent: Recalled,
+    profile?: string,
+  ): Promise<{ role: string; content: string }[]> {
     const seen: { role: string; content: string }[] = [];
     await runAgentTurn(capturing(seen, recent), {
       userId: 'u1',
@@ -397,12 +400,13 @@ describe('the assembled system prompt', () => {
       purpose: 'keep me on top of chemistry',
       message: 'go',
       timezone: 'Europe/London',
+      ...(profile === undefined ? {} : { profile }),
     } as never);
     return seen;
   }
 
-  async function systemPrompt(recent: Recalled = []): Promise<string> {
-    return (await messagesFor(recent)).find((m) => m.role === 'system')?.content ?? '';
+  async function systemPrompt(recent: Recalled = [], profile?: string): Promise<string> {
+    return (await messagesFor(recent, profile)).find((m) => m.role === 'system')?.content ?? '';
   }
 
   async function userMessage(recent: Recalled = []): Promise<string> {
@@ -456,6 +460,33 @@ describe('the assembled system prompt', () => {
     const user = await userMessage([]);
     expect(user).toMatch(/<turn_context>[\s\S]*<\/turn_context>/);
     expect(user.indexOf('</turn_context>')).toBeLessThan(user.indexOf('go'));
+  });
+
+  it('carries what it durably knows about the student', async () => {
+    const prompt = await systemPrompt([], 'Revises by rewriting notes rather than rereading.');
+    expect(prompt).toContain('Revises by rewriting notes');
+    expect(prompt).toMatch(/what you know about this student/i);
+  });
+
+  it('keeps the profile above everything volatile, so it stays cached', async () => {
+    // It changes once per conversation at most, which makes it per-agent
+    // rather than per-turn -- the tier that still caches.
+    const prompt = await systemPrompt([], 'Revises by rewriting notes.');
+    expect(prompt.indexOf('Revises by rewriting notes')).toBeGreaterThan(-1);
+    expect(prompt).not.toContain('Right now it is');
+  });
+
+  it('carries no profile heading at all for an agent that knows nothing yet', async () => {
+    // An empty section would cost tokens in the cached prefix on every turn
+    // of every conversation, for every new student, forever.
+    expect(await systemPrompt([], '')).not.toMatch(/what you know about this student/i);
+  });
+
+  it('holds an over-long profile to the budget', async () => {
+    const huge = 'This student does a thing. '.repeat(200);
+    const prompt = await systemPrompt([], huge);
+    const section = /what you know about this student \[(\d+)\//i.exec(prompt);
+    expect(Number(section?.[1])).toBeLessThanOrEqual(1400);
   });
 
   it('does not still carry the instruction the document replaced', async () => {
