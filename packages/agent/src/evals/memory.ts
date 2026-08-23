@@ -117,11 +117,7 @@ interface Outcome {
   queries: { q: string; hits: number }[];
 }
 
-async function runCase(
-  apiKey: string,
-  testCase: MemoryCase,
-  profile?: string,
-): Promise<Outcome> {
+async function runCase(apiKey: string, testCase: MemoryCase, profile?: string): Promise<Outcome> {
   const provider = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
   const tools = new ToolRegistry();
   tools.register(searchMemory as never);
@@ -223,7 +219,9 @@ async function main(): Promise<void> {
     `\nreached for memory_search: ${results.filter((r) => r.searched).length}/${results.length}` +
       ` without a profile, ${searchedWith}/${withProfile.length} with one`,
   );
-  const avgProfile = Math.round(profiles.reduce((n, p) => n + (p?.length ?? 0), 0) / profiles.length);
+  const avgProfile = Math.round(
+    profiles.reduce((n, p) => n + (p?.length ?? 0), 0) / profiles.length,
+  );
   console.log(`average profile: ${avgProfile}/1400 characters`);
 
   const pct = (rows: Outcome[]) =>

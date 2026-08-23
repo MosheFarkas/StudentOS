@@ -57,18 +57,33 @@ export async function updateStudentProfile(
 
   if (fresh.length === 0) return { changed: false };
 
+  const exchanges = fresh.map((entry) => entry.content).join('\n\n');
+
+  /*
+   * Two different asks, because "return it unchanged" is nonsense with nothing
+   * to return.
+   *
+   * The first version showed a placeholder -- "(empty, nothing known yet)" --
+   * in the slot where the document goes, and asked for it back untouched if
+   * nothing was worth keeping. Production's first run did exactly that, and
+   * the placeholder was saved as what the agent knows about a person. The
+   * model was following instructions: from where it sat, the placeholder WAS
+   * the document. So there is no placeholder to hand back now.
+   */
+  const ask = current
+    ? `The document as it stands [${current.length}/${PROFILE_CHAR_LIMIT} characters]:\n` +
+      `${current}\n\n` +
+      `Exchanges since it was last written, oldest first:\n${exchanges}\n\n` +
+      'Return the whole document, rewritten. Return it exactly as it stands if none of ' +
+      'this is worth keeping.'
+    : 'There is no document for this student yet.\n\n' +
+      `Their exchanges so far, oldest first:\n${exchanges}\n\n` +
+      `Write the first version, up to ${PROFILE_CHAR_LIMIT} characters. Reply with an ` +
+      'empty message if none of this is worth keeping, which is the usual answer.';
+
   const messages: ChatMessage[] = [
     { role: 'system', content: PROFILE_DOC.body },
-    {
-      role: 'user',
-      content:
-        `The document as it stands [${current.length}/${PROFILE_CHAR_LIMIT} characters]:\n` +
-        `${current || '(empty -- nothing known about this student yet)'}\n\n` +
-        'Exchanges since it was last written, oldest first:\n' +
-        `${fresh.map((entry) => entry.content).join('\n\n')}\n\n` +
-        'Return the whole document, rewritten. Return it exactly as it stands if none of ' +
-        'this is worth keeping.',
-    },
+    { role: 'user', content: ask },
   ];
 
   const response = await llm.chat({ messages }, { userId: options.userId });
@@ -81,7 +96,18 @@ export async function updateStudentProfile(
    * string, and treating that as "the student is now a blank" would silently
    * destroy months of accumulated memory with nothing to notice it.
    */
-  if (written === '' || written === capProfile(current)) return { changed: false };
+  /*
+   * A model narrating emptiness is not a profile.
+   *
+   * Belt and braces alongside removing the placeholder: models describe an
+   * absence in a dozen ways, and any of them saved here becomes a permanent
+   * line in a prompt that every turn pays for.
+   */
+  const describesNothing = /^\(?\s*(?:empty|none|nothing|no (?:profile|document|information))\b/i;
+
+  if (written === '' || written === capProfile(current) || describesNothing.test(written)) {
+    return { changed: false };
+  }
 
   await profiles.save(options.agentId, written, now);
   return { changed: true };

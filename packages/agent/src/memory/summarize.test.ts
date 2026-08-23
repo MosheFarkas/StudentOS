@@ -137,6 +137,44 @@ describe('updating the profile', () => {
     expect(saved[0]?.profile.length).toBeLessThanOrEqual(1400);
   });
 
+  it('never saves the placeholder that stands in for an empty document', async () => {
+    /*
+     * Found in production on the first run, not by any test here.
+     *
+     * The prompt showed "(empty -- nothing known about this student yet)" as
+     * the current document and asked for it back unchanged if nothing was
+     * worth keeping. The model obliged, correctly, and that string was saved
+     * as what the agent knows about a person. Every eval case has a durable
+     * fact in it, so none of them could ever have caught this.
+     */
+    const { store, saved } = profileStore('', null);
+    const llm = llmReturning('(empty -- nothing known about this student yet)');
+
+    const result = await run({
+      llm,
+      memory: memoryWith([{ content: 'Student: whats 2+2\nAgent: 4.', hoursAgo: 1 }]),
+      profiles: store,
+    });
+
+    expect(saved).toHaveLength(0);
+    expect(result.changed).toBe(false);
+  });
+
+  it('does not show the model a placeholder it can hand straight back', async () => {
+    const { store } = profileStore('', null);
+    const llm = llmReturning('Takes chemistry.');
+
+    await run({
+      llm,
+      memory: memoryWith([{ content: 'Student: i do chemistry\nAgent: Noted.', hoursAgo: 1 }]),
+      profiles: store,
+    });
+
+    expect(JSON.stringify(llm.chat.mock.calls[0])).not.toContain(
+      'nothing known about this student',
+    );
+  });
+
   it('keeps the old profile when the model returns nothing usable', async () => {
     // An empty completion must not wipe what the agent already knew.
     const { store, saved } = profileStore('Takes chemistry.', at(48));
