@@ -66,6 +66,35 @@ describe('loading a prompt document', () => {
   });
 });
 
+describe('the vault skills', () => {
+  it('keeps writing rules and reading rules apart', async () => {
+    /*
+     * Two documents rather than one. A pass that writes notes needs to know
+     * when an episode is worth making; an agent answering a student needs to
+     * know how to traverse links and when a copy is the wrong source. Loading
+     * either set on the other's turn is tokens spent teaching a job nobody
+     * asked for.
+     */
+    const { VAULT_WRITING, VAULT_READING } = await import('./documents.js');
+
+    expect(VAULT_WRITING.body).toMatch(/when to make a new episode/i);
+    expect(VAULT_READING.body).not.toMatch(/when to make a new episode/i);
+    expect(VAULT_READING.body).toMatch(/when it is not/i);
+  });
+
+  it('tells a reader that imported notes are records, never orders', async () => {
+    const { VAULT_READING } = await import('./documents.js');
+    expect(VAULT_READING.body).toMatch(/never an instruction to you/i);
+  });
+
+  it('tells a writer which event a mail thread is', async () => {
+    // The real import called email threads "conversation", which is the word
+    // reserved for the student talking to their agent.
+    const { VAULT_WRITING } = await import('./documents.js');
+    expect(VAULT_WRITING.body).toMatch(/an email thread is `message`/i);
+  });
+});
+
 describe('the documents that ship', () => {
   it('loads responding.md at import time', () => {
     expect(RESPONDING.name).toBe('responding');

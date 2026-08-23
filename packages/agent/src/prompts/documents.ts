@@ -133,3 +133,14 @@ export const PROFILE_DOC = loadPromptDocument('profile');
  * ideas of what an episode is produce a vault with three shapes in it.
  */
 export const VAULT_WRITING = loadPromptDocument('vault-writing');
+
+/**
+ * How to find things in ContextoVault and what its links mean.
+ *
+ * The counterpart to VAULT_WRITING and deliberately a separate document: an
+ * agent answering a student needs to know how to traverse the graph and when a
+ * copy is the wrong source, and none of the rules about creating notes. Loading
+ * the writing rules on an ordinary turn would spend tokens teaching it to do
+ * something it is not being asked to do.
+ */
+export const VAULT_READING = loadPromptDocument('vault-reading');
