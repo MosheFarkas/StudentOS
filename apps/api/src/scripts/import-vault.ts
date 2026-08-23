@@ -1,6 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { agents, user } from '@contexto/db';
-import { Vault, collectClassroomSnapshot, importClassroom } from '@contexto/agent';
+import {
+  Vault,
+  collectClassroomSnapshot,
+  collectSchoolMail,
+  domainOf,
+  importClassroom,
+  importMail,
+} from '@contexto/agent';
 import type { ToolContext } from '@contexto/agent';
 import { createContext } from '../context.js';
 import { loadEnv } from '../env.js';
@@ -77,10 +84,41 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  /*
+   * Mail second, and only when asked for.
+   *
+   * It costs a model call per message and it is the only part that puts text
+   * somebody else wrote into the vault, so it is a flag rather than a default.
+   */
+  const wantMail = process.argv.includes('--mail');
+  const domain = domainOf(owner.email);
+
   for (const agent of owned) {
-    const result = await importClassroom(new Vault(root, agent.id), snapshot);
+    const vault = new Vault(root, agent.id);
+    const result = await importClassroom(vault, snapshot);
     console.log(`\n--- ${agent.name} (${agent.id}) ---`);
-    console.log(`Vault: ${result.written} notes written, ${result.updated} updated`);
+    console.log(`Classroom: ${result.written} written, ${result.updated} updated`);
+
+    if (wantMail) {
+      if (!domain) {
+        console.log('Mail: skipped, no school domain on this address');
+      } else {
+        const found = await collectSchoolMail(toolContext, { domain });
+        for (const reason of found.skipped) console.log(`  skipped ${reason}`);
+        console.log(
+          `Mail: ${found.messages.length} messages from ${domain}` +
+            (found.overCap > 0 ? ` (${found.overCap} more over the cap)` : ''),
+        );
+
+        const entities = (await vault.list('entity')).map((note) => note.name);
+        const mail = await importMail(
+          { llm: await ctx.llm.resolve(owner.id) },
+          { vault, messages: found.messages, entities, userId: owner.id },
+        );
+        console.log(`      ${mail.written} episodes written, ${mail.skipped} unparseable`);
+      }
+    }
+
     console.log(`       ${root}/${agent.id}`);
   }
 
