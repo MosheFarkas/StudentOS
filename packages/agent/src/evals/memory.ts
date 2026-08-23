@@ -153,6 +153,7 @@ async function main(): Promise<void> {
   const results = await pooled(MEMORY_CASES, 4, (c) => runCase(apiKey, c));
 
   const categories: MemoryCategory[] = [
+    'continuity',
     'extraction',
     'multi-session',
     'update',

@@ -31,6 +31,36 @@ const FILLER: string[] = [
 ];
 
 export const MEMORY_CASES: MemoryCase[] = [
+  /*
+   * Continuity: the fact is INSIDE the window, unlike everything below it.
+   *
+   * These guard the recall tier rather than the archival one. The window was
+   * halved from twenty exchanges to eight for the token saving, and nothing
+   * verified that ordinary back-and-forth still works -- a corpus where every
+   * fact is deliberately out of reach cannot notice the window breaking.
+   */
+  {
+    id: 'just-said',
+    category: 'continuity',
+    history: [
+      ...FILLER,
+      'Student: im going to start with the past papers tonight\nAgent: Good plan.',
+    ],
+    question: 'what did i just say i was starting with',
+    expect: ['past papers'],
+  },
+  {
+    id: 'few-turns-back',
+    category: 'continuity',
+    history: [
+      ...FILLER,
+      'Student: my history essay is on the causes of the cold war\nAgent: Noted.',
+      ...FILLER.slice(0, 3),
+    ],
+    question: 'what is my history essay about',
+    expect: ['cold war'],
+  },
+
   // --- Information extraction: one fact, stated once, long ago. ---
   {
     id: 'teacher-name',

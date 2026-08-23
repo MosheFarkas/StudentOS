@@ -83,10 +83,31 @@ const STOPWORDS = new Set([
   'tell',
   'say',
   'said',
+  // Two-letter noise, which the length floor used to remove for free.
+  'as',
+  'so',
+  'no',
+  'up',
+  'by',
+  'he',
+  'us',
+  'ok',
+  'oh',
 ]);
 
-/** Shorter than this and a term matches too much to be worth searching for. */
-const MIN_TERM_LENGTH = 3;
+/**
+ * Shorter than this and a term matches too much to be worth searching for.
+ *
+ * Two, not three. Three looked like a safe default and quietly deleted PE, RE
+ * and DT -- real subjects, for the students this is built for. "what did i get
+ * in RE" reduced to an empty query and could never be answered at all. The
+ * noisy two-letter words are handled by STOPWORDS instead, where the decision
+ * is visible rather than incidental.
+ *
+ * IT is the one case this cannot win: "it" is a pronoun far more often than a
+ * subject, so it stays a stopword and that subject is unfindable by initials.
+ */
+const MIN_TERM_LENGTH = 2;
 
 /** The words in a question worth searching for, lowercased and deduplicated. */
 export function queryTerms(query: string): string[] {

@@ -11,7 +11,9 @@
  * reference, and declining to answer something it was never told.
  */
 
-export type MemoryCategory = 'extraction' | 'multi-session' | 'update' | 'temporal' | 'abstention';
+export type MemoryCategory =
+  /** The fact is inside the recency window. Guards the recall tier. */
+  'continuity' | 'extraction' | 'multi-session' | 'update' | 'temporal' | 'abstention';
 
 export interface MemoryCase {
   id: string;

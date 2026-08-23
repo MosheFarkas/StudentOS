@@ -35,6 +35,21 @@ describe('turning a question into search terms', () => {
     expect(queryTerms('do i have a EPQ')).toEqual(['epq']);
   });
 
+  it('keeps two-letter subject names', () => {
+    // PE, RE and DT are real subjects. A three-character floor deleted them,
+    // and "what did i get in RE" produced an empty query -- unanswerable by
+    // construction, for a product aimed at UK students.
+    expect(queryTerms('what did i get in RE')).toEqual(['re']);
+    expect(queryTerms('when is my PE lesson')).toEqual(['pe', 'lesson']);
+    expect(queryTerms('hows my DT coursework')).toContain('dt');
+  });
+
+  it('still drops two-letter words that are noise', () => {
+    // The floor was doing real work: without stopwords covering them, "so",
+    // "as" and "up" match most of the table.
+    expect(queryTerms('so is it up to me as by')).toEqual([]);
+  });
+
   it('strips punctuation the model adds', () => {
     expect(queryTerms("my sister's name?")).toEqual(['sister', 'name']);
   });
