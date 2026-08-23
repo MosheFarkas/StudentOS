@@ -128,8 +128,20 @@ export async function importMail(
   const takenNames = new Set(existingEpisodes.map((note) => note.name));
 
   const allowed = new Set(entities);
-  const knownPeople = new Set(
-    (await vault.list('entity')).filter((n) => n.description === 'Person').map((n) => n.name),
+
+  /*
+   * People are resolved by address, never by name.
+   *
+   * The first real run produced lucas-liu and lucas-yunqi-liu: one person,
+   * twice, because the note was named after the model's rendering of the name
+   * and that varies between messages. An address does not vary. This is the
+   * entity resolution failure the design exists to avoid, and it appeared the
+   * moment real mail arrived -- exactly as the literature says it does.
+   */
+  const peopleByAddress = new Map(
+    (await vault.list('entity'))
+      .filter((note) => note.description === 'Person' && note.externalId)
+      .map((note) => [note.externalId as string, note.name]),
   );
 
   const result: MailImportResult = { written: 0, skipped: 0, people: 0 };
@@ -188,8 +200,12 @@ export async function importMail(
     let personNote: string | undefined;
     const atSchool = domain ? sender.address.endsWith(`@${domain}`) : false;
     if (atSchool && !AUTOMATED.test(sender.address) && parsed.actor.trim() !== '') {
-      personNote = slugForNote(parsed.actor);
-      if (!knownPeople.has(personNote)) {
+      // The address decides identity. Whatever this message called them, a
+      // person already seen keeps the note and the name they were given first.
+      personNote = peopleByAddress.get(sender.address);
+
+      if (!personNote) {
+        personNote = slugForNote(parsed.actor);
         await vault.write({
           name: personNote,
           kind: 'entity',
@@ -198,7 +214,7 @@ export async function importMail(
           externalId: sender.address,
           body: `${parsed.actor.trim()}, at ${sender.address}.`,
         });
-        knownPeople.add(personNote);
+        peopleByAddress.set(sender.address, personNote);
         result.people += 1;
       }
       allowed.add(personNote);

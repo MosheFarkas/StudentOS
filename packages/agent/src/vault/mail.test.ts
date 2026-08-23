@@ -148,6 +148,46 @@ describe('importing school mail', () => {
     expect((await vault.list('episode'))[0]?.body).toMatch(/By \[\[mrs-bell\]\]/);
   });
 
+  it('resolves a person by their address, not by how the name was written', async () => {
+    /*
+     * Found on the first real run: lucas-liu and lucas-yunqi-liu, the same
+     * person twice, because the note was named after the model's rendering of
+     * the name and that varies between messages. The address does not. This is
+     * the entity resolution failure the whole design is supposed to avoid, and
+     * it appeared the moment real mail arrived.
+     */
+    const llm = {
+      chat: vi
+        .fn(async (_r: { messages: unknown[]; tools?: unknown }, _c?: unknown) => ({
+          content: '',
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        }))
+        .mockResolvedValueOnce({
+          content: kept({ actor: 'Lucas Liu' }),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        })
+        .mockResolvedValueOnce({
+          content: kept({ actor: 'Lucas Yunqi Liu' }),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        }),
+    };
+
+    await run(llm, [
+      message({ messageId: 'm-1', from: 'Lucas Liu <lyliu@school.example>' }),
+      message({ messageId: 'm-2', from: '"Liu, Lucas Yunqi" <lyliu@school.example>' }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people).toHaveLength(1);
+    expect(people[0]?.externalId).toBe('lyliu@school.example');
+  });
+
   it('does not invent a person for an automated sender', async () => {
     // no-reply@classroom.google.com is not a teacher, and a note for it would
     // become one of the most-linked nodes in the vault.
