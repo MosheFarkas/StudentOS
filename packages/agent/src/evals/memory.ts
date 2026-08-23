@@ -197,6 +197,7 @@ async function main(): Promise<void> {
     'update',
     'temporal',
     'abstention',
+    'dense',
   ];
 
   const score = (rows: Outcome[], category: MemoryCategory) => {

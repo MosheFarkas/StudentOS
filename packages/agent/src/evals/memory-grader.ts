@@ -13,7 +13,14 @@
 
 export type MemoryCategory =
   /** The fact is inside the recency window. Guards the recall tier. */
-  'continuity' | 'extraction' | 'multi-session' | 'update' | 'temporal' | 'abstention';
+  | 'continuity'
+  | 'extraction'
+  | 'multi-session'
+  | 'update'
+  | 'temporal'
+  | 'abstention'
+  /** Many entities at once. Built to find the flat profile's ceiling. */
+  | 'dense';
 
 export interface MemoryCase {
   id: string;

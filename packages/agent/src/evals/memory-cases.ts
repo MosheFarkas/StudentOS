@@ -189,3 +189,73 @@ export const MEMORY_CASES: MemoryCase[] = [
     abstain: true,
   },
 ];
+
+/**
+ * A term of school, in one history.
+ *
+ * The flat profile scored full marks on the corpus above, which makes it a
+ * control the graph cannot be measured against: everything already passes.
+ * These cases exist to find its ceiling. Five subjects, five teachers, and a
+ * scatter of durable facts about each -- more entities than 1,400 characters
+ * holds comfortably, so the writer has to start choosing what to drop.
+ *
+ * If the flat document passes these too, the vault is not yet worth building,
+ * and that is a result rather than a disappointment.
+ */
+const TERM: string[] = [
+  'Student: im taking chemistry, physics, history, economics and french this year\nAgent: Noted.',
+  'Student: chemistry is with mr ali, hes the one who marks on method not answers\nAgent: Noted.',
+  'Student: physics is dr novak, she does the friday afternoon lab\nAgent: Noted.',
+  'Student: history is mrs bell, she never posts to classroom until the night before\nAgent: Noted.',
+  'Student: economics is mr whitfield and french is madame roux\nAgent: Noted.',
+  'Student: i revise by rewriting my notes, rereading does nothing for me\nAgent: Understood.',
+  'Student: i have football training tuesday and thursday evenings\nAgent: Noted.',
+  'Student: im applying to do medicine so chemistry matters most\nAgent: Noted.',
+  'Student: my EPQ is on antibiotic resistance\nAgent: Strong topic.',
+  'Student: i work best in the morning, after 9pm im useless\nAgent: Noted.',
+  'Student: dr novak sets a problem sheet every friday\nAgent: Noted.',
+  'Student: mrs bell gave us the cold war essay, due the 14th\nAgent: Noted.',
+  'Student: madame roux does speaking practice in pairs every tuesday\nAgent: Noted.',
+  'Student: mr whitfield told us the economics mock is after half term\nAgent: Noted.',
+  'Student: i failed my first chemistry mock in october\nAgent: That is recoverable.',
+  'Student: i get anxious about speaking assessments specifically\nAgent: Noted.',
+  ...FILLER,
+];
+
+MEMORY_CASES.push(
+  {
+    id: 'dense-teacher',
+    category: 'dense',
+    history: TERM,
+    question: 'who takes me for physics again',
+    expect: ['Novak'],
+  },
+  {
+    id: 'dense-all-subjects',
+    category: 'dense',
+    history: TERM,
+    question: 'remind me what im taking this year',
+    expect: ['chemistry', 'physics', 'history', 'economics', 'french'],
+  },
+  {
+    id: 'dense-teacher-habit',
+    category: 'dense',
+    history: TERM,
+    question: 'which teacher posts stuff late',
+    expect: ['Bell'],
+  },
+  {
+    id: 'dense-preference',
+    category: 'dense',
+    history: TERM,
+    question: 'whens the best time of day for me to revise',
+    expect: ['morning'],
+  },
+  {
+    id: 'dense-why-chemistry',
+    category: 'dense',
+    history: TERM,
+    question: 'why does chemistry matter more than my other subjects',
+    expect: ['medicine'],
+  },
+);
