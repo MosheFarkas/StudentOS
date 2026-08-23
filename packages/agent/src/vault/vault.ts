@@ -131,6 +131,17 @@ export class Vault {
     await rename(temp, path);
   }
 
+  /**
+   * Whether this agent has a vault worth handing to a turn.
+   *
+   * Decides two things at once: whether the search tool has anything to search,
+   * and whether the reading rules are loaded onto the prompt. A student who has
+   * connected nothing should carry neither.
+   */
+  async has(): Promise<boolean> {
+    return (await this.list('entity')).length > 0;
+  }
+
   async read(kind: NoteKind, name: string): Promise<VaultNote | null> {
     try {
       return parse(await readFile(this.#pathFor(kind, name), 'utf8'), kind);

@@ -30,12 +30,15 @@ import {
 } from './google/gmail.js';
 import { browseWithAgent, readSchoolPortal, refreshSchoolPortal } from './portal.js';
 import { searchMemory } from './memory.js';
+import { searchVault } from './vault.js';
 import { readWebLink } from './web/read-link.js';
 import { readYoutubeVideo } from './web/youtube.js';
 
 const ALL_TOOLS: Tool<never, unknown>[] = [
-  // No scopes: an agent's own history is not behind anyone's OAuth grant.
+  // No scopes: an agent's own history and its own vault are not behind
+  // anyone's OAuth grant.
   searchMemory as Tool<never, unknown>,
+  searchVault as Tool<never, unknown>,
   listCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,

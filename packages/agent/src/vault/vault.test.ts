@@ -100,6 +100,17 @@ describe('Vault', () => {
     expect((await vault.list('episode')).map((n) => n.name)).toEqual(['2026-08-23-mock']);
   });
 
+  it('knows whether this agent has a vault at all', async () => {
+    /*
+     * Whether to hand the agent a vault, and therefore whether to load the
+     * reading rules onto its prompt, depends on there being something to read.
+     * A student who has connected nothing should carry neither.
+     */
+    expect(await new Vault(root, 'never-imported').has()).toBe(false);
+    await vault.write(note());
+    expect(await vault.has()).toBe(true);
+  });
+
   it('returns null for a note that is not there', async () => {
     expect(await vault.read('entity', 'nonexistent')).toBeNull();
   });

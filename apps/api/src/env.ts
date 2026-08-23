@@ -85,6 +85,14 @@ const envSchema = z.object({
   PLATFORM_MONTHLY_TOKEN_QUOTA: optional(z.coerce.number().int().positive()),
 
   /**
+   * Where ContextoVaults live on disk, one directory per agent.
+   *
+   * Optional: a deployment without it simply has no vaults, and every agent
+   * behaves as it did before they existed.
+   */
+  VAULT_ROOT: optional(z.string().min(1)),
+
+  /**
    * Telegram gateway. Both optional -- unset disables the gateway entirely,
    * and the product must work without it.
    */

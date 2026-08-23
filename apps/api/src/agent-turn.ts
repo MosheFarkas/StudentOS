@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
 import type { Message } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
-import { buildToolRegistry, runAgentTurn } from '@contexto/agent';
+import { Vault, buildToolRegistry, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
@@ -16,6 +16,13 @@ import { beginTurn, endTurn, setActivity } from './turns-in-flight.js';
  * transcript. If these ever diverge you have two agents wearing one name, which
  * is exactly what the product promises not to be.
  */
+/** The agent's vault, if this deployment has vaults and this agent has one. */
+async function vaultFor(root: string | undefined, agentId: string): Promise<Vault | undefined> {
+  if (!root) return undefined;
+  const vault = new Vault(root, agentId);
+  return (await vault.has()) ? vault : undefined;
+}
+
 export async function runTurnForAgent(
   ctx: AppContext,
   params: {
@@ -44,9 +51,21 @@ export async function runTurnForAgent(
   beginTurn(agent.id);
   try {
     // Assembled per turn from what this student has actually connected.
-    const [grant, [profile]] = await Promise.all([
+    const [grant, [profile], vault] = await Promise.all([
       getGoogleGrant(ctx.db, userId),
       ctx.db.select({ timezone: user.timezone }).from(user).where(eq(user.id, userId)).limit(1),
+      /*
+       * Only handed over when there is something in it.
+       *
+       * Its presence decides whether vault_search can find anything and
+       * whether the reading rules go onto the prompt, so an agent whose
+       * student has imported nothing carries neither -- and behaves exactly as
+       * it did before vaults existed.
+       */
+      // Optional chaining, not laziness: this is the path a student is waiting
+      // on, and a context assembled without env should degrade to no vault
+      // rather than take the whole turn down.
+      vaultFor(ctx.env?.VAULT_ROOT, agent.id),
     ]);
 
     const result = await runAgentTurn(
@@ -62,6 +81,7 @@ export async function runTurnForAgent(
         purpose: agent.purpose,
         // What the summarisation job has learned about them, if anything yet.
         profile: agent.profile,
+        ...(vault ? { vault } : {}),
         message: content,
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),
         google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
