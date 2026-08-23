@@ -113,9 +113,11 @@ async function main(): Promise<void> {
         const entities = (await vault.list('entity')).map((note) => note.name);
         const mail = await importMail(
           { llm: await ctx.llm.resolve(owner.id) },
-          { vault, messages: found.messages, entities, userId: owner.id },
+          { vault, messages: found.messages, entities, userId: owner.id, domain },
         );
-        console.log(`      ${mail.written} episodes written, ${mail.skipped} unparseable`);
+        console.log(
+          `      ${mail.written} episodes, ${mail.people} people, ${mail.skipped} unparseable`,
+        );
       }
     }
 

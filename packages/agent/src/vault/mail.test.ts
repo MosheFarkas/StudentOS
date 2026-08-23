@@ -43,7 +43,10 @@ const kept = (over: Record<string, unknown> = {}) =>
   JSON.stringify({
     keep: true,
     what: 'Mrs Bell moved the Cold War essay deadline to Friday the 21st.',
-    relatesTo: ['cold-war-essay'],
+    actor: 'Mrs Bell',
+    event: 'deadline-changed',
+    about: ['cold-war-essay'],
+    inCourse: ['history'],
     ...over,
   });
 
@@ -59,7 +62,13 @@ describe('importing school mail', () => {
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
   const run = (llm: unknown, messages: SchoolMessage[], entities = ['cold-war-essay', 'history']) =>
-    importMail({ llm } as never, { vault, messages, entities, userId: 'u1' });
+    importMail({ llm } as never, {
+      vault,
+      messages,
+      entities,
+      userId: 'u1',
+      domain: 'school.example',
+    });
 
   it('writes an episode for a message worth keeping', async () => {
     const result = await run(llmReturning(kept()), [message()]);
@@ -88,6 +97,66 @@ describe('importing school mail', () => {
     const body = (await vault.list('episode'))[0]?.body ?? '';
     expect(body).toContain('[[cold-war-essay]]');
     expect(body).not.toContain('made-up-note');
+  });
+
+  it('records when it happened, who did it, and what kind of thing it was', async () => {
+    /*
+     * The definition in prompts/vault-writing.md, enforced. Without these a
+     * later reader cannot sort by time, filter by person, or tell an
+     * assignment being posted from a grade coming back.
+     */
+    await run(llmReturning(kept()), [message()]);
+    const episode = (await vault.list('episode'))[0];
+
+    expect(episode?.occurred).toBe('2026-09-02T10:00:00.000Z');
+    expect(episode?.actor).toBe('Mrs Bell');
+    expect(episode?.event).toBe('deadline-changed');
+    expect(episode?.sourceUrl).toContain('m-1');
+  });
+
+  it('keeps the message itself, under a heading', async () => {
+    // Full fidelity on disk: the vault is meant to be handed over and still
+    // make sense. Rendering is where size gets controlled, not storage.
+    await run(llmReturning(kept()), [message({ body: 'The deadline has moved to Friday.' })]);
+    const body = (await vault.list('episode'))[0]?.body ?? '';
+
+    expect(body).toContain('Mrs Bell moved the Cold War essay');
+    expect(body).toContain('The deadline has moved to Friday.');
+  });
+
+  it('distinguishes what an episode is about from the course it is in', async () => {
+    // One undifferentiated "Relates to" made a course and an assignment look
+    // like the same kind of connection. They are not.
+    await run(llmReturning(kept()), [message()]);
+    const body = (await vault.list('episode'))[0]?.body ?? '';
+
+    expect(body).toMatch(/About \[\[cold-war-essay\]\]/);
+    expect(body).toMatch(/In \[\[history\]\]/);
+  });
+
+  it('makes a note for the person who sent it, and links to them', async () => {
+    /*
+     * "Who sent what" needs somebody to have been sent from. Classroom does
+     * not hand over teachers -- listCourses returns an id and a name -- so
+     * senders at the school domain are the only place people come from, and
+     * they are the most-linked nodes the vault was missing.
+     */
+    await run(llmReturning(kept()), [message()]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((p) => p.name)).toContain('mrs-bell');
+    expect((await vault.list('episode'))[0]?.body).toMatch(/By \[\[mrs-bell\]\]/);
+  });
+
+  it('does not invent a person for an automated sender', async () => {
+    // no-reply@classroom.google.com is not a teacher, and a note for it would
+    // become one of the most-linked nodes in the vault.
+    await run(llmReturning(kept({ actor: 'Google Classroom' })), [
+      message({ from: '"Mrs. Irwin (Classroom)" <no-reply@classroom.google.com>' }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people).toEqual([]);
   });
 
   it('skips a message the pass judged not to be school', async () => {

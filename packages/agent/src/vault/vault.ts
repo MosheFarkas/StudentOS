@@ -27,6 +27,24 @@ export type NoteKind = 'entity' | 'episode';
 /** Who wrote the material a note is derived from. */
 export type NoteSource = 'student' | 'classroom' | 'gmail' | 'portal' | 'agent';
 
+/**
+ * What kind of thing happened.
+ *
+ * A closed list, because the value of the field is that it can be counted and
+ * filtered. "A grade came back" and "an assignment was posted" are different
+ * events even when both arrive as email, and a free-text field would record
+ * them a dozen different ways.
+ */
+export type EpisodeEvent =
+  | 'assignment-posted'
+  | 'assignment-graded'
+  | 'deadline-changed'
+  | 'announcement'
+  | 'material-posted'
+  | 'message'
+  | 'conversation'
+  | 'other';
+
 export interface VaultNote {
   /** Slug. Also the filename. Produced by slugForNote, never raw. */
   name: string;
@@ -34,6 +52,20 @@ export interface VaultNote {
   source: NoteSource;
   /** One line, for a reader and for a future loader deciding relevance. */
   description: string;
+  /**
+   * Episodes only: when the thing happened, not when it was imported.
+   *
+   * The field that makes an episode an episode. Keeping it only in the
+   * filename, as the first version did, means nothing can sort or filter by
+   * it -- which is most of what a timeline is for.
+   */
+  occurred?: string;
+  /** Episodes only: who did it, in the plainest name a student would use. */
+  actor?: string;
+  /** Episodes only: what changed for the student. */
+  event?: EpisodeEvent;
+  /** Where this came from, so a person can go and look. */
+  sourceUrl?: string;
   /**
    * Stable id in the system this came from -- a Classroom courseId, a Gmail
    * messageId. What makes re-syncing an exact lookup rather than a guess.
@@ -142,6 +174,10 @@ function serialise(note: VaultNote): string {
     `source: ${note.source}`,
     `description: ${note.description}`,
     ...(note.externalId ? [`externalId: ${note.externalId}`] : []),
+    ...(note.occurred ? [`occurred: ${note.occurred}`] : []),
+    ...(note.actor ? [`actor: ${note.actor}`] : []),
+    ...(note.event ? [`event: ${note.event}`] : []),
+    ...(note.sourceUrl ? [`sourceUrl: ${note.sourceUrl}`] : []),
     '---',
     '',
     note.body.trim(),
@@ -164,13 +200,22 @@ function parse(raw: string, kind: NoteKind): VaultNote | null {
   const source = fields.get('source');
   if (!name || !source) return null;
 
-  const externalId = fields.get('externalId');
+  /** Omit an absent field rather than carrying an undefined through. */
+  const optional = (key: string): Record<string, string> => {
+    const value = fields.get(key);
+    return value ? { [key]: value } : {};
+  };
+
   return {
     name,
     kind,
     source: source as NoteSource,
     description: fields.get('description') ?? '',
-    ...(externalId ? { externalId } : {}),
+    ...optional('externalId'),
+    ...optional('occurred'),
+    ...optional('actor'),
+    ...(optional('event') as { event?: EpisodeEvent }),
+    ...optional('sourceUrl'),
     body: raw.slice(frontmatter[0].length).trim(),
   };
 }

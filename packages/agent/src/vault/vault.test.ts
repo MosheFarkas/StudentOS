@@ -47,6 +47,40 @@ describe('Vault', () => {
     });
   });
 
+  it('round-trips everything that makes an episode an episode', async () => {
+    /*
+     * The fields a later reader cannot recover if they are not stored. The
+     * first version of this kept the time only in the filename and the sender
+     * only in a prose description, so nothing could sort by when, filter by
+     * who, or tell an assignment being posted from a grade coming back.
+     */
+    await vault.write({
+      name: '2026-06-11-castle-portfolio-posted',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'Mrs Irwin posted a new portfolio assignment.',
+      externalId: '19eb7811c9181665',
+      occurred: '2026-06-11T14:32:00Z',
+      actor: 'Mrs Irwin',
+      event: 'assignment-posted',
+      sourceUrl: 'https://mail.google.com/mail/u/0/#inbox/19eb7811c9181665',
+      body: 'Mrs Irwin posted a new portfolio assignment in Enriched English 10.',
+    });
+
+    const read = await vault.read('episode', '2026-06-11-castle-portfolio-posted');
+    expect(read?.occurred).toBe('2026-06-11T14:32:00Z');
+    expect(read?.actor).toBe('Mrs Irwin');
+    expect(read?.event).toBe('assignment-posted');
+    expect(read?.sourceUrl).toContain('mail.google.com');
+  });
+
+  it('leaves an entity free of the fields only an episode has', async () => {
+    await vault.write(note());
+    const read = await vault.read('entity', 'chemistry');
+    expect(read?.occurred).toBeUndefined();
+    expect(read?.event).toBeUndefined();
+  });
+
   it('writes something a person can read', async () => {
     // The point of files. If this is not legible in a text editor, the vault
     // may as well have been a table.

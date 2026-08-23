@@ -123,3 +123,13 @@ export const RESPONDING = loadPromptDocument('responding');
  * per turn despite being long.
  */
 export const PROFILE_DOC = loadPromptDocument('profile');
+
+/**
+ * What an episode is, when to make one, and how to link it.
+ *
+ * Loaded by every pass that writes into ContextoVault -- mail import,
+ * Classroom import, conversation rollup -- and by none that only reads. One
+ * definition rather than one per importer, because three importers with three
+ * ideas of what an episode is produce a vault with three shapes in it.
+ */
+export const VAULT_WRITING = loadPromptDocument('vault-writing');
