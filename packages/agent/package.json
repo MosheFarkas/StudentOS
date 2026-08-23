@@ -11,7 +11,8 @@
     "eval": "tsx src/evals/run.ts",
     "eval:cache": "tsx src/evals/cache.ts",
     "eval:memory": "tsx src/evals/memory.ts",
-    "eval:injection": "tsx src/evals/injection.ts"
+    "eval:injection": "tsx src/evals/injection.ts",
+    "eval:vault": "tsx src/evals/vault-skills.ts"
   },
   "dependencies": {
     "@contexto/db": "workspace:*",

@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { MemoryStore } from '../memory/types.js';
+import type { Vault } from '../vault/vault.js';
 import type { ScopeGroup } from './google/scopes.js';
 import type { AudioTranscriber } from './transcribe.js';
 import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './web/youtube.js';
@@ -41,6 +42,13 @@ export interface ToolContext {
    * indistinguishable from a genuine miss.
    */
   memory?: MemoryStore;
+  /**
+   * ContextoVault: this student's school, as linked notes.
+   *
+   * Optional because a student who has not connected anything has no vault,
+   * and that is an ordinary state rather than a broken one.
+   */
+  vault?: Vault;
   /**
    * Present only for tools that need Google APIs, and only once the student has
    * granted the relevant scope group. Undefined means "not connected" -- a tool

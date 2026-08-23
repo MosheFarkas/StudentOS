@@ -86,6 +86,10 @@ describe('checking it declines to invent', () => {
       'I have no record of that.',
       "I can't find anything about that in what you've told me.",
       'Not sure, sorry.',
+      // Found by the vault skills eval, which scored this correct reply as a
+      // failure because the list had "can't find" and not "couldn't find".
+      "I couldn't find anything in your saved school records about that.",
+      'I have no record of that conversation.',
     ]) {
       expect(gradeReply({ ...base, category: 'abstention', abstain: true }, reply).passed).toBe(
         true,

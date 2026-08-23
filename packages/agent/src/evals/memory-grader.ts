@@ -80,6 +80,12 @@ const ADMITS_NOT_KNOWING = [
   /\bdid not mention\b/i,
   /\bcan'?t find\b/i,
   /\bcannot find\b/i,
+  // "I couldn't find anything in your records" -- the commonest way a model
+  // says it does not know, and missing from the first version of this list.
+  /\bcould ?n'?t find\b/i,
+  /\bcould not find\b/i,
+  /\bdid ?n'?t find\b/i,
+  /\bno (?:record|mention|note) of\b/i,
   /\bnothing (?:about|in)\b/i,
   /\bI don'?t have\b/i,
   /\bno idea\b/i,

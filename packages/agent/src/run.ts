@@ -1,6 +1,6 @@
 import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
-import { RESPONDING } from './prompts/documents.js';
+import { RESPONDING, VAULT_READING } from './prompts/documents.js';
 import { profileSection } from './memory/profile.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
@@ -8,6 +8,7 @@ import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './t
 import type { AudioTranscriber } from './tools/transcribe.js';
 import type { YoutubeMetadataSource, YoutubeTranscriptSource } from './tools/web/youtube.js';
 import type { ToolRegistry } from './tools/registry.js';
+import type { Vault } from './vault/vault.js';
 
 /**
  * One turn of an agent.
@@ -55,6 +56,14 @@ export interface AgentRunInput {
   residentialFetch?: typeof globalThis.fetch;
   /** Portal snapshots pushed up by the student's linked desktop companion. */
   portals?: PortalSnapshotSource;
+  /**
+   * ContextoVault, when this student has one.
+   *
+   * Its presence also decides whether the reading rules are loaded: an agent
+   * with nothing to search should not be carrying instructions about how to
+   * search it on every turn.
+   */
+  vault?: Vault;
   /**
    * Told what the turn is doing, each time that changes.
    *
@@ -108,7 +117,15 @@ export async function runAgentTurn(
   const messages: ChatMessage[] = [
     // Static for the whole conversation, so it caches. Anything that changes
     // between turns goes in the user message instead -- see buildTurnContext.
-    { role: 'system', content: buildSystemPrompt(input.purpose, availableSkills, input.profile) },
+    {
+      role: 'system',
+      content: buildSystemPrompt(
+        input.purpose,
+        availableSkills,
+        input.profile,
+        Boolean(input.vault),
+      ),
+    },
     {
       role: 'user',
       content: buildUserMessage(buildTurnContext(recalled, input.timezone), input.message),
@@ -126,6 +143,7 @@ export async function runAgentTurn(
     ...(input.youtubeTranscripts ? { youtubeTranscripts: input.youtubeTranscripts } : {}),
     ...(input.residentialFetch ? { residentialFetch: input.residentialFetch } : {}),
     ...(input.portals ? { portals: input.portals } : {}),
+    ...(input.vault ? { vault: input.vault } : {}),
   };
 
   // Empty rather than [] -- some providers reject a zero-length tools array,
@@ -268,6 +286,7 @@ export function buildSystemPrompt(
   purpose: string,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
   profile?: string,
+  hasVault = false,
 ): string {
   /*
    * Tier 1 -- universal. Byte-identical for every agent on the platform.
@@ -294,6 +313,15 @@ export function buildSystemPrompt(
      */
     SIGN_IN_SECTION,
   ];
+
+  /*
+   * How to read the vault, only when there is one.
+   *
+   * Universal in the sense that matters -- identical for every student who has
+   * a vault -- so it stays in the cached tier. A student who has connected
+   * nothing carries none of it.
+   */
+  if (hasVault) universal.push(VAULT_READING.body);
 
   /*
    * Tier 2 -- per agent. Stable for one student across a whole conversation.

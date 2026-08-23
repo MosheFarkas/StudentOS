@@ -95,8 +95,11 @@ const ASK = [
   `event is one of: ${EVENTS.join(', ')}.`,
   '',
   'about and inCourse may only contain names from the list you are given. Omit rather',
-  'than guess. keep is false for newsletters, receipts and automated notices that change',
-  'nothing -- which is most mail.',
+  'than guess, and link the specific thing as well as the course it belongs to.',
+  '',
+  'Before setting keep, ask: would this student have to do or know anything different',
+  'because of this message? A bulletin about the choir, the canteen and the car park',
+  'changes nothing for them, so keep is false. Most mail is false.',
 ].join('\n');
 
 /**
@@ -128,6 +131,7 @@ export async function importMail(
   const takenNames = new Set(existingEpisodes.map((note) => note.name));
 
   const allowed = new Set(entities);
+  const neighbours = neighbourMap(await vault.list('entity'));
 
   /*
    * People are resolved by address, never by name.
@@ -173,8 +177,12 @@ export async function importMail(
     message,
     parsed: parseExtraction(
       // No tools. Not an omission -- the containment argument rests on it.
-      (await llm.chat({ messages: chatFor(message, entities), tools: undefined }, { userId }))
-        .content,
+      (
+        await llm.chat(
+          { messages: chatFor(message, entities, neighbours), tools: undefined },
+          { userId },
+        )
+      ).content,
     ),
   }));
 
@@ -276,8 +284,12 @@ async function pooled<T, R>(items: T[], size: number, fn: (item: T) => Promise<R
 }
 
 /** The one prompt this pass sends, built per message. */
-function chatFor(message: SchoolMessage, entities: string[]): ChatMessage[] {
-  const shortlist = shortlistFor(message, entities);
+function chatFor(
+  message: SchoolMessage,
+  entities: string[],
+  neighbours?: ReadonlyMap<string, string[]>,
+): ChatMessage[] {
+  const shortlist = shortlistFor(message, entities, neighbours);
   return [
     { role: 'system', content: `${VAULT_WRITING.body}\n\n---\n\n${ASK}` },
     {
@@ -296,7 +308,11 @@ function chatFor(message: SchoolMessage, entities: string[]): ChatMessage[] {
  * A whole vault is hundreds of names and most of a prompt. Narrowing on shared
  * words keeps the list short and keeps the model choosing rather than scanning.
  */
-function shortlistFor(message: SchoolMessage, entities: string[]): string[] {
+function shortlistFor(
+  message: SchoolMessage,
+  entities: string[],
+  neighbours: ReadonlyMap<string, string[]> = new Map(),
+): string[] {
   const words = new Set(
     `${message.subject} ${message.body.slice(0, 800)}`
       .toLowerCase()
@@ -304,12 +320,39 @@ function shortlistFor(message: SchoolMessage, entities: string[]): string[] {
       .filter((word) => word.length >= 4),
   );
 
-  return entities
+  const direct = entities
     .map((name) => ({ name, score: name.split('-').filter((part) => words.has(part)).length }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 25)
     .map(({ name }) => name);
+
+  /*
+   * Whatever those notes link to, as well.
+   *
+   * Caught by the skills eval: an email about the Cold War essay never
+   * contains the word "history", so the course was never offered and the
+   * episode could not be linked to it -- the model was blamed for a choice it
+   * was never given. An assignment already says which course it is part of, so
+   * one hop out is free and is exactly the general thing the writing rules ask
+   * to be linked alongside the specific one.
+   */
+  const withNeighbours = new Set(direct);
+  for (const name of direct) {
+    for (const neighbour of neighbours.get(name) ?? []) withNeighbours.add(neighbour);
+  }
+
+  return [...withNeighbours].slice(0, 30);
+}
+
+/** Who links to whom, read off the [[wikilinks]] already in the notes. */
+function neighbourMap(notes: { name: string; body: string }[]): Map<string, string[]> {
+  return new Map(
+    notes.map((note) => [
+      note.name,
+      [...note.body.matchAll(/\[\[([^\]]+)\]\]/g)].map((match) => match[1] as string),
+    ]),
+  );
 }
 
 /** The model's answer, or nothing. A refusal and a truncation look the same. */
