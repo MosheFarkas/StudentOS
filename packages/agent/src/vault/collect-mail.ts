@@ -1,6 +1,7 @@
 import { isUnavailable } from '../tools/google/client.js';
 import { listAllMessageIds, readMail } from '../tools/google/gmail.js';
 import type { ToolContext } from '../tools/types.js';
+import { schoolMailQuery } from './mail-query.js';
 import type { SchoolMessage } from './mail.js';
 
 /**
@@ -23,8 +24,16 @@ import type { SchoolMessage } from './mail.js';
  * student is allowed to have.
  */
 
-/** Ceiling on ids listed. Not a sample -- a guard against a pathological inbox. */
-const MAX_IDS = 2000;
+/**
+ * Ceiling on ids listed.
+ *
+ * A guard against a pathological inbox, never a sample. Reaching it means the
+ * query is wrong rather than that the student is unusual -- which is exactly
+ * what happened the first time: a broken filter listed two thousand messages
+ * and the number looked like a finding instead of a ceiling. Hitting it is
+ * reported loudly now, and the caller is expected to stop.
+ */
+const MAX_IDS = 600;
 
 export interface MailCollectionOptions {
   /** e.g. "wearelcc.ca". Everything else is somebody else's problem. */
@@ -39,6 +48,8 @@ export interface CollectedMail {
   messages: SchoolMessage[];
   /** How many ids were listed, so a truncated fetch is visible. */
   found: number;
+  /** True when listing stopped at the ceiling, so the result is incomplete. */
+  hitCeiling: boolean;
   skipped: string[];
 }
 
@@ -71,7 +82,29 @@ export async function collectSchoolMail(
     return {
       messages: [],
       found: 0,
+      hitCeiling: false,
       skipped: ['gmail: not available (scope not granted, or not connected)'],
+    };
+  }
+
+  const ceiling = options.maxIds ?? MAX_IDS;
+  const hitCeiling = ids.length >= ceiling;
+
+  /*
+   * A ceiling reached is a broken query, not a busy student.
+   *
+   * Returned before anything is fetched, so a wrong filter costs one listing
+   * rather than six hundred requests and six hundred model calls.
+   */
+  if (hitCeiling) {
+    return {
+      messages: [],
+      found: ids.length,
+      hitCeiling: true,
+      skipped: [
+        `listing stopped at ${ceiling} messages, which means the query is too broad -- ` +
+          'nothing was fetched',
+      ],
     };
   }
 
@@ -96,5 +129,5 @@ export async function collectSchoolMail(
     });
   }
 
-  return { messages, found: ids.length, skipped };
+  return { messages, found: ids.length, hitCeiling, skipped };
 }
