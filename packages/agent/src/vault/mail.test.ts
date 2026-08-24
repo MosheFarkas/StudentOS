@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
-import { importMail, type SchoolMessage } from './mail.js';
+import { CHUNK, importMail, type SchoolMessage } from './mail.js';
 
 /**
  * Turning school mail into ContextoVault episodes.
@@ -69,6 +69,37 @@ describe('importing school mail', () => {
       userId: 'u1',
       domains: ['school.example'],
     });
+
+  it('gets episodes onto disk before the last message is extracted', async () => {
+    /*
+     * A year of mail is a half-hour job, and extracting everything before
+     * writing anything means an interruption at minute twenty-nine costs all
+     * of it. Because an import skips messages it already has, work that
+     * reached disk is work a re-run does not repeat -- so writing as it goes
+     * is what makes a long import resumable rather than merely restartable.
+     */
+    let seen = 0;
+    let onDiskByTheEnd = -1;
+    const llm = {
+      chat: vi.fn(async () => {
+        seen += 1;
+        if (seen === CHUNK + 1) onDiskByTheEnd = (await vault.list('episode')).length;
+        return {
+          content: kept(),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        };
+      }),
+    };
+
+    await run(
+      llm,
+      Array.from({ length: CHUNK + 4 }, (_, i) => message({ messageId: `m-${i}`, subject: `S${i}` })),
+    );
+
+    expect(onDiskByTheEnd).toBe(CHUNK);
+  });
 
   it('keeps going when one message cannot be extracted', async () => {
     /*

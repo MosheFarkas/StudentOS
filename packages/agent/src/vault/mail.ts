@@ -173,104 +173,133 @@ export async function importMail(
    * would produce exactly the duplicates the ids were meant to prevent.
    */
   const pending = messages.filter((message) => !already.has(message.messageId));
-  const extracted = await pooled(pending, EXTRACT_CONCURRENCY, async (message) => {
-    try {
-      const answer = await retrying(() =>
-        // No tools. Not an omission -- the containment argument rests on it.
-        llm.chat({ messages: chatFor(message, entities, neighbours), tools: undefined }, { userId }),
-      );
-      return { message, parsed: parseExtraction(answer.content) };
-    } catch {
-      /*
-       * One message failing is one message, not the import.
-       *
-       * A real run of a year of mail died on message six hundred: a single
-       * 429 rejected the Promise.all and five hundred and ninety-nine good
-       * extractions were discarded with it, having been paid for. Nothing
-       * reached disk, so starting again meant paying again.
-       */
-      return { message, parsed: null };
-    }
-  });
 
-  for (const { message, parsed } of extracted) {
-    const sender = parseSender(message.from);
-
-    if (!parsed) {
-      result.skipped += 1;
-      continue;
-    }
-    if (!parsed.keep || parsed.what.trim() === '') continue;
-
-    /*
-     * A note for the person who sent it.
-     *
-     * "Who sent what" needs somebody to have been sent from, and Classroom
-     * does not hand over teachers -- listCourses returns an id and a name and
-     * nothing else. Senders at the school's own domain are the only place
-     * people come from, and they are the most-linked nodes the vault lacked.
-     */
-    let personNote: string | undefined;
-    const atSchool = (domains ?? []).some((domain) =>
-      sender.address.toLowerCase().endsWith(`@${domain}`),
-    );
-    if (atSchool && !AUTOMATED.test(sender.address) && parsed.actor.trim() !== '') {
-      // The address decides identity. Whatever this message called them, a
-      // person already seen keeps the note and the name they were given first.
-      personNote = peopleByAddress.get(sender.address);
-
-      if (!personNote) {
-        personNote = slugForNote(parsed.actor);
-        await vault.write({
-          name: personNote,
-          kind: 'entity',
-          source: 'gmail',
-          description: 'Person',
-          externalId: sender.address,
-          body: `${parsed.actor.trim()}, at ${sender.address}.`,
-        });
-        peopleByAddress.set(sender.address, personNote);
-        result.people += 1;
-      }
-      allowed.add(personNote);
-    }
-
-    const about = parsed.about.filter((name) => allowed.has(name));
-    const inCourse = parsed.inCourse.filter((name) => allowed.has(name));
-    const occurred = isoTime(message.date);
-
-    await vault.write({
-      name: uniqueName(slugForNote(`${occurred.slice(0, 10)} ${message.subject}`)),
-      kind: 'episode',
-      source: 'gmail',
-      description: parsed.what.trim().slice(0, 200),
-      externalId: message.messageId,
-      occurred,
-      ...(parsed.actor.trim() ? { actor: parsed.actor.trim() } : {}),
-      event: parsed.event as EpisodeEvent,
-      sourceUrl: `https://mail.google.com/mail/u/0/#all/${message.messageId}`,
-      body: [
-        parsed.what.trim(),
-        '',
-        ...about.map((name) => `About [[${name}]]`),
-        ...inCourse.map((name) => `In [[${name}]]`),
-        ...(personNote ? [`By [[${personNote}]]`] : []),
-        '',
-        '## The message',
-        '',
-        `From: ${message.from}`,
-        `Subject: ${message.subject}`,
-        '',
-        message.body.trim(),
-      ]
-        .join('\n')
-        .trim(),
-    });
-    result.written += 1;
+  /*
+   * Extract a chunk, write a chunk, repeat.
+   *
+   * Extracting everything before writing anything makes a half-hour import
+   * all-or-nothing, and an interruption at minute twenty-nine costs every
+   * model call it had already paid for. Since an import skips messages the
+   * vault already has, whatever reached disk is work a re-run will not repeat
+   * -- which is what makes a long import resumable rather than merely
+   * restartable. The chunk is the unit at risk, and twenty-five of them is a
+   * small enough thing to lose.
+   */
+  for (let start = 0; start < pending.length; start += CHUNK) {
+    await extractAndWrite(pending.slice(start, start + CHUNK));
   }
 
   return result;
+
+  async function extractAndWrite(batch: SchoolMessage[]): Promise<void> {
+    const extracted = await pooled(batch, EXTRACT_CONCURRENCY, async (message) => {
+      try {
+        const answer = await retrying(() =>
+          // No tools. Not an omission -- the containment argument rests on it.
+          llm.chat(
+            { messages: chatFor(message, entities, neighbours), tools: undefined },
+            { userId },
+          ),
+        );
+        return { message, parsed: parseExtraction(answer.content) };
+      } catch {
+        /*
+         * One message failing is one message, not the import.
+         *
+         * A real run of a year of mail died on message six hundred: a single
+         * 429 rejected the Promise.all and five hundred and ninety-nine good
+         * extractions were discarded with it, having been paid for. Nothing
+         * reached disk, so starting again meant paying again.
+         */
+        return { message, parsed: null };
+      }
+    });
+
+    for (const { message, parsed } of extracted) {
+      const sender = parseSender(message.from);
+
+      if (!parsed) {
+        result.skipped += 1;
+        continue;
+      }
+      if (!parsed.keep || parsed.what.trim() === '') continue;
+
+      /*
+       * A note for the person who sent it.
+       *
+       * "Who sent what" needs somebody to have been sent from, and Classroom
+       * does not hand over teachers -- listCourses returns an id and a name and
+       * nothing else. Senders at the school's own domain are the only place
+       * people come from, and they are the most-linked nodes the vault lacked.
+       */
+      let personNote: string | undefined;
+      const atSchool = (domains ?? []).some((domain) =>
+        sender.address.toLowerCase().endsWith(`@${domain}`),
+      );
+      if (atSchool && !AUTOMATED.test(sender.address) && parsed.actor.trim() !== '') {
+        // The address decides identity. Whatever this message called them, a
+        // person already seen keeps the note and the name they were given first.
+        personNote = peopleByAddress.get(sender.address);
+
+        if (!personNote) {
+          personNote = slugForNote(parsed.actor);
+          await vault.write({
+            name: personNote,
+            kind: 'entity',
+            source: 'gmail',
+            description: 'Person',
+            externalId: sender.address,
+            body: `${parsed.actor.trim()}, at ${sender.address}.`,
+          });
+          peopleByAddress.set(sender.address, personNote);
+          result.people += 1;
+        }
+        allowed.add(personNote);
+      }
+
+      const about = parsed.about.filter((name) => allowed.has(name));
+      const inCourse = parsed.inCourse.filter((name) => allowed.has(name));
+      const occurred = isoTime(message.date);
+
+      await vault.write({
+        name: uniqueName(slugForNote(`${occurred.slice(0, 10)} ${message.subject}`)),
+        kind: 'episode',
+        source: 'gmail',
+        description: parsed.what.trim().slice(0, 200),
+        externalId: message.messageId,
+        occurred,
+        ...(parsed.actor.trim() ? { actor: parsed.actor.trim() } : {}),
+        event: parsed.event as EpisodeEvent,
+        sourceUrl: `https://mail.google.com/mail/u/0/#all/${message.messageId}`,
+        body: [
+          parsed.what.trim(),
+          '',
+          ...about.map((name) => `About [[${name}]]`),
+          ...inCourse.map((name) => `In [[${name}]]`),
+          ...(personNote ? [`By [[${personNote}]]`] : []),
+          '',
+          '## The message',
+          '',
+          `From: ${message.from}`,
+          `Subject: ${message.subject}`,
+          '',
+          message.body.trim(),
+        ]
+          .join('\n')
+          .trim(),
+      });
+      result.written += 1;
+    }
+  }
 }
+
+/**
+ * How many messages are extracted and written before the next batch starts.
+ *
+ * The amount of paid-for work an interruption can destroy. Small enough to be
+ * cheap to lose, large enough that the concurrency pool is never starved.
+ */
+export const CHUNK = 25;
 
 /** How many extractions run at once. Enough to be quick, few enough to be polite. */
 const EXTRACT_CONCURRENCY = 6;
