@@ -24,6 +24,7 @@ export { PostgresProfileStore } from './memory/profile-store.js';
 export { UNTRUSTED_RULE, untrustedNote } from './untrusted.js';
 export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/vault.js';
 export { renderNotes } from './vault/render.js';
+export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';
 export { searchVault } from './tools/vault.js';
 export { importConversation } from './vault/conversation.js';
 export { slugForNote } from './vault/slug.js';

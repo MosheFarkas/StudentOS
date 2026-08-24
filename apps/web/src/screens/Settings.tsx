@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { UsageStatus } from '@contexto/shared';
+import type { Agent, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { DeviceConnections } from './DeviceConnections.js';
+import { VaultSpace } from './VaultSpace.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 
@@ -14,10 +15,16 @@ import { TelegramConnection } from './TelegramConnection.js';
  */
 export function Settings({ onBack }: { onBack: () => void }) {
   const [usage, setUsage] = useState<UsageStatus | null>(null);
+  const [agent, setAgent] = useState<Agent | null>(null);
 
   async function load() {
     const res = await api.usage.$get();
     if (res.ok) setUsage(await res.json());
+
+    // The vault belongs to an agent, and Settings is about the person. Nearly
+    // every student has one, so the first is the right one to show.
+    const agents = await api.agents.$get();
+    if (agents.ok) setAgent((await agents.json()).agents[0] ?? null);
   }
 
   useEffect(() => {
@@ -54,6 +61,19 @@ export function Settings({ onBack }: { onBack: () => void }) {
               </>
             )}
           </dl>
+        </div>
+      )}
+
+      {agent && (
+        <div className="panel">
+          <div className="panel-head">
+            <h2>Your vault</h2>
+          </div>
+          <p className="muted">
+            Everything the agent has worked out about your school, as a shape. It built this from
+            your own Classroom and mail.
+          </p>
+          <VaultSpace agentId={agent.id} />
         </div>
       )}
 

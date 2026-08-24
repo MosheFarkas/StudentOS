@@ -10,7 +10,7 @@ import {
 } from '@contexto/shared';
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
-import { Vault } from '@contexto/agent';
+import { Vault, buildGraph } from '@contexto/agent';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
 import { turnActivity, turnRunning } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -125,6 +125,20 @@ export function createAgentRoutes(ctx: AppContext) {
           groups: [...byKind.entries()].map(([kind, notes]) => ({ kind, notes })),
           episodes: episodes.length,
         });
+      })
+
+      /*
+       * The whole vault as a shape.
+       *
+       * Everything a drawing needs and nothing it does not: no note bodies,
+       * because a picture of five hundred notes should not cost five hundred
+       * note bodies over the wire.
+       */
+      .get('/:id/vault/graph', auth, async (c) => {
+        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        if (!vault) return c.json({ nodes: [], edges: [] });
+        return c.json(await buildGraph(vault));
       })
 
       /** One note, and everything that ever pointed at it. */
