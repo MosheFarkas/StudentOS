@@ -94,10 +94,17 @@ async function main(): Promise<void> {
   const wantMail = process.argv.includes('--mail');
   const domain = domainOf(owner.email);
 
-  for (const agent of owned) {
+  /*
+   * Once for the student, not once per agent.
+   *
+   * The vault used to belong to an agent, so this looped over them. Now they
+   * share one, and looping meant importing the same year twice and paying for
+   * every mail extraction a second time.
+   */
+  {
     const vault = new Vault(root, owner.id);
     const result = await importClassroom(vault, snapshot);
-    console.log(`\n--- ${agent.name} (${agent.id}) ---`);
+    console.log(`\n--- ${owner.email}, read by ${owned.length} agent(s) ---`);
     console.log(`Classroom: ${result.written} written, ${result.updated} updated`);
 
     if (wantMail) {

@@ -5,9 +5,12 @@ import {
   collectClassroomSnapshot,
   collectSchoolMail,
   discoverSchoolDomains,
+  readFileContents,
   domainOf,
   importClassroom,
   importMail,
+  isUnavailable,
+  readDriveFile,
 } from '@contexto/agent';
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
@@ -72,7 +75,30 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
     }
   }
 
-  return `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes`;
+  /*
+   * And read some of the files, a few at a time.
+   *
+   * A real account has hundreds of them and each one is a model call, so this
+   * is deliberately a trickle on the refresh cadence rather than a bootstrap
+   * that bills for everything at once. Everything it writes is durable, so
+   * being interrupted costs one file.
+   */
+  const files = await readFileContents(
+    {
+      llm: await ctx.llm.resolve(userId),
+      read: async (fileId) => {
+        const out = await readDriveFile.execute({ fileId } as never, toolContext);
+        if (isUnavailable(out)) return null;
+        return (out as { content?: string }).content ?? null;
+      },
+    },
+    { vault, userId },
+  );
+
+  return (
+    `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
+    `${files.read} files read (${files.remaining} to go)`
+  );
 }
 
 /**

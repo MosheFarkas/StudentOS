@@ -31,6 +31,7 @@ export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
 export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
 export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
+export { readFileContents, type FileReadResult } from './vault/files.js';
 export {
   collectSchoolMail,
   discoverSchoolDomains,
@@ -69,6 +70,9 @@ export {
   type Topic,
 } from './tools/google/classroom.js';
 export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
+// Exported so a caller outside the package can tell a scope refusal from a
+// real answer, which is the whole shape the Google tools return.
+export { isUnavailable } from './tools/google/client.js';
 export {
   searchMail,
   readMail,
