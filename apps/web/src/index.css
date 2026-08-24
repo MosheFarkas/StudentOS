@@ -1263,3 +1263,26 @@ a.button {
   color: var(--ink-faint);
   pointer-events: none;
 }
+
+/*
+ * A vault note, shown as written.
+ *
+ * The note is markdown with [[wikilinks]] in it and nothing here renders
+ * markdown -- deliberately, the same reason the agent does not write it. What a
+ * student should see is the file, as it is on disk, because the point of
+ * showing them the vault is that it is theirs.
+ */
+.note-body {
+  font-family: var(--sans);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin: 0 0 0.75rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}

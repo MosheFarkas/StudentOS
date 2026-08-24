@@ -111,6 +111,45 @@ describe('Vault', () => {
     expect(await vault.has()).toBe(true);
   });
 
+  it('finds what points at a note, which is how a timeline is built', async () => {
+    /*
+     * An entity's history is not stored on it -- it is every episode that
+     * links to it. That is the whole shape of the graph: an assignment knows
+     * nothing about itself, and everything that ever happened to it knows the
+     * assignment's name.
+     */
+    await vault.write(note({ name: 'cold-war-essay', body: 'Cold War essay.' }));
+    await vault.write(
+      note({
+        name: '2026-09-02-moved',
+        kind: 'episode',
+        source: 'gmail',
+        body: 'Mrs Bell moved it.\n\nAbout [[cold-war-essay]]\nIn [[history]]',
+      }),
+    );
+    await vault.write(
+      note({ name: 'unrelated', kind: 'episode', source: 'gmail', body: 'Nothing to do with it.' }),
+    );
+
+    const pointing = await vault.backlinks('cold-war-essay');
+    expect(pointing.map((n) => n.name)).toEqual(['2026-09-02-moved']);
+  });
+
+  it('returns nothing for a note nothing points at', async () => {
+    await vault.write(note());
+    expect(await vault.backlinks('chemistry')).toEqual([]);
+  });
+
+  it('does not mistake a longer name for the one asked about', async () => {
+    // [[chemistry-mock]] is not a link to [[chemistry]], and a substring match
+    // would put every mock on the course's timeline.
+    await vault.write(note({ name: 'chemistry-mock', kind: 'episode', body: 'x' }));
+    await vault.write(
+      note({ name: 'ep', kind: 'episode', source: 'gmail', body: 'About [[chemistry-mock]]' }),
+    );
+    expect(await vault.backlinks('chemistry')).toEqual([]);
+  });
+
   it('returns null for a note that is not there', async () => {
     expect(await vault.read('entity', 'nonexistent')).toBeNull();
   });

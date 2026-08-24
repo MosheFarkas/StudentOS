@@ -142,6 +142,25 @@ export class Vault {
     return (await this.list('entity')).length > 0;
   }
 
+  /**
+   * Every note pointing at this one, newest first.
+   *
+   * An entity's history is not stored on the entity. It is every episode that
+   * links to it, which is the whole shape of the graph: an assignment knows
+   * nothing about itself, and everything that ever happened to it knows the
+   * assignment's name. So a timeline is a backlink query.
+   */
+  async backlinks(name: string): Promise<VaultNote[]> {
+    // Exact, inside the brackets. A substring match would put every
+    // [[chemistry-mock]] on the [[chemistry]] timeline.
+    const link = `[[${name}]]`;
+    const [entities, episodes] = await Promise.all([this.list('entity'), this.list('episode')]);
+
+    return [...entities, ...episodes]
+      .filter((note) => note.name !== name && note.body.includes(link))
+      .sort((a, b) => (b.occurred ?? '').localeCompare(a.occurred ?? ''));
+  }
+
   async read(kind: NoteKind, name: string): Promise<VaultNote | null> {
     try {
       return parse(await readFile(this.#pathFor(kind, name), 'utf8'), kind);

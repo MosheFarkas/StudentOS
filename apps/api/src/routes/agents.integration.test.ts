@@ -400,3 +400,54 @@ describe('the student profile', () => {
     expect(res.status).toBe(404);
   });
 });
+
+/**
+ * Looking at your own vault.
+ *
+ * The profile is a paragraph a person reads in fifteen seconds. The vault is
+ * hundreds of notes about them, and until there is a way to see it they are
+ * being asked to trust a filing cabinet nobody has opened.
+ */
+describe('browsing the vault', () => {
+  it('returns nothing rather than failing when the deployment has no vaults', async () => {
+    // VAULT_ROOT is unset in this harness, which is the ordinary state for a
+    // deployment that has not turned vaults on.
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/vault`, as(alice.token));
+    const body = (await res.json()) as { groups: unknown[]; episodes: number };
+
+    expect(res.status).toBe(200);
+    expect(body.groups).toEqual([]);
+    expect(body.episodes).toBe(0);
+  });
+
+  it("will not show one student another's vault", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    const agent = await createAgent(alice.id);
+
+    // 404 rather than 403: a 403 confirms the agent exists.
+    expect((await app.request(`/api/agents/${agent.id}/vault`, as(bob.token))).status).toBe(404);
+    expect(
+      (await app.request(`/api/agents/${agent.id}/vault/chemistry`, as(bob.token))).status,
+    ).toBe(404);
+  });
+
+  it('refuses a note name that is not a note name', async () => {
+    /*
+     * The name goes into a path. Vault rejects anything outside the slug
+     * alphabet, so this is the second of the two checks -- and the one that
+     * proves a URL cannot reach past the vault directory.
+     */
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(
+      `/api/agents/${agent.id}/vault/${encodeURIComponent('../../etc/passwd')}`,
+      as(alice.token),
+    );
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});

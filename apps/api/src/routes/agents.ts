@@ -10,6 +10,7 @@ import {
 } from '@contexto/shared';
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
+import { Vault } from '@contexto/agent';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
 import { turnActivity, turnRunning } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -92,6 +93,82 @@ export function createAgentRoutes(ctx: AppContext) {
         return c.json({ agent: toAgent(row) });
       })
 
+      /*
+       * What the agent knows, for the person it knows it about.
+       *
+       * The profile is a paragraph somebody can read in fifteen seconds. The
+       * vault is hundreds of notes, and until there is a way to look at it a
+       * student is being told to trust a filing cabinet they have never been
+       * shown. Grouped rather than listed flat, because "Courses" and
+       * "People" are how a person thinks about their own school.
+       */
+      .get('/:id/vault', auth, async (c) => {
+        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        if (!vault) return c.json({ groups: [], episodes: 0 });
+
+        const [entities, episodes] = await Promise.all([
+          vault.list('entity'),
+          vault.list('episode'),
+        ]);
+
+        // Grouped by what the importer called them, which is already the
+        // vocabulary a student would use: Course, Assignment, Topic, Person.
+        const byKind = new Map<string, { name: string; description: string }[]>();
+        for (const note of entities) {
+          const group = byKind.get(note.description) ?? [];
+          group.push({ name: note.name, description: note.body.split('\n')[0] ?? '' });
+          byKind.set(note.description, group);
+        }
+
+        return c.json({
+          groups: [...byKind.entries()].map(([kind, notes]) => ({ kind, notes })),
+          episodes: episodes.length,
+        });
+      })
+
+      /** One note, and everything that ever pointed at it. */
+      .get('/:id/vault/:name', auth, async (c) => {
+        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        if (!vault) throw new ContextoError('not_found', 'No vault for this agent.');
+
+        const name = c.req.param('name');
+        const note = (await vault.read('entity', name)) ?? (await vault.read('episode', name));
+        if (!note) throw new ContextoError('not_found', 'No such note.');
+
+        const timeline = await vault.backlinks(name);
+        return c.json({
+          /*
+           * Mapped rather than returned whole.
+           *
+           * The stored note carries types that belong to the vault, and
+           * handing them straight out makes the route's shape depend on the
+           * agent package's internals -- which the compiler noticed before
+           * anyone else would have. What a reader needs is these fields.
+           */
+          note: {
+            name: note.name,
+            kind: note.kind,
+            source: note.source,
+            description: note.description,
+            body: note.body,
+            occurred: note.occurred ?? null,
+            actor: note.actor ?? null,
+            event: (note.event as string | undefined) ?? null,
+            sourceUrl: note.sourceUrl ?? null,
+          },
+          timeline: timeline.map((entry) => ({
+            name: entry.name,
+            description: entry.description,
+            source: entry.source,
+            occurred: entry.occurred ?? null,
+            actor: entry.actor ?? null,
+            event: (entry.event as string | undefined) ?? null,
+          })),
+        });
+      })
+
       .delete('/:id', auth, async (c) => {
         await ownedAgent(c.get('userId'), c.req.param('id'));
         // Messages, memories, and skills cascade -- see the FKs in packages/db.
@@ -161,6 +238,11 @@ export function createAgentRoutes(ctx: AppContext) {
         return c.json(result);
       })
   );
+}
+
+/** The agent's vault, when this deployment has vaults configured. */
+function vaultFor(root: string | undefined, agentId: string): Vault | undefined {
+  return root ? new Vault(root, agentId) : undefined;
 }
 
 function toAgent(row: typeof agents.$inferSelect): Agent {
