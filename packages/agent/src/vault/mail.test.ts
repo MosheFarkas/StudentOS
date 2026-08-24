@@ -95,7 +95,9 @@ describe('importing school mail', () => {
 
     await run(
       llm,
-      Array.from({ length: CHUNK + 4 }, (_, i) => message({ messageId: `m-${i}`, subject: `S${i}` })),
+      Array.from({ length: CHUNK + 4 }, (_, i) =>
+        message({ messageId: `m-${i}`, subject: `S${i}` }),
+      ),
     );
 
     expect(onDiskByTheEnd).toBe(CHUNK);

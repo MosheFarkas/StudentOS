@@ -28,7 +28,7 @@ const file = (over: Partial<DriveFile> = {}): DriveFile => ({
   ...over,
 });
 
-describe('importing the student\'s Drive', () => {
+describe("importing the student's Drive", () => {
   let root: string;
   let vault: Vault;
 
@@ -110,7 +110,9 @@ describe('importing the student\'s Drive', () => {
       body: 'Grade 10 Math.',
     });
 
-    await importDrive(vault, [file({ fileId: 'd2', name: 'Unit 3 notes', path: ['Grade 10 Math'] })]);
+    await importDrive(vault, [
+      file({ fileId: 'd2', name: 'Unit 3 notes', path: ['Grade 10 Math'] }),
+    ]);
     expect((await vault.read('entity', 'unit-3-notes'))?.body).toContain('[[grade-10-math]]');
   });
 

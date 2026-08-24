@@ -443,7 +443,7 @@ describe('browsing the vault', () => {
     expect(body.episodes).toBe(0);
   });
 
-  it('is the same vault whichever of a student\'s agents asks for it', async () => {
+  it("is the same vault whichever of a student's agents asks for it", async () => {
     /*
      * The vault is built from the student's own Classroom and mail. It is
      * theirs, not any one agent's -- so keying it by agent gave a student who
@@ -470,7 +470,7 @@ describe('browsing the vault', () => {
     }
   });
 
-  it('does not hand a student the vault of another student\'s agent', async () => {
+  it("does not hand a student the vault of another student's agent", async () => {
     // The route is scoped by owner, and the vault is now keyed by owner too --
     // so this checks the second lookup did not quietly widen the first.
     const alice = await createUser();

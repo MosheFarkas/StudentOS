@@ -576,8 +576,7 @@ export async function listAllDriveFiles(
     const params = new URLSearchParams({
       q: 'trashed = false',
       pageSize: '1000',
-      fields:
-        'nextPageToken,files(id,name,mimeType,parents,ownedByMe,modifiedTime,webViewLink)',
+      fields: 'nextPageToken,files(id,name,mimeType,parents,ownedByMe,modifiedTime,webViewLink)',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     });

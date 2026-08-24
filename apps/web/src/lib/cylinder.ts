@@ -61,7 +61,9 @@ export function layout(nodes: GraphNode[]): Placed[] {
   const span = Math.max(1, latest - earliest);
 
   // Bearings are handed out per course, evenly, so subjects do not overlap.
-  const clusters = [...new Set(nodes.map((node) => node.cluster).filter(Boolean))].sort() as string[];
+  const clusters = [
+    ...new Set(nodes.map((node) => node.cluster).filter(Boolean)),
+  ].sort() as string[];
   const bearing = new Map(clusters.map((name, i) => [name, (i / clusters.length) * Math.PI * 2]));
 
   const busiest = Math.max(1, ...nodes.map((node) => node.degree));

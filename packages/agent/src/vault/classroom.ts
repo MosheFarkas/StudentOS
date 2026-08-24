@@ -312,9 +312,7 @@ export async function importClassroom(
         announcement.id,
         `${announcement.course}:${announcement.postedAt ?? opening}`,
       ),
-      ...(announcement.postedAt
-        ? { occurred: new Date(announcement.postedAt).toISOString() }
-        : {}),
+      ...(announcement.postedAt ? { occurred: new Date(announcement.postedAt).toISOString() } : {}),
       ...(announcement.link ? { sourceUrl: announcement.link } : {}),
       body: lines.join('\n'),
     });

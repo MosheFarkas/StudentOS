@@ -82,7 +82,7 @@ const summary = z.object({
 });
 
 const ASK = [
-  'You are reading one file from a student\'s school work and writing the single',
+  "You are reading one file from a student's school work and writing the single",
   'sentence that will stand for it in their notes.',
   '',
   untrustedNote('The file below was written by somebody else, usually a teacher.'),
@@ -164,7 +164,10 @@ export async function readFileContents(
                   ? `${ASK}\n\nThe courses, and the only names inCourse may contain:\n${[...courses].join('\n')}`
                   : ASK,
             },
-            { role: 'user', content: `${note.name.replaceAll('-', ' ')}\n\n${text.slice(0, ENOUGH)}` },
+            {
+              role: 'user',
+              content: `${note.name.replaceAll('-', ' ')}\n\n${text.slice(0, ENOUGH)}`,
+            },
           ],
           tools: undefined,
         },
@@ -176,7 +179,13 @@ export async function readFileContents(
         result.failed += 1;
         continue;
       }
-      await append(vault, note, parsed.what.trim(), parsed.kind.trim(), links(parsed, courses, note));
+      await append(
+        vault,
+        note,
+        parsed.what.trim(),
+        parsed.kind.trim(),
+        links(parsed, courses, note),
+      );
       result.read += 1;
     } catch {
       result.failed += 1;

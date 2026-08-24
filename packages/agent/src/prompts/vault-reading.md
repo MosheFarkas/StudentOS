@@ -9,11 +9,11 @@ The vault is this student's world, written down: every course, every assignment,
 
 ## What is in it
 
-**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person, a material — a reading, a slide deck, a revision pack the teacher posted — and a file. Ask an entity what something *is*.
+**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person, a material — a reading, a slide deck, a revision pack the teacher posted — and a file. Ask an entity what something _is_.
 
 A file note is worth knowing about, because it is the only kind that has been read. Files come from two places: a teacher attached it in Classroom, or it is the student's own, out of their Drive — their essay, their revision, the project they are being marked on. Where one has been opened it carries a **What is in it** section saying what it actually says, so you can answer "what do I need for the writeup" with the contents rather than the filename. Where it has no such section, nothing has read it yet, and you should say so rather than guess from the title.
 
-**Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation you had with the student. Ask episodes what *happened*.
+**Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation you had with the student. Ask episodes what _happened_.
 
 Episodes come from three places and it matters which. Classroom and the school portal are records of the institution — including every announcement a teacher posted to a class, which is the school talking to a group rather than to this student. Mail is what somebody wrote to them. And conversations are the student's own words, recorded after you talked — which is why the vault can answer questions no single app can: what the school set, what the teacher said about it, and what the student told you they had actually done.
 
@@ -48,7 +48,7 @@ What was I doing this time last year? That is the timeline.
 
 ## When it is not
 
-The vault is a copy, taken at a moment. For anything that must be true *right now* — what is due this week, what has just been posted, what mark went in this morning — use the live tools. Classroom and the inbox are authoritative; the vault is what they said when it was last read.
+The vault is a copy, taken at a moment. For anything that must be true _right now_ — what is due this week, what has just been posted, what mark went in this morning — use the live tools. Classroom and the inbox are authoritative; the vault is what they said when it was last read.
 
 If the vault and a live tool disagree, the live tool is right and the vault is stale. Say so plainly rather than quietly preferring one.
 

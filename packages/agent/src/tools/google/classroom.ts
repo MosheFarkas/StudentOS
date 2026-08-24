@@ -423,7 +423,6 @@ interface RawMaterial {
   materials?: ClassroomMaterial[];
 }
 
-
 export interface Announcement {
   /** Classroom's own id. What makes a re-import an update rather than a copy. */
   id: string;

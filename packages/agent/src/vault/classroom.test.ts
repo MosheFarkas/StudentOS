@@ -145,7 +145,12 @@ describe('importing a snapshot', () => {
             course: 'Chemistry',
             title: 'Titration week',
             attachments: [
-              { kind: 'file', title: 'Titration method.pdf', fileId: 'drive-1', url: 'https://drive/1' },
+              {
+                kind: 'file',
+                title: 'Titration method.pdf',
+                fileId: 'drive-1',
+                url: 'https://drive/1',
+              },
             ],
           },
         ],
@@ -175,9 +180,7 @@ describe('importing a snapshot', () => {
             course: 'Chemistry',
             title: 'Lab writeup',
             due: null,
-            attachments: [
-              { kind: 'file', title: 'Writeup template', fileId: 'drive-2' },
-            ],
+            attachments: [{ kind: 'file', title: 'Writeup template', fileId: 'drive-2' }],
           },
         ],
       }),
@@ -260,7 +263,13 @@ describe('importing a snapshot', () => {
   it('does not import the same announcement twice', async () => {
     const withOne = snapshot({
       announcements: [
-        { id: 'a1', course: 'Chemistry', text: 'Same notice.', postedAt: '2026-09-02T10:00:00Z', attachments: [] },
+        {
+          id: 'a1',
+          course: 'Chemistry',
+          text: 'Same notice.',
+          postedAt: '2026-09-02T10:00:00Z',
+          attachments: [],
+        },
       ],
     });
     await importClassroom(vault, withOne);
@@ -279,8 +288,20 @@ describe('importing a snapshot', () => {
       vault,
       snapshot({
         announcements: [
-          { id: '', course: 'Chemistry', text: 'First notice.', postedAt: '2026-09-01T10:00:00Z', attachments: [] },
-          { id: '', course: 'Chemistry', text: 'Second notice.', postedAt: '2026-09-08T10:00:00Z', attachments: [] },
+          {
+            id: '',
+            course: 'Chemistry',
+            text: 'First notice.',
+            postedAt: '2026-09-01T10:00:00Z',
+            attachments: [],
+          },
+          {
+            id: '',
+            course: 'Chemistry',
+            text: 'Second notice.',
+            postedAt: '2026-09-08T10:00:00Z',
+            attachments: [],
+          },
         ],
       }),
     );
@@ -299,7 +320,13 @@ describe('importing a snapshot', () => {
       vault,
       snapshot({
         announcements: [
-          { id: 'a1', course: 'Chemistry', text: 'A notice.', postedAt: '2026-09-02T10:00:00Z', attachments: [] },
+          {
+            id: 'a1',
+            course: 'Chemistry',
+            text: 'A notice.',
+            postedAt: '2026-09-02T10:00:00Z',
+            attachments: [],
+          },
         ],
         materials: [{ id: 'm1', course: 'Chemistry', title: 'A reading', attachments: [] }],
       }),

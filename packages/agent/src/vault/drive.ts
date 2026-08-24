@@ -41,10 +41,7 @@ export interface DriveImportResult {
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
-export async function importDrive(
-  vault: Vault,
-  files: DriveFile[],
-): Promise<DriveImportResult> {
+export async function importDrive(vault: Vault, files: DriveFile[]): Promise<DriveImportResult> {
   const existing = await vault.list('entity');
   const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
   const takenNames = new Set(existing.map((note) => note.name));

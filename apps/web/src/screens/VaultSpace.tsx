@@ -311,8 +311,7 @@ export function VaultSpace({ agentId }: Props) {
         context.lineWidth = 1.4;
         context.globalAlpha = held;
         for (const edge of graph.edges) {
-          const otherEnd =
-            edge.from === centre ? edge.to : edge.to === centre ? edge.from : null;
+          const otherEnd = edge.from === centre ? edge.to : edge.to === centre ? edge.from : null;
           if (otherEnd === null || !anchor) continue;
           const other = screen.get(otherEnd);
           if (!other) continue;
