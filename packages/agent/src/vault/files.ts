@@ -84,12 +84,40 @@ const PER_PASS = 40;
 /** Enough of a document to know what it is. Beyond this is more of the same. */
 const ENOUGH = 6000;
 
+/*
+ * The bounds are enforced by trimming, not by refusing.
+ *
+ * These caps exist for containment: they stop a hostile file writing
+ * paragraphs into a note through a field meant to hold a sentence. Rejecting
+ * enforced them, but at the cost of the whole file -- and it failed hardest on
+ * the files worth most. Measured on a real vault: of twelve stuck files, eight
+ * were refused for a summary of 327 to 409 characters against a 300 cap, or a
+ * kind of 44 against 40. They were the debate briefs, the Model UN position
+ * papers, the assessment rubrics. The more a document contained, the longer
+ * its summary, and the likelier it was to be thrown away whole.
+ *
+ * A trim costs a clause. A refusal costs the document.
+ */
 const summary = z.object({
-  what: z.string().max(300),
-  kind: z.string().max(40).default(''),
+  what: z
+    .string()
+    .transform((text) => text.slice(0, SUMMARY_LIMIT))
+    .pipe(z.string().min(1)),
+  kind: z
+    .string()
+    .default('')
+    .transform((text) => text.slice(0, KIND_LIMIT)),
   /** The course it belongs to, if it clearly belongs to one. */
-  inCourse: z.array(z.string()).max(2).default([]),
+  inCourse: z
+    .array(z.string())
+    .default([])
+    .transform((names) => names.slice(0, MAX_COURSES)),
 });
+
+/** Long enough for two real sentences about a document. */
+const SUMMARY_LIMIT = 300;
+const KIND_LIMIT = 40;
+const MAX_COURSES = 2;
 
 const ASK = [
   "You are reading one file from a student's school work and writing the single",

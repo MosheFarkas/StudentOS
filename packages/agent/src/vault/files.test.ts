@@ -250,6 +250,81 @@ describe('reading the files in the vault', () => {
     expect(llm.chat).toHaveBeenCalledTimes(1);
   });
 
+  it('trims an answer that runs long instead of throwing the file away', async () => {
+    /*
+     * The caps were rejecting rather than trimming, and that failed the files
+     * it should have served best. Measured on a real vault: of twelve stuck
+     * files, eight were refused for a summary of 327 to 409 characters against
+     * a 300 cap, or a kind of 44 against 40 -- and they were the debate
+     * briefs, the Model UN position papers, the assessment rubrics. The more
+     * a document actually contained, the longer its summary, and the likelier
+     * it was to be discarded whole.
+     *
+     * The cap is worth keeping: it is what stops a hostile file from writing
+     * paragraphs into a note through a field meant to hold a sentence. But it
+     * is enforced just as well by trimming, and trimming costs a clause where
+     * refusing costs the file.
+     */
+    const long = 'A very thorough description. '.repeat(30);
+    const result = await run({
+      llm: {
+        chat: vi.fn(async () => ({
+          content: JSON.stringify({
+            what: long,
+            kind: 'Personal Project planning guide and checklist',
+            inCourse: [],
+          }),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        })),
+      },
+      read: async () => 'text',
+    });
+
+    expect(result.read).toBe(1);
+    expect(result.failed).toBe(0);
+
+    const note = await vault.read('entity', 'titration-method');
+    expect(note?.body).toContain('A very thorough description.');
+    // Trimmed, not stored whole -- the bound is the point of the bound.
+    const summaryText = note!.body.split('## What is in it')[1] ?? '';
+    expect(summaryText.length).toBeLessThan(400);
+  });
+
+  it('takes only the courses it is allowed, when the model names too many', async () => {
+    await vault.write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+    await vault.write({
+      name: 'physics',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Physics.',
+    });
+    await vault.write({
+      name: 'biology',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Biology.',
+    });
+
+    const result = await run({
+      llm: summary('A method.', ['chemistry', 'physics', 'biology']),
+      read: async () => 'text',
+    });
+
+    expect(result.read).toBe(1);
+    const body = (await vault.read('entity', 'titration-method'))?.body ?? '';
+    expect((body.match(/Part of \[\[/g) ?? []).length).toBeLessThanOrEqual(2);
+  });
+
   it('says why a file failed, rather than only counting it', async () => {
     /*
      * The reason was being caught and dropped, so three separate passes over a
