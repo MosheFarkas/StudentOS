@@ -61,7 +61,7 @@ export function layout(nodes: GraphNode[]): Placed[] {
   const span = Math.max(1, latest - earliest);
 
   // Bearings are handed out per course, evenly, so subjects do not overlap.
-  const clusters = [...new Set(nodes.map((node) => node.cluster ?? '·'))].sort();
+  const clusters = [...new Set(nodes.map((node) => node.cluster).filter(Boolean))].sort() as string[];
   const bearing = new Map(clusters.map((name, i) => [name, (i / clusters.length) * Math.PI * 2]));
 
   const busiest = Math.max(1, ...nodes.map((node) => node.degree));
@@ -80,10 +80,26 @@ export function layout(nodes: GraphNode[]): Placed[] {
     const pull = Math.sqrt(node.degree / busiest);
     const radius = SKIN * (1 - pull) + 0.06;
 
-    // A little jitter per node, so nodes sharing a course and a moment are not
-    // drawn exactly on top of each other and countable as one.
+    /*
+     * A little jitter per node, so nodes sharing a course and a moment are not
+     * drawn exactly on top of each other and countable as one. The multiplier
+     * is the golden angle, which is what stops the offsets from falling into
+     * step with each other and re-stacking.
+     */
     const spread = ((index * 2.399963) % 1) * 0.5 - 0.25;
-    const theta = (bearing.get(node.cluster ?? '·') ?? 0) + spread;
+
+    /*
+     * Belonging to no course is not a course.
+     *
+     * A fifth of a real vault is people and school-wide mail. Giving them one
+     * shared bearing stacks two hundred nodes into a blade that reads as a
+     * fault; scattered right round the cylinder they read as what they are,
+     * the background the subjects are threaded through.
+     */
+    const theta =
+      node.cluster === null
+        ? ((index * 2.399963) % 1) * Math.PI * 2
+        : (bearing.get(node.cluster) ?? 0) + spread;
 
     return { node, x, y: Math.cos(theta) * radius, z: Math.sin(theta) * radius, radius };
   });

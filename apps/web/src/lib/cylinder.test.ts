@@ -51,6 +51,33 @@ describe('where a node sits', () => {
     expect(Math.abs(angle(placed[0]!) - angle(placed[1]!))).toBeGreaterThan(0.3);
   });
 
+  it('spreads the notes that belong to no course all the way round', () => {
+    /*
+     * A fifth of a real vault has no course -- people, and mail about the
+     * school rather than about a class. Handing them one bearing like a
+     * fourteenth subject stacks two hundred nodes into a blade, which reads
+     * as a rendering fault rather than as what it is: the absence of a
+     * course, not a course of its own.
+     */
+    const placed = layout(
+      Array.from({ length: 30 }, (_, i) => node({ name: `n${i}`, cluster: null, degree: 1 })),
+    );
+
+    const bearings = placed.map((point) => Math.atan2(point.z, point.y));
+    expect(Math.max(...bearings) - Math.min(...bearings)).toBeGreaterThan(4);
+  });
+
+  it('still gives each real course one bearing of its own', () => {
+    // The spreading must not leak into the courses, or the threads that make
+    // the whole shape mean something dissolve into noise.
+    const placed = layout(
+      Array.from({ length: 12 }, (_, i) => node({ name: `n${i}`, cluster: 'history' })),
+    );
+
+    const bearings = placed.map((point) => Math.atan2(point.z, point.y));
+    expect(Math.max(...bearings) - Math.min(...bearings)).toBeLessThan(1);
+  });
+
   it('spreads out the notes nothing ever happened to', () => {
     /*
      * An assignment with no episodes has no time. Stacking every one of them at
