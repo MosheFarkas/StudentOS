@@ -94,6 +94,15 @@ export async function importClassroom(
     attachments: Attachment[] | undefined,
     courseName: string,
     parent: string,
+    /*
+     * How the file relates to the note it came from, in the file's own words.
+     *
+     * A worksheet a teacher posted and the copy a student handed in are both
+     * "attached" to the same assignment and are not the same thing at all --
+     * and which one it is, is exactly what somebody asking "what did I write
+     * for this" needs to know.
+     */
+    relation = 'Attached to',
   ): Promise<string[]> => {
     const lines: string[] = [];
     for (const item of attachments ?? []) {
@@ -110,7 +119,7 @@ export async function importClassroom(
         description: 'File',
         externalId: item.fileId,
         ...(item.url ? { sourceUrl: item.url } : {}),
-        body: [`${item.title}.`, '', linkToCourse(courseName), `Attached to [[${parent}]].`].join(
+        body: [`${item.title}.`, '', linkToCourse(courseName), `${relation} [[${parent}]].`].join(
           '\n',
         ),
       });
@@ -263,6 +272,25 @@ export async function importClassroom(
           ? ''
           : `. Marked ${submission.grade}${submission.maxPoints === null ? '' : `/${submission.maxPoints}`}`;
       lines.push(`${state}${late}${grade}.`);
+
+      /*
+       * What the student actually handed in.
+       *
+       * Their own copy, under their own id, which they can open and we can
+       * read -- unlike the "[Template]" master attached to the assignment,
+       * which Classroom never shares with them. This is the only place in the
+       * vault that holds the student's own schoolwork rather than the
+       * school's.
+       */
+      const mine = await attach(
+        submission.attachments,
+        work.course,
+        name,
+        'You handed in this for',
+      );
+      if (mine.length > 0) {
+        lines.push('', ...mine.map((entry) => entry.replace('Attached:', 'You handed in:')));
+      }
     }
 
     const attached = await attach(work.attachments, work.course, name);

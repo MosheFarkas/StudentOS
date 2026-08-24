@@ -565,6 +565,15 @@ function formatDue(
  * ========================================================================== */
 
 export interface SubmissionSummary {
+  /**
+   * The student's own copy of the work, when they attached one.
+   *
+   * Classroom's "make a copy for each student" gives every student a separate
+   * file under its own id; the teacher's master, named "[Template] ...", is
+   * never shared with them. Reading only the master meant holding blanks that
+   * 404 and none of the work done on them.
+   */
+  attachments?: Attachment[];
   course: string;
   assignment: string;
   state: string;
@@ -630,6 +639,10 @@ export const listSubmissions: Tool<
           submissionId: s.id ?? '',
           courseId: s.courseId ?? '',
           courseWorkId: s.courseWorkId ?? '',
+          ...(() => {
+            const mine = toAttachments(s.assignmentSubmission?.attachments);
+            return mine.length > 0 ? { attachments: mine } : {};
+          })(),
           ...(s.alternateLink ? { link: s.alternateLink } : {}),
         })),
       input.includeArchived,
@@ -655,6 +668,7 @@ export const listSubmissions: Tool<
 };
 
 interface RawSubmission {
+  assignmentSubmission?: { attachments?: ClassroomMaterial[] };
   id?: string;
   courseId?: string;
   courseWorkId?: string;

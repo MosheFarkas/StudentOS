@@ -128,6 +128,52 @@ describe('importing a snapshot', () => {
     expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
   });
 
+  it('keeps the work the student handed in, not just the blank they started from', async () => {
+    /*
+     * Classroom's "make a copy for each student" attaches the teacher's master
+     * to the assignment, named "[Template] ...", and gives each student their
+     * own copy under a different id. The master is not shared with them.
+     *
+     * So the vault held 36 templates it could not open -- 404, every one --
+     * and none of the work done on them. On a real account 57 submissions
+     * carried the student's own copy, every one readable, named things like
+     * "Lucas Yunqi Liu - Activities Ch. 4". That is the most valuable material
+     * a school account has and it was entirely absent.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [{ id: 'w1', course: 'Chemistry', title: 'Activities Ch 4', due: null }],
+        submissions: [
+          {
+            course: 'Chemistry',
+            assignment: 'w1',
+            state: 'turned in',
+            late: false,
+            grade: 8,
+            maxPoints: 10,
+            submissionId: 's1',
+            courseId: 'c1',
+            courseWorkId: 'w1',
+            attachments: [{ kind: 'file', title: 'Lucas Liu - Activities Ch 4', fileId: 'mine-1' }],
+          },
+        ],
+      }),
+    );
+
+    const mine = await vault.read('entity', 'lucas-liu-activities-ch-4');
+    expect(mine?.description).toBe('File');
+    expect(mine?.externalId).toBe('mine-1');
+    // Tied to the assignment it answers, and marked as the student's own, so
+    // "what did I write for this" has somewhere to land.
+    expect(mine?.body).toContain('[[activities-ch-4]]');
+    expect(mine?.body).toContain('handed in');
+
+    expect((await vault.read('entity', 'activities-ch-4'))?.body).toContain(
+      '[[lucas-liu-activities-ch-4]]',
+    );
+  });
+
   it('makes a note for a file a teacher attached', async () => {
     /*
      * The files were being written into the body as `Attached: <title>` --
