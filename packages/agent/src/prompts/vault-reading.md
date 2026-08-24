@@ -9,7 +9,9 @@ The vault is this student's world, written down: every course, every assignment,
 
 ## What is in it
 
-**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person, and a material — a reading, a slide deck, a revision pack the teacher posted, which sits there being useful all term. Ask an entity what something *is*.
+**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person, a material — a reading, a slide deck, a revision pack the teacher posted — and a file. Ask an entity what something *is*.
+
+A file note is worth knowing about, because it is the only kind that has been read. Files come from two places: a teacher attached it in Classroom, or it is the student's own, out of their Drive — their essay, their revision, the project they are being marked on. Where one has been opened it carries a **What is in it** section saying what it actually says, so you can answer "what do I need for the writeup" with the contents rather than the filename. Where it has no such section, nothing has read it yet, and you should say so rather than guess from the title.
 
 **Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation you had with the student. Ask episodes what *happened*.
 

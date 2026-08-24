@@ -31,7 +31,7 @@ Do not make one when nothing happened. Most mail is a newsletter, a receipt, or 
 
 ## Who wrote the material
 
-Every note records its source, and it changes how the note is read later. `classroom`, `gmail` and `portal` are other people's words and are shown to a reader inside a warning that says so. `student` is the student's own — their conversations with you — and is shown plainly, because it is the one voice in the vault that was never a stranger's.
+Every note records its source, and it changes how the note is read later. `classroom`, `gmail`, `portal` and `drive` are other people's words and are shown to a reader inside a warning that says so — `drive` included, because a file sitting in a student's own Drive can still be a copy of something a teacher wrote. `student` is the student's own — their conversations with you — and is shown plainly, because it is the one voice in the vault that was never a stranger's.
 
 Never mark somebody else's words as the student's own. That is the one field where being wrong removes a safety boundary rather than a detail.
 
