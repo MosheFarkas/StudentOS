@@ -146,12 +146,33 @@ export async function importClassroom(
     return name;
   };
 
+  /*
+   * Who owns which part of a note's body.
+   *
+   * The importer owns everything above the first `## ` heading -- the title,
+   * the links, the due date, the state -- and rebuilds it from Classroom every
+   * run. Everything from that heading down was put there by another pass and
+   * is none of its business.
+   *
+   * Without this a re-import silently destroyed work. Observed on a real
+   * vault: 723 files carried a summary of their own contents, an import ran,
+   * and 127 were left. Six hundred model calls that had already been paid for,
+   * gone, and nothing reported it -- from the importer's side it was just an
+   * update.
+   */
+  const OWNED_BY_OTHERS = /^## /m;
+
   const save = async (note: VaultNote): Promise<void> => {
     const before = byExternalId.get(note.externalId);
-    if (before && before.body === note.body && before.description === note.description) return;
 
-    await vault.write(note);
-    byExternalId.set(note.externalId, note);
+    const appended = before ? OWNED_BY_OTHERS.exec(before.body) : null;
+    const kept = appended ? `\n\n${before!.body.slice(appended.index).trimEnd()}` : '';
+    const merged: VaultNote = kept ? { ...note, body: `${note.body.trimEnd()}${kept}` } : note;
+
+    if (before && before.body === merged.body && before.description === merged.description) return;
+
+    await vault.write(merged);
+    byExternalId.set(merged.externalId, merged);
     if (before) result.updated += 1;
     else result.written += 1;
   };

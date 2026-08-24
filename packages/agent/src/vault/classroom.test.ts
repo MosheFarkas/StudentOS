@@ -212,6 +212,46 @@ describe('importing a snapshot', () => {
     expect(files).toHaveLength(0);
   });
 
+  it('does not wipe what another pass has added to a note', async () => {
+    /*
+     * A re-import rebuilds each note's body from Classroom and writes it, and
+     * that threw away everything any other pass had appended. Observed on a
+     * real vault: 723 files carried a summary of their own contents, an
+     * import ran, and 127 were left. Six hundred model calls, already paid
+     * for, gone -- and nothing said so, because from the importer's side it
+     * was simply an update.
+     *
+     * The rule that fixes it is a contract about the body: the importer owns
+     * everything above the first `## ` heading, and everything from that
+     * heading down belongs to whoever put it there.
+     */
+    const first = snapshot({
+      materials: [{ id: 'm1', course: 'Chemistry', title: 'Titration week', attachments: [] }],
+    });
+    await importClassroom(vault, first);
+
+    const note = await vault.read('entity', 'titration-week');
+    await vault.write({
+      ...note!,
+      body: `${note!.body}\n\n## What is in it (worksheet)\n\nStep by step titration method.`,
+    });
+
+    // The same import again, with the title changed so the note must be
+    // rewritten rather than skipped as identical.
+    await importClassroom(
+      vault,
+      snapshot({
+        materials: [
+          { id: 'm1', course: 'Chemistry', title: 'Titration week (updated)', attachments: [] },
+        ],
+      }),
+    );
+
+    const after = await vault.read('entity', 'titration-week');
+    expect(after?.body).toContain('Step by step titration method.');
+    expect(after?.body).toContain('Titration week (updated)');
+  });
+
   it('records an announcement as something that happened', async () => {
     /*
      * Two hundred and fifty-seven of these existed on a real account and none
