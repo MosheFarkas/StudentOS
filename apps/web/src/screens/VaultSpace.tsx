@@ -38,12 +38,24 @@ const COLOURS: Record<string, string> = {
   Material: '#fbbf24',
 };
 
+/*
+ * Files are the largest thing in the vault and they are not all alike.
+ *
+ * One a teacher attached in Classroom and one out of the student's own Drive
+ * are different objects: the first is what they were given, the second is what
+ * they made. Falling through to the same grey as everything unrecognised
+ * turned eleven hundred nodes -- the biggest group there is -- into fog.
+ */
+const OWN_FILE = '#a3e635';
+const GIVEN_FILE = '#fb923c';
+
 function colourFor(node: GraphNode): string {
   if (node.kind === 'episode') {
     // What the student said themselves is the one thing here they wrote.
     if (node.source === 'student') return '#34d399';
     return node.source === 'classroom' ? '#94a3b8' : '#7c8bb0';
   }
+  if (node.description === 'File') return node.source === 'drive' ? OWN_FILE : GIVEN_FILE;
   return COLOURS[node.description] ?? '#8a8fae';
 }
 
@@ -61,6 +73,8 @@ const KEY: { colour: string; label: string }[] = [
   { colour: COLOURS.Assignment as string, label: 'Work' },
   { colour: COLOURS.Topic as string, label: 'Units' },
   { colour: COLOURS.Material as string, label: 'Readings' },
+  { colour: GIVEN_FILE, label: 'Files from class' },
+  { colour: OWN_FILE, label: 'Your own files' },
   { colour: COLOURS.Person as string, label: 'People' },
   { colour: '#94a3b8', label: 'Things that happened' },
   { colour: '#34d399', label: 'What you told it' },
