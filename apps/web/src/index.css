@@ -1356,3 +1356,28 @@ a.button {
   border-color: var(--violet);
   color: var(--violet);
 }
+
+.vault-space-body {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+  max-height: 11rem;
+  overflow-y: auto;
+}
+
+/* A link inside the prose, which has to read as part of the sentence rather
+   than as a control sitting in the middle of it. */
+.vault-space-inline {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--violet);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vault-space-open {
+  font-size: 0.85rem;
+}

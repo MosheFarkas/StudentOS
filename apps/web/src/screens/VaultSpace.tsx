@@ -50,12 +50,38 @@ function colourFor(node: GraphNode): string {
 /** Labels are only legible up to a point; past it they are texture. */
 const MAX_LABELS = 26;
 
+interface Held {
+  body: string;
+  sourceUrl: string | null;
+}
+
+/**
+ * A note body, with its [[wikilinks]] turned into somewhere to go.
+ *
+ * The links are the whole structure of the vault, and rendered as raw brackets
+ * they are punctuation the student has to ignore. Made clickable they are the
+ * shortest path from "what did my teacher say" to the assignment it was about.
+ */
+function withLinks(body: string, go: (name: string) => void) {
+  return body.split(/(\[\[[^\]]+\]\])/g).map((piece, index) => {
+    const link = /^\[\[([^\]]+)\]\]$/.exec(piece);
+    if (!link) return <span key={index}>{piece}</span>;
+    const name = link[1] as string;
+    return (
+      <button key={index} type="button" className="vault-space-inline" onClick={() => go(name)}>
+        {name.replaceAll('-', ' ')}
+      </button>
+    );
+  });
+}
+
 export function VaultSpace({ agentId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [held, setHeld] = useState<Held | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   /*
@@ -83,6 +109,34 @@ export function VaultSpace({ agentId }: Props) {
       setGraph(await res.json());
     })();
   }, [agentId]);
+
+  /*
+   * The note itself, once something is actually held.
+   *
+   * Only on a click, never on a hover: moving the pointer across a thousand
+   * nodes would be a thousand requests. Seeing that an announcement exists is
+   * worth much less than reading what the teacher wrote in it.
+   */
+  useEffect(() => {
+    if (!focused) {
+      setHeld(null);
+      return;
+    }
+    let dropped = false;
+    void (async () => {
+      const res = await api.agents[':id'].vault[':name'].$get({
+        param: { id: agentId, name: focused },
+      });
+      // A click that lands while an older request is in flight must win, or
+      // the panel fills in with whatever the student stopped caring about.
+      if (!res.ok || dropped) return;
+      const data = await res.json();
+      setHeld({ body: data.note.body, sourceUrl: data.note.sourceUrl });
+    })();
+    return () => {
+      dropped = true;
+    };
+  }, [agentId, focused]);
 
   /*
    * What is lit.
@@ -380,6 +434,14 @@ export function VaultSpace({ agentId }: Props) {
               ? ` · ${node.cluster.replaceAll('-', ' ')}`
               : ''}
           </span>
+          {focused && held ? (
+            <p className="vault-space-body">{withLinks(held.body, setFocused)}</p>
+          ) : null}
+          {focused && held?.sourceUrl ? (
+            <a href={held.sourceUrl} target="_blank" rel="noreferrer" className="vault-space-open">
+              See it where it came from
+            </a>
+          ) : null}
           {linked.length > 0 ? (
             <p className="vault-space-links">
               {/* Clicking one moves the light onto it, which is how you walk
