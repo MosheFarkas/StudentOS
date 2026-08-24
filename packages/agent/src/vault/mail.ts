@@ -173,18 +173,25 @@ export async function importMail(
    * would produce exactly the duplicates the ids were meant to prevent.
    */
   const pending = messages.filter((message) => !already.has(message.messageId));
-  const extracted = await pooled(pending, EXTRACT_CONCURRENCY, async (message) => ({
-    message,
-    parsed: parseExtraction(
-      // No tools. Not an omission -- the containment argument rests on it.
-      (
-        await llm.chat(
-          { messages: chatFor(message, entities, neighbours), tools: undefined },
-          { userId },
-        )
-      ).content,
-    ),
-  }));
+  const extracted = await pooled(pending, EXTRACT_CONCURRENCY, async (message) => {
+    try {
+      const answer = await retrying(() =>
+        // No tools. Not an omission -- the containment argument rests on it.
+        llm.chat({ messages: chatFor(message, entities, neighbours), tools: undefined }, { userId }),
+      );
+      return { message, parsed: parseExtraction(answer.content) };
+    } catch {
+      /*
+       * One message failing is one message, not the import.
+       *
+       * A real run of a year of mail died on message six hundred: a single
+       * 429 rejected the Promise.all and five hundred and ninety-nine good
+       * extractions were discarded with it, having been paid for. Nothing
+       * reached disk, so starting again meant paying again.
+       */
+      return { message, parsed: null };
+    }
+  });
 
   for (const { message, parsed } of extracted) {
     const sender = parseSender(message.from);
@@ -267,6 +274,45 @@ export async function importMail(
 
 /** How many extractions run at once. Enough to be quick, few enough to be polite. */
 const EXTRACT_CONCURRENCY = 6;
+
+/**
+ * Worth going back for, or not.
+ *
+ * A rate limit and a server fault are the provider saying "come back shortly",
+ * and treating either as a verdict on the message throws mail away for a
+ * reason that has nothing to do with the mail. A malformed request is a real
+ * answer: asking again spends the same tokens to be told the same thing.
+ */
+function worthRetrying(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (status === 429 || (typeof status === 'number' && status >= 500)) return true;
+  return /\b429\b|rate.?limit|\b5\d\d\b|timeout|ECONNRESET|ETIMEDOUT/i.test(
+    (error as Error)?.message ?? '',
+  );
+}
+
+/*
+ * Backoff between attempts, in milliseconds.
+ *
+ * Long enough at the end to ride out a saturated minute rather than a single
+ * unlucky call: a year of mail is hundreds of extractions and the token limit
+ * is per minute, so the pool will sit against the ceiling for a while and the
+ * backoff is what regulates it down to the rate actually allowed. Concurrency
+ * only decides how far past the ceiling it reaches before doing so.
+ */
+const BACKOFF = [500, 2000, 6000, 15_000];
+
+async function retrying<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      const wait = BACKOFF[attempt];
+      if (wait === undefined || !worthRetrying(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+}
 
 /** Run tasks with a small pool, preserving input order in the result. */
 async function pooled<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {

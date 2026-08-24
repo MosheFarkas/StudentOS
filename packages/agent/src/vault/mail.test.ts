@@ -70,6 +70,79 @@ describe('importing school mail', () => {
       domains: ['school.example'],
     });
 
+  it('keeps going when one message cannot be extracted', async () => {
+    /*
+     * A real import of a year of mail died on message six hundred: OpenAI
+     * returned one 429, Promise.all rejected, and five hundred and ninety-nine
+     * successful extractions went in the bin along with it. Nothing was
+     * written, and the run had to start over into the same rate limit.
+     */
+    let call = 0;
+    const llm = {
+      chat: vi.fn(async () => {
+        call += 1;
+        // A 400 rather than a 429, so it stays failed: a retryable error
+        // would succeed on the next attempt and prove nothing.
+        if (call === 2) throw new Error('400 invalid request');
+        return {
+          content: kept(),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        };
+      }),
+    };
+
+    const result = await run(llm, [
+      message({ messageId: 'm-1' }),
+      message({ messageId: 'm-2', subject: 'Second' }),
+      message({ messageId: 'm-3', subject: 'Third' }),
+    ]);
+
+    // The two that worked are on disk; the one that failed is counted, not
+    // silently dropped and not fatal.
+    expect(result.written).toBe(2);
+    expect(result.skipped).toBe(1);
+    expect(await vault.list('episode')).toHaveLength(2);
+  });
+
+  it('tries a rate-limited message again before giving up on it', async () => {
+    // A rate limit is a "come back shortly", not a verdict on the message.
+    // Treating it as failure throws away mail for a reason that has nothing
+    // to do with the mail.
+    let call = 0;
+    const llm = {
+      chat: vi.fn(async () => {
+        call += 1;
+        if (call === 1) throw new Error('429 rate_limit_exceeded');
+        return {
+          content: kept(),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        };
+      }),
+    };
+
+    const result = await run(llm, [message()]);
+    expect(result.written).toBe(1);
+    expect(call).toBe(2);
+  });
+
+  it('does not retry a message the model genuinely could not answer', async () => {
+    // Retrying a schema violation just spends the same tokens to get the same
+    // answer. Only a rate limit and a server fault are worth going back for.
+    const llm = {
+      chat: vi.fn(async () => {
+        throw new Error('400 invalid request: context length exceeded');
+      }),
+    };
+
+    const result = await run(llm, [message()]);
+    expect(result.skipped).toBe(1);
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+  });
+
   it('writes an episode for a message worth keeping', async () => {
     const result = await run(llmReturning(kept()), [message()]);
 
