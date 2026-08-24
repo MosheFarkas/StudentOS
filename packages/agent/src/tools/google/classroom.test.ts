@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listAnnouncements, listCourseMaterials, listCourses, MODEL_PAGE } from './classroom.js';
+import {
+  listAnnouncements,
+  listCourseMaterials,
+  listCourses,
+  listSubmissions,
+  MODEL_PAGE,
+} from './classroom.js';
 import type { ToolContext } from '../types.js';
 
 /**
@@ -174,5 +180,57 @@ describe("which courses count as the student's", () => {
       'Extended History of Quebec and Canada 10',
       'Grade 10 Math',
     ]);
+  });
+});
+
+describe('the work a student handed in', () => {
+  /*
+   * A submission's attachments are shaped differently from a coursework
+   * material's. Coursework nests it -- {driveFile: {driveFile: {...}}} --
+   * and a submission does not: {driveFile: {id, title}}. Reusing the
+   * coursework mapper on a submission silently produced nothing, and the
+   * importer's own test did not catch it because its fixture handed over
+   * attachments that were already mapped. It tested the importer; nothing
+   * tested the shape the API actually returns.
+   */
+  it("reads the student's own file off a submission", async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const body = /\/courses\?/.test(url)
+        ? { courses: [{ id: 'c1', name: 'Chemistry' }] }
+        : {
+            studentSubmissions: [
+              {
+                id: 's1',
+                courseId: 'c1',
+                courseWorkId: 'w1',
+                state: 'TURNED_IN',
+                assignmentSubmission: {
+                  attachments: [
+                    {
+                      driveFile: {
+                        id: 'mine-1',
+                        title: 'Lucas Liu - Activities Ch 4',
+                        alternateLink: 'https://drive/mine-1',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const result = (await listSubmissions.execute({} as never, ctx())) as {
+      submissions: { attachments?: { title: string; fileId?: string }[] }[];
+    };
+
+    const mine = result.submissions[0]?.attachments ?? [];
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.title).toBe('Lucas Liu - Activities Ch 4');
+    expect(mine[0]?.fileId).toBe('mine-1');
   });
 });

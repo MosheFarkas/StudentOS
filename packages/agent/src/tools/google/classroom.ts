@@ -640,7 +640,7 @@ export const listSubmissions: Tool<
           courseId: s.courseId ?? '',
           courseWorkId: s.courseWorkId ?? '',
           ...(() => {
-            const mine = toAttachments(s.assignmentSubmission?.attachments);
+            const mine = toSubmissionAttachments(s.assignmentSubmission?.attachments);
             return mine.length > 0 ? { attachments: mine } : {};
           })(),
           ...(s.alternateLink ? { link: s.alternateLink } : {}),
@@ -667,8 +667,42 @@ export const listSubmissions: Tool<
   },
 };
 
+/**
+ * What a student attached to their submission.
+ *
+ * Shaped differently from a coursework material, which nests it as
+ * `driveFile.driveFile`. A submission does not nest it, and running the
+ * coursework mapper over one silently produces nothing at all -- which is what
+ * happened: 57 files of the student's own work mapped to zero.
+ */
+interface SubmissionAttachment {
+  driveFile?: { id?: string; title?: string; alternateLink?: string };
+  youTubeVideo?: { title?: string; alternateLink?: string };
+  link?: { title?: string; url?: string };
+  form?: { title?: string; formUrl?: string };
+}
+
+function toSubmissionAttachments(items: SubmissionAttachment[] | undefined): Attachment[] {
+  return (items ?? []).flatMap((item): Attachment[] => {
+    if (item.driveFile?.id) {
+      return [
+        {
+          kind: 'file',
+          title: item.driveFile.title ?? 'Untitled file',
+          ...(item.driveFile.alternateLink ? { url: item.driveFile.alternateLink } : {}),
+          fileId: item.driveFile.id,
+        },
+      ];
+    }
+    if (item.link?.url)
+      return [{ kind: 'link', title: item.link.title ?? item.link.url, url: item.link.url }];
+    // A video or a form handed in is a URL, not something that can be read.
+    return [];
+  });
+}
+
 interface RawSubmission {
-  assignmentSubmission?: { attachments?: ClassroomMaterial[] };
+  assignmentSubmission?: { attachments?: SubmissionAttachment[] };
   id?: string;
   courseId?: string;
   courseWorkId?: string;
