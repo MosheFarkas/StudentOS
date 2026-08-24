@@ -33,7 +33,9 @@ describe('what a rate limit is worth waiting', () => {
 
   it('falls back to a widening wait when nothing is suggested', () => {
     const plain = new Error('503 Service Unavailable');
-    expect(waitFor(plain, 0)).toBeLessThan(waitFor(plain, 2));
+    const first = waitFor(plain, 0) ?? 0;
+    const later = waitFor(plain, 2) ?? 0;
+    expect(first).toBeLessThan(later);
   });
 
   it('is willing to wait out a whole minute', () => {

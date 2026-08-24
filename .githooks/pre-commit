@@ -1,27 +1,47 @@
 #!/bin/sh
 #
-# Refuse a commit CI would reject on its first step.
+# Refuse a commit CI would reject.
 #
-# CI runs `prettier --check .` before anything else, so an unformatted file
-# fails the run in seconds and every later step -- lint, typecheck, tests,
-# build -- never runs at all. That is a slow way to find out, and a whole
-# session's worth of pushes went red this way before anyone looked.
+# CI runs format, lint, typecheck, test, build in that order and stops at the
+# first failure -- so one unformatted file turns the run red in seconds and
+# nothing else ever executes. A whole session of pushes went red that way.
 #
-# Only staged files are checked, deliberately. Being blocked by a scratch file
-# sitting unstaged in the working tree teaches people to pass --no-verify,
+# This covers the three fast checks. Tests and build stay with CI: they are
+# slow enough that running them here would make people reach for --no-verify,
 # and a hook that gets bypassed is worse than no hook.
 
-staged=$(git diff --cached --name-only --diff-filter=ACM |
-  grep -Ei '\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|html|ya?ml)$' || true)
+changed=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$changed" ] && exit 0
 
-[ -z "$staged" ] && exit 0
-
-# NUL-delimited: filenames in this repo contain spaces.
-if ! git diff --cached --name-only --diff-filter=ACM -z |
-  grep -zEi '\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|html|ya?ml)$' |
-  xargs -0 npx prettier --check --ignore-unknown 2>&1; then
+fail() {
   echo ""
-  echo "Formatting would fail CI. Run:  pnpm format"
-  echo "Then stage the changes and commit again."
+  echo "This would fail CI. Fix it, stage the changes, and commit again."
+  echo "  $1"
   exit 1
+}
+
+# Formatting: only staged files, so an unrelated scratch file in the working
+# tree cannot block a commit. NUL-delimited because filenames here have spaces.
+if git diff --cached --name-only --diff-filter=ACM -z |
+  grep -zEi '\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|html|ya?ml)$' |
+  xargs -0 -r npx prettier --check --ignore-unknown >/dev/null 2>&1; then
+  :
+else
+  git diff --cached --name-only --diff-filter=ACM -z |
+    grep -zEi '\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|html|ya?ml)$' |
+    xargs -0 -r npx prettier --check --ignore-unknown 2>&1 | tail -20
+  fail "pnpm format"
+fi
+
+# Lint and types only when TypeScript actually changed. Both are
+# whole-project checks -- a type error is rarely in the file that caused it.
+if echo "$changed" | grep -qE '\.(ts|tsx)$'; then
+  pnpm -w run lint >/dev/null 2>&1 || {
+    pnpm -w run lint 2>&1 | tail -20
+    fail "pnpm lint"
+  }
+  pnpm -w run typecheck >/dev/null 2>&1 || {
+    pnpm -w run typecheck 2>&1 | grep -E 'error TS' | head -20
+    fail "pnpm typecheck"
+  }
 fi
