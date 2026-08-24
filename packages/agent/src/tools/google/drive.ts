@@ -551,3 +551,58 @@ function describeKind(mimeType: string): string {
   if (PLAIN_TEXT.test(mimeType)) return 'Text file';
   return mimeType || 'File';
 }
+
+/**
+ * Every file in the student's Drive, for the vault importer.
+ *
+ * Separate from listAccessibleFiles, which is what a conversation calls: that
+ * one stops at a hundred and returns the four fields a model needs to pick a
+ * file. This pages through the lot and asks for the fields that decide how a
+ * note is written and in what order files get read -- who owns it, when it
+ * last changed, where it sits.
+ *
+ * The ceiling is a guard against a pathological account, not a sample. A real
+ * school account came back with 580.
+ */
+export async function listAllDriveFiles(
+  token: string,
+  options: { signal?: AbortSignal; max?: number } = {},
+): Promise<DriveFileMeta[] | ReturnType<typeof unavailable>> {
+  const max = options.max ?? 5000;
+  const files: DriveFileMeta[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      q: 'trashed = false',
+      pageSize: '1000',
+      fields:
+        'nextPageToken,files(id,name,mimeType,parents,ownedByMe,modifiedTime,webViewLink)',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const result = await googleFetch<{ files?: DriveFileMeta[]; nextPageToken?: string }>(
+      `${FILES_URL}?${params.toString()}`,
+      token,
+      { ...(options.signal ? { signal: options.signal } : {}) },
+    );
+    if (isUnavailable(result)) return files.length > 0 ? files : result;
+
+    files.push(...(result.files ?? []));
+    pageToken = result.nextPageToken;
+  } while (pageToken && files.length < max);
+
+  return files;
+}
+
+export interface DriveFileMeta {
+  id: string;
+  name?: string;
+  mimeType?: string;
+  parents?: string[];
+  ownedByMe?: boolean;
+  modifiedTime?: string;
+  webViewLink?: string;
+}

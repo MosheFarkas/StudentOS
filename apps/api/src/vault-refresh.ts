@@ -6,6 +6,8 @@ import {
   collectSchoolMail,
   discoverSchoolDomains,
   readFileContents,
+  collectDriveFiles,
+  importDrive,
   domainOf,
   importClassroom,
   importMail,
@@ -76,6 +78,15 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
   }
 
   /*
+   * The student's own Drive: their essays, their revision, their project.
+   *
+   * Listing is free and needs no model, so it happens every refresh and picks
+   * up whatever is new. What each file is actually about is settled by the
+   * reading pass below, which has to open it anyway.
+   */
+  const drive = await importDrive(vault, await collectDriveFiles(toolContext));
+
+  /*
    * And read some of the files, a few at a time.
    *
    * A real account has hundreds of them and each one is a model call, so this
@@ -97,7 +108,7 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
 
   return (
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
-    `${files.read} files read (${files.remaining} to go)`
+    `${drive.written} drive files, ${files.read} read (${files.remaining} to go)`
   );
 }
 

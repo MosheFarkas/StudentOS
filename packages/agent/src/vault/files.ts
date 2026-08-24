@@ -77,6 +77,8 @@ const ENOUGH = 6000;
 const summary = z.object({
   what: z.string().max(300),
   kind: z.string().max(40).default(''),
+  /** The course it belongs to, if it clearly belongs to one. */
+  inCourse: z.array(z.string()).max(2).default([]),
 });
 
 const ASK = [
@@ -85,20 +87,37 @@ const ASK = [
   '',
   untrustedNote('The file below was written by somebody else, usually a teacher.'),
   '',
-  'Reply with JSON only, no prose around it: {"what": string, "kind": string}',
+  'Reply with JSON only, no prose around it:',
+  '{"what": string, "kind": string, "inCourse": string[]}',
   '',
   'what: one or two sentences saying what this file is for and what is in it, in the',
   'words a student would use. Not "this document contains" -- say the thing.',
   'kind: what sort of file it is. worksheet, reading, slides, notes, rubric, past paper,',
   'form, template, or something else that fits.',
+  'inCourse: the course this belongs to, using only a name from the list you are given,',
+  'and only when it plainly belongs to one. Leave it empty rather than guessing -- a',
+  'wrong subject is worse than no subject.',
 ].join('\n');
 
 export async function readFileContents(
   { llm, read }: FileReadDeps,
   { vault, userId, limit = PER_PASS }: FileReadOptions,
 ): Promise<FileReadResult> {
-  const files = (await vault.list('entity')).filter(
+  const entities = await vault.list('entity');
+  const files = entities.filter(
     (note) => note.description === 'File' && note.externalId && !note.body.includes(SECTION),
+  );
+
+  /*
+   * The courses, and only the courses.
+   *
+   * Thirteen names is a shortlist small enough to put in every prompt, and a
+   * course is the edge that matters -- it is what puts a loose file on the
+   * right thread instead of leaving it a dot. Offering every note in the vault
+   * would be two thousand names and an invitation to guess.
+   */
+  const courses = new Set(
+    entities.filter((note) => note.description === 'Course').map((note) => note.name),
   );
 
   const result: FileReadResult = {
@@ -138,7 +157,13 @@ export async function readFileContents(
       const answer = await llm.chat(
         {
           messages: [
-            { role: 'system', content: ASK },
+            {
+              role: 'system',
+              content:
+                courses.size > 0
+                  ? `${ASK}\n\nThe courses, and the only names inCourse may contain:\n${[...courses].join('\n')}`
+                  : ASK,
+            },
             { role: 'user', content: `${note.name.replaceAll('-', ' ')}\n\n${text.slice(0, ENOUGH)}` },
           ],
           tools: undefined,
@@ -151,7 +176,7 @@ export async function readFileContents(
         result.failed += 1;
         continue;
       }
-      await append(vault, note, parsed.what.trim(), parsed.kind.trim());
+      await append(vault, note, parsed.what.trim(), parsed.kind.trim(), links(parsed, courses, note));
       result.read += 1;
     } catch {
       result.failed += 1;
@@ -161,15 +186,39 @@ export async function readFileContents(
   return result;
 }
 
+/**
+ * The course lines to add, if any.
+ *
+ * A link may only point at a note that already exists -- the same rule the
+ * mail pass follows, so an edge always lands somewhere real rather than at a
+ * name the model produced. And a course the note is already filed under is
+ * dropped, because the same link twice is a lie about how connected a thing
+ * is: degree is what decides where it sits in the picture.
+ */
+function links(
+  parsed: z.infer<typeof summary>,
+  courses: ReadonlySet<string>,
+  note: VaultNote,
+): string[] {
+  return parsed.inCourse
+    .filter((name) => courses.has(name) && !note.body.includes(`[[${name}]]`))
+    .map((name) => `Part of [[${name}]].`);
+}
+
 /** Add the summary to the note, keeping every link it already had. */
 async function append(
   vault: Vault,
   note: VaultNote,
   what: string,
   kind: string,
+  extraLinks: string[] = [],
 ): Promise<void> {
   const heading = kind ? `${SECTION} (${kind})` : SECTION;
-  await vault.write({ ...note, body: `${note.body.trimEnd()}\n\n${heading}\n\n${what}` });
+  const filed = extraLinks.length > 0 ? `\n${extraLinks.join('\n')}` : '';
+  await vault.write({
+    ...note,
+    body: `${note.body.trimEnd()}${filed}\n\n${heading}\n\n${what}`,
+  });
 }
 
 /** The model's answer, or nothing if it did not answer in the shape asked for. */

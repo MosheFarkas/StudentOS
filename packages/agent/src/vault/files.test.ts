@@ -19,11 +19,11 @@ import { readFileContents } from './files.js';
  * is paid over several runs rather than all at once.
  */
 
-const summary = (text: string) => ({
+const summary = (text: string, inCourse: string[] = []) => ({
   // Typed parameters so a test can inspect what the pass was actually sent --
   // the toolless check reads the request rather than trusting the code.
   chat: vi.fn(async (_request: { messages: unknown[]; tools?: unknown }, _ctx?: unknown) => ({
-    content: JSON.stringify({ what: text, kind: 'worksheet' }),
+    content: JSON.stringify({ what: text, kind: 'worksheet', inCourse }),
     toolCalls: [],
     usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     finishReason: 'stop' as const,
@@ -114,6 +114,69 @@ describe('reading the files in the vault', () => {
     expect(second.read).toBe(0);
     expect(second.unreadable).toBe(0);
     expect(deps.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('files a loose Drive file under the course it turns out to be about', async () => {
+    /*
+     * A file out of the student's own Drive arrives with a name and nothing
+     * else -- on a real account 459 of 469 of them resolve to no folder at
+     * all. The pass that reads it has the file open anyway, so deciding which
+     * course it belongs to costs nothing extra, and it is the difference
+     * between a loose dot and something on the right thread.
+     */
+    await vault.write({
+      name: 'grade-10-math',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Grade 10 Math.',
+    });
+    await vault.write({
+      name: 'june-exam-study-guide',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'drive-9',
+      body: 'June Exam Study Guide.\n\nYours -- you made this.',
+    });
+
+    await run({
+      llm: summary('Revision questions on quadratics and trigonometry.', ['grade-10-math']),
+      read: async () => 'Solve for x. Find the missing angle.',
+    });
+
+    expect((await vault.read('entity', 'june-exam-study-guide'))?.body).toContain(
+      'Part of [[grade-10-math]]',
+    );
+  });
+
+  it('will not invent a course that does not exist', async () => {
+    // The same rule the mail pass follows: a link may only point at a note
+    // that is already there, so an edge always lands somewhere real.
+    await run({
+      llm: summary('Something.', ['a-course-nobody-has']),
+      read: async () => 'text',
+    });
+
+    expect((await vault.read('entity', 'titration-method'))?.body).not.toContain('[[a-course');
+  });
+
+  it('does not file a note under a course it is already filed under', async () => {
+    await vault.write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    await run({
+      llm: summary('A method.', ['chemistry']),
+      read: async () => 'text',
+    });
+
+    const body = (await vault.read('entity', 'titration-method'))?.body ?? '';
+    expect(body.match(/\[\[chemistry\]\]/g)).toHaveLength(1);
   });
 
   it('leaves everything that is not a file alone', async () => {

@@ -32,6 +32,8 @@ export { importClassroom, type ClassroomSnapshot, type ImportResult } from './va
 export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
 export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
 export { readFileContents, type FileReadResult } from './vault/files.js';
+export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
+export { collectDriveFiles } from './vault/collect-drive.js';
 export {
   collectSchoolMail,
   discoverSchoolDomains,

@@ -25,7 +25,7 @@ import { join, resolve, sep } from 'node:path';
 export type NoteKind = 'entity' | 'episode';
 
 /** Who wrote the material a note is derived from. */
-export type NoteSource = 'student' | 'classroom' | 'gmail' | 'portal' | 'agent';
+export type NoteSource = 'student' | 'classroom' | 'drive' | 'gmail' | 'portal' | 'agent';
 
 /**
  * What kind of thing happened.
