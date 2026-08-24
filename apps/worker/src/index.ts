@@ -152,7 +152,7 @@ const jobs: Job[] = [
            * vault containing conversations and no school.
            */
           if (ctx.vaultRoot && result.exchanges.length > 0 && result.newestId) {
-            const vault = new Vault(ctx.vaultRoot, agentId);
+            const vault = new Vault(ctx.vaultRoot, userId);
             if (await vault.has()) {
               const written = await importConversation(
                 { llm },

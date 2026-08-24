@@ -46,7 +46,7 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
     google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
   };
 
-  const vault = new Vault(ctx.env.VAULT_ROOT as string, agentId);
+  const vault = new Vault(ctx.env.VAULT_ROOT as string, userId);
   const { snapshot } = await collectClassroomSnapshot(toolContext);
   const classroom = await importClassroom(vault, snapshot);
 

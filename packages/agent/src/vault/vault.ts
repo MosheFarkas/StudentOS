@@ -88,11 +88,27 @@ const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 export class Vault {
   readonly #dir: string;
 
-  constructor(root: string, agentId: string) {
-    // Agent ids are database uuids. Anything else is a caller mistake, and a
-    // caller mistake here is a directory somewhere it should not be.
-    if (!/^[a-zA-Z0-9-]+$/.test(agentId)) throw new Error(`Unsafe agent id: ${agentId}`);
-    this.#dir = join(root, agentId);
+  /**
+   * @param ownerId The student the vault belongs to, never an agent.
+   *
+   * It is built from their own Classroom and their own mail, so it is theirs
+   * and every agent they make reads the same one. Keyed by agent it was a
+   * second empty vault per agent, and an agent that knew nothing about their
+   * school -- found on a real account with 1401 notes filed under an agent the
+   * settings page was not showing.
+   */
+  constructor(root: string, ownerId: string) {
+    /*
+     * Better Auth issues nanoids and the database issues uuids, so both
+     * alphabets have to pass -- nanoid's includes the underscore, which the
+     * uuid-shaped rule this started as rejected outright.
+     *
+     * Everything else is refused, because this becomes a path segment and it
+     * is the only thing between a malformed caller and another student's
+     * notes. No dot, no slash, so no way to climb out.
+     */
+    if (!/^[A-Za-z0-9_-]+$/.test(ownerId)) throw new Error(`Unsafe owner id: ${ownerId}`);
+    this.#dir = join(root, ownerId);
   }
 
   /**

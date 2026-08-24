@@ -1,5 +1,9 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
+import { Vault } from '@contexto/agent';
 import { eq } from 'drizzle-orm';
 import { agentMessages } from '@contexto/db';
 import { createAuth } from '../auth.js';
@@ -25,6 +29,16 @@ import {
  */
 
 let app: Hono;
+
+/*
+ * A second server, with vaults switched on.
+ *
+ * The first deliberately has VAULT_ROOT unset, which is the ordinary state of
+ * a deployment that has not turned vaults on and is what one of the tests
+ * below is about. Anything that needs a real vault on disk uses this one.
+ */
+let withVaults: Hono;
+let vaultRoot: string;
 
 beforeAll(async () => {
   const db = await testDb();
@@ -53,7 +67,13 @@ beforeAll(async () => {
   // Same error handler as the real server -- see src/errors.ts. Without it a
   // test harness sees 500s where production returns 404s.
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
+
+  vaultRoot = mkdtempSync(join(tmpdir(), 'contexto-routes-vault-'));
+  const vaultCtx = { ...ctx, env: { ...env, VAULT_ROOT: vaultRoot } } as unknown as AppContext;
+  withVaults = new Hono().route('/api', createRoutes(vaultCtx)).onError(handleError);
 });
+
+afterAll(() => rmSync(vaultRoot, { recursive: true, force: true }));
 
 beforeEach(reset);
 
@@ -421,6 +441,53 @@ describe('browsing the vault', () => {
     expect(res.status).toBe(200);
     expect(body.groups).toEqual([]);
     expect(body.episodes).toBe(0);
+  });
+
+  it('is the same vault whichever of a student\'s agents asks for it', async () => {
+    /*
+     * The vault is built from the student's own Classroom and mail. It is
+     * theirs, not any one agent's -- so keying it by agent gave a student who
+     * made a second agent a second, empty vault, and that agent knew nothing
+     * about their school at all. Found on a real account: two agents, 1401
+     * notes under one of them and the settings page showing the other.
+     */
+    const alice = await createUser();
+    const first = await createAgent(alice.id);
+    const second = await createAgent(alice.id);
+
+    await new Vault(vaultRoot, alice.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    for (const agent of [first, second]) {
+      const res = await withVaults.request(`/api/agents/${agent.id}/vault`, as(alice.token));
+      const body = (await res.json()) as { groups: { kind: string; notes: unknown[] }[] };
+      expect(body.groups[0]?.notes).toHaveLength(1);
+    }
+  });
+
+  it('does not hand a student the vault of another student\'s agent', async () => {
+    // The route is scoped by owner, and the vault is now keyed by owner too --
+    // so this checks the second lookup did not quietly widen the first.
+    const alice = await createUser();
+    const bob = await createUser();
+    const agent = await createAgent(bob.id);
+
+    await new Vault(vaultRoot, bob.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    expect(
+      (await withVaults.request(`/api/agents/${agent.id}/vault`, as(alice.token))).status,
+    ).toBe(404);
   });
 
   it("will not show one student another's vault", async () => {

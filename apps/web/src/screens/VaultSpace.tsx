@@ -50,6 +50,22 @@ function colourFor(node: GraphNode): string {
 /** Labels are only legible up to a point; past it they are texture. */
 const MAX_LABELS = 26;
 
+/*
+ * What the colours mean.
+ *
+ * Without this it is six colours of dot and no way to know which is which, and
+ * a picture nobody can read is decoration however true its geometry is.
+ */
+const KEY: { colour: string; label: string }[] = [
+  { colour: COLOURS.Course as string, label: 'Courses' },
+  { colour: COLOURS.Assignment as string, label: 'Work' },
+  { colour: COLOURS.Topic as string, label: 'Units' },
+  { colour: COLOURS.Material as string, label: 'Readings' },
+  { colour: COLOURS.Person as string, label: 'People' },
+  { colour: '#94a3b8', label: 'Things that happened' },
+  { colour: '#34d399', label: 'What you told it' },
+];
+
 interface Held {
   body: string;
   sourceUrl: string | null;
@@ -141,10 +157,10 @@ export function VaultSpace({ agentId }: Props) {
   /*
    * What is lit.
    *
-   * A search lights every match. Otherwise it is whatever is held or hovered,
-   * plus everything one link away from it -- which is the whole point of
-   * holding something: an assignment on its own is a dot, and an assignment
-   * with its course, its unit and the six emails about it is a story.
+   * A search lights every match. Otherwise it is whatever is held, plus
+   * everything one link away from it -- which is the whole point of holding
+   * something: an assignment on its own is a dot, and an assignment with its
+   * course, its unit and the six emails about it is a story.
    */
   const lit = useMemo(() => {
     if (!graph) return null;
@@ -157,17 +173,33 @@ export function VaultSpace({ agentId }: Props) {
       return new Set(matches);
     }
 
-    const centre = focused ?? hovered;
-    if (!centre) return null;
-    return new Set([centre, ...neighbours(graph.edges, centre)]);
-  }, [graph, query, focused, hovered]);
+    /*
+     * Holding, not hovering.
+     *
+     * Hover used to light the whole neighbourhood too, which meant dragging
+     * the pointer across a thousand nodes strobed the entire picture. Hover
+     * now only names what is under the pointer; lighting up is something you
+     * ask for.
+     */
+    if (!focused) return null;
+    return new Set([focused, ...neighbours(graph.edges, focused)]);
+  }, [graph, query, focused]);
 
   // Read by the draw loop, which must not restart every time a pointer moves.
-  const view = useRef<{ lit: Set<string> | null; centre: string | null }>({
+  const view = useRef<{ lit: Set<string> | null; centre: string | null; named: string | null }>({
     lit: null,
     centre: null,
+    named: null,
   });
-  view.current = { lit, centre: focused ?? hovered };
+  view.current = { lit, centre: focused, named: hovered };
+
+  /*
+   * How far into the lit state the picture is, 0 to 1.
+   *
+   * Eased rather than switched, so letting go fades the vault back up instead
+   * of snapping. It is also what stops a hover-then-click from flashing.
+   */
+  const emphasis = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -222,7 +254,13 @@ export function VaultSpace({ agentId }: Props) {
       const points = project(placed, camera.current, width, height);
       projected.current = points;
       const screen = new Map(points.map((point) => [point.placed.node.name, point]));
-      const { lit: onlyThese, centre } = view.current;
+      const { lit: onlyThese, centre, named } = view.current;
+
+      emphasis.current += ((onlyThese ? 1 : 0) - emphasis.current) * 0.14;
+      const held = emphasis.current;
+      // Below this the fade is finished and the two paths would draw the same
+      // thing, so the cheaper one wins.
+      const lighting = held > 0.01 && onlyThese !== null;
 
       /*
        * Edges first, and in two passes.
@@ -234,31 +272,44 @@ export function VaultSpace({ agentId }: Props) {
        * contrast is the entire answer to "what is this connected to".
        */
       context.lineWidth = 0.5;
-      context.strokeStyle = onlyThese ? 'rgba(120, 132, 190, 0.05)' : 'rgba(130, 142, 200, 0.13)';
+      context.strokeStyle = `rgba(130, 142, 200, ${0.13 - held * 0.08})`;
       context.beginPath();
       for (const edge of graph.edges) {
         const from = screen.get(edge.from);
         const to = screen.get(edge.to);
         if (!from || !to) continue;
-        if (onlyThese && centre && (edge.from === centre || edge.to === centre)) continue;
+        if (lighting && centre && (edge.from === centre || edge.to === centre)) continue;
         context.moveTo(from.screenX, from.screenY);
         context.lineTo(to.screenX, to.screenY);
       }
       context.stroke();
 
-      if (onlyThese && centre) {
-        context.lineWidth = 1.2;
-        context.strokeStyle = 'rgba(167, 139, 250, 0.75)';
-        context.beginPath();
+      /*
+       * Every link that touches what is held, drawn over the top.
+       *
+       * Coloured from the thing at the far end rather than one flat accent, so
+       * a held course shows at a glance that its work is blue, its units are
+       * cyan and the people who mailed about it are pink. One stroke each,
+       * which is a few dozen even on the busiest node in the vault.
+       */
+      if (lighting && centre) {
+        const anchor = screen.get(centre);
+        context.lineWidth = 1.4;
+        context.globalAlpha = held;
         for (const edge of graph.edges) {
-          if (edge.from !== centre && edge.to !== centre) continue;
-          const from = screen.get(edge.from);
-          const to = screen.get(edge.to);
-          if (!from || !to) continue;
-          context.moveTo(from.screenX, from.screenY);
-          context.lineTo(to.screenX, to.screenY);
+          const otherEnd =
+            edge.from === centre ? edge.to : edge.to === centre ? edge.from : null;
+          if (otherEnd === null || !anchor) continue;
+          const other = screen.get(otherEnd);
+          if (!other) continue;
+
+          context.strokeStyle = colourFor(other.placed.node);
+          context.beginPath();
+          context.moveTo(anchor.screenX, anchor.screenY);
+          context.lineTo(other.screenX, other.screenY);
+          context.stroke();
         }
-        context.stroke();
+        context.globalAlpha = 1;
       }
 
       /*
@@ -270,12 +321,13 @@ export function VaultSpace({ agentId }: Props) {
        * frame the student is looking at while they drag, which is exactly the
        * frame that must not stutter.
        */
-      if (onlyThese) {
-        context.globalAlpha = 0.07;
+      if (lighting) {
+        // Eased with the rest, so letting go fades the vault back up.
+        context.globalAlpha = 0.07 + (1 - held) * 0.5;
         context.fillStyle = '#8a8fae';
         context.beginPath();
         for (const point of points) {
-          if (onlyThese.has(point.placed.node.name)) continue;
+          if (onlyThese?.has(point.placed.node.name)) continue;
           const radius = Math.max(1, point.size);
           context.moveTo(point.screenX + radius, point.screenY);
           context.arc(point.screenX, point.screenY, radius, 0, Math.PI * 2);
@@ -287,11 +339,11 @@ export function VaultSpace({ agentId }: Props) {
       for (const point of points) {
         const node = point.placed.node;
         const isLit = !onlyThese || onlyThese.has(node.name);
-        if (onlyThese && !isLit) continue;
+        if (lighting && !isLit) continue;
         // Further away is fainter, which is what makes it read as depth at all.
         const fade = Math.max(0.3, Math.min(1, 6 / point.depth - 0.3));
 
-        context.globalAlpha = onlyThese ? 1 : fade;
+        context.globalAlpha = fade + (1 - fade) * (isLit ? held : 0);
         context.fillStyle = colourFor(node);
 
         /*
@@ -299,8 +351,8 @@ export function VaultSpace({ agentId }: Props) {
          * a 2D canvas, and asking for it on a thousand nodes every frame drops
          * the whole thing to single figures.
          */
-        if (isLit && onlyThese) {
-          context.shadowBlur = node.name === centre ? 22 : 11;
+        if (isLit && lighting) {
+          context.shadowBlur = (node.name === centre ? 22 : 11) * held;
           context.shadowColor = colourFor(node);
         }
 
@@ -324,7 +376,24 @@ export function VaultSpace({ agentId }: Props) {
        * those: a thousand labels is a solid block of text, and the point of
        * lighting something up is to be able to read it.
        */
-      if (onlyThese) {
+      /*
+       * A ring around what the pointer is over, when nothing is held.
+       *
+       * Hover no longer lights the neighbourhood, so it needs some other way
+       * to say "this is the one you would be holding".
+       */
+      if (!lighting && named) {
+        const point = screen.get(named);
+        if (point) {
+          context.strokeStyle = '#ffffff';
+          context.lineWidth = 1.5;
+          context.beginPath();
+          context.arc(point.screenX, point.screenY, Math.max(4, point.size + 4), 0, Math.PI * 2);
+          context.stroke();
+        }
+      }
+
+      if (lighting && onlyThese) {
         const labelled = points
           .filter((point) => onlyThese.has(point.placed.node.name))
           .sort((a, b) => b.placed.node.degree - a.placed.node.degree)
@@ -332,6 +401,7 @@ export function VaultSpace({ agentId }: Props) {
 
         context.font = '11px ui-sans-serif, system-ui, sans-serif';
         context.textBaseline = 'middle';
+        context.globalAlpha = held;
         for (const point of labelled) {
           const node = point.placed.node;
           const text = node.name.replaceAll('-', ' ');
@@ -343,6 +413,20 @@ export function VaultSpace({ agentId }: Props) {
           context.fillRect(x - 3, y - 8, width_ + 6, 16);
           context.fillStyle = node.name === centre ? '#ffffff' : '#c7cbe4';
           context.fillText(text, x, y);
+        }
+        context.globalAlpha = 1;
+      } else if (named) {
+        // Just the one name, for whatever is under the pointer.
+        const point = screen.get(named);
+        if (point) {
+          const text = named.replaceAll('-', ' ');
+          context.font = '11px ui-sans-serif, system-ui, sans-serif';
+          context.textBaseline = 'middle';
+          const x = point.screenX + point.size + 6;
+          context.fillStyle = 'rgba(7, 9, 28, 0.72)';
+          context.fillRect(x - 3, point.screenY - 8, context.measureText(text).width + 6, 16);
+          context.fillStyle = '#ffffff';
+          context.fillText(text, x, point.screenY);
         }
       }
 
@@ -405,6 +489,17 @@ export function VaultSpace({ agentId }: Props) {
             Let go
           </button>
         ) : null}
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            target.current = { spin: 0.5, tilt: 0.35, zoom: 1 };
+            setFocused(null);
+            setQuery('');
+          }}
+        >
+          Reset
+        </button>
       </div>
 
       <canvas
@@ -447,12 +542,21 @@ export function VaultSpace({ agentId }: Props) {
         }}
       />
 
+      <div className="vault-space-key">
+        {KEY.map((entry) => (
+          <span key={entry.label}>
+            <i style={{ background: entry.colour }} />
+            {entry.label}
+          </span>
+        ))}
+      </div>
+
       {node ? (
         <div className="vault-space-card">
           <strong>{node.name.replaceAll('-', ' ')}</strong>
           <span className="muted">
             {node.description}
-            {node.degree > 0 ? ` · ${node.degree} things point at it` : ''}
+            {linked.length > 0 ? ` · ${linked.length} connections` : ' · nothing linked to it yet'}
             {node.cluster && node.cluster !== node.name
               ? ` · ${node.cluster.replaceAll('-', ' ')}`
               : ''}
@@ -482,7 +586,7 @@ export function VaultSpace({ agentId }: Props) {
         </div>
       ) : (
         <p className="muted">
-          Drag to turn it, scroll to zoom, and hold anything to light up what it is connected to.
+          Drag to turn it, scroll to zoom, and click anything to light up everything it connects to.
           Along is time, toward the middle is how much everything else depends on it, and around is
           which subject.
         </p>

@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   const domain = domainOf(owner.email);
 
   for (const agent of owned) {
-    const vault = new Vault(root, agent.id);
+    const vault = new Vault(root, owner.id);
     const result = await importClassroom(vault, snapshot);
     console.log(`\n--- ${agent.name} (${agent.id}) ---`);
     console.log(`Classroom: ${result.written} written, ${result.updated} updated`);

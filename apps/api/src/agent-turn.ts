@@ -16,10 +16,10 @@ import { beginTurn, endTurn, setActivity } from './turns-in-flight.js';
  * transcript. If these ever diverge you have two agents wearing one name, which
  * is exactly what the product promises not to be.
  */
-/** The agent's vault, if this deployment has vaults and this agent has one. */
-async function vaultFor(root: string | undefined, agentId: string): Promise<Vault | undefined> {
+/** The student's vault, if this deployment has vaults and they have one. */
+async function vaultFor(root: string | undefined, ownerId: string): Promise<Vault | undefined> {
   if (!root) return undefined;
-  const vault = new Vault(root, agentId);
+  const vault = new Vault(root, ownerId);
   return (await vault.has()) ? vault : undefined;
 }
 
@@ -65,7 +65,7 @@ export async function runTurnForAgent(
       // Optional chaining, not laziness: this is the path a student is waiting
       // on, and a context assembled without env should degrade to no vault
       // rather than take the whole turn down.
-      vaultFor(ctx.env?.VAULT_ROOT, agent.id),
+      vaultFor(ctx.env?.VAULT_ROOT, userId),
     ]);
 
     const result = await runAgentTurn(

@@ -103,8 +103,8 @@ export function createAgentRoutes(ctx: AppContext) {
        * "People" are how a person thinks about their own school.
        */
       .get('/:id/vault', auth, async (c) => {
-        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
-        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, c.get('userId'));
         if (!vault) return c.json({ groups: [], episodes: 0 });
 
         const [entities, episodes] = await Promise.all([
@@ -135,16 +135,16 @@ export function createAgentRoutes(ctx: AppContext) {
        * note bodies over the wire.
        */
       .get('/:id/vault/graph', auth, async (c) => {
-        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
-        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, c.get('userId'));
         if (!vault) return c.json({ nodes: [], edges: [] });
         return c.json(await buildGraph(vault));
       })
 
       /** One note, and everything that ever pointed at it. */
       .get('/:id/vault/:name', auth, async (c) => {
-        const agent = await ownedAgent(c.get('userId'), c.req.param('id'));
-        const vault = vaultFor(ctx.env?.VAULT_ROOT, agent.id);
+        await ownedAgent(c.get('userId'), c.req.param('id'));
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, c.get('userId'));
         if (!vault) throw new ContextoError('not_found', 'No vault for this agent.');
 
         const name = c.req.param('name');
@@ -254,9 +254,9 @@ export function createAgentRoutes(ctx: AppContext) {
   );
 }
 
-/** The agent's vault, when this deployment has vaults configured. */
-function vaultFor(root: string | undefined, agentId: string): Vault | undefined {
-  return root ? new Vault(root, agentId) : undefined;
+/** The student's vault, when this deployment has vaults configured. */
+function vaultFor(root: string | undefined, ownerId: string): Vault | undefined {
+  return root ? new Vault(root, ownerId) : undefined;
 }
 
 function toAgent(row: typeof agents.$inferSelect): Agent {

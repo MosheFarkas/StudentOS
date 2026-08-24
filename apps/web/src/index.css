@@ -1291,7 +1291,7 @@ a.button {
 .vault-space {
   display: block;
   width: 100%;
-  height: 30rem;
+  height: 34rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   /* Matches the canvas's own darkest stop, so the corners the radius cuts
@@ -1332,6 +1332,28 @@ a.button {
 .vault-space-links button:hover {
   border-color: var(--violet);
   color: var(--violet);
+}
+
+/* The colour key. Small, quiet, and always visible -- it is the difference
+   between a picture and a diagram. */
+.vault-space-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+
+.vault-space-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.vault-space-key i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
 }
 
 .vault-space-body {

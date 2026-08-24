@@ -13,6 +13,24 @@ import { Vault } from './vault.js';
  * a filesystem as a database.
  */
 
+describe('whose vault it is', () => {
+  it('accepts the id shapes the two systems actually produce', () => {
+    // Better Auth issues nanoids and the database issues uuids, and a test
+    // harness prefixes its own. All three are legal directory names.
+    for (const id of ['AX4ghSwLWABEznpR0uzqj8QnbL490rBo', '3e0b1f4a-c08b-42d9-8cbe-a85028125f2b', 'u_9fbf7100-f80e']) {
+      expect(() => new Vault('/tmp/contexto-ids', id)).not.toThrow();
+    }
+  });
+
+  it('refuses anything that could climb out of the vault directory', () => {
+    // The id becomes a path segment, so this is the only thing standing
+    // between a malformed caller and someone else's notes.
+    for (const id of ['..', '../etc', 'a/b', 'a.b', '', 'a b']) {
+      expect(() => new Vault('/tmp/contexto-ids', id)).toThrow(/Unsafe owner id/);
+    }
+  });
+});
+
 describe('Vault', () => {
   let root: string;
   let vault: Vault;
