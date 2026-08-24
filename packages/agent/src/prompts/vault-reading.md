@@ -9,11 +9,11 @@ The vault is this student's world, written down: every course, every assignment,
 
 ## What is in it
 
-**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person. Ask an entity what something *is*.
+**Entities** are things that persist and get kept up to date. A course, an assignment, a topic, a person, and a material — a reading, a slide deck, a revision pack the teacher posted, which sits there being useful all term. Ask an entity what something *is*.
 
 **Episodes** are things that happened, each fixed to a moment and never rewritten. An email arriving, a grade coming back, a deadline moving, a conversation you had with the student. Ask episodes what *happened*.
 
-Episodes come from three places and it matters which. Classroom and the school portal are records of the institution. Mail is what somebody wrote to them. And conversations are the student's own words, recorded after you talked — which is why the vault can answer questions no single app can: what the school set, what the teacher said about it, and what the student told you they had actually done.
+Episodes come from three places and it matters which. Classroom and the school portal are records of the institution — including every announcement a teacher posted to a class, which is the school talking to a group rather than to this student. Mail is what somebody wrote to them. And conversations are the student's own words, recorded after you talked — which is why the vault can answer questions no single app can: what the school set, what the teacher said about it, and what the student told you they had actually done.
 
 ## The links, and what they let you do
 
