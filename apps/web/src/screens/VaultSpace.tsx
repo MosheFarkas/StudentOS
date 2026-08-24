@@ -261,14 +261,37 @@ export function VaultSpace({ agentId }: Props) {
         context.stroke();
       }
 
+      /*
+       * The dimmed remainder, in a single pass.
+       *
+       * When something is held, well over a thousand nodes are drawn at seven
+       * percent opacity, where hue is imperceptible -- so they go into one
+       * path and one fill instead of a beginPath and a fill each. This is the
+       * frame the student is looking at while they drag, which is exactly the
+       * frame that must not stutter.
+       */
+      if (onlyThese) {
+        context.globalAlpha = 0.07;
+        context.fillStyle = '#8a8fae';
+        context.beginPath();
+        for (const point of points) {
+          if (onlyThese.has(point.placed.node.name)) continue;
+          const radius = Math.max(1, point.size);
+          context.moveTo(point.screenX + radius, point.screenY);
+          context.arc(point.screenX, point.screenY, radius, 0, Math.PI * 2);
+        }
+        context.fill();
+      }
+
       // Then nodes, far to near, so the shape reads the right way round.
       for (const point of points) {
         const node = point.placed.node;
         const isLit = !onlyThese || onlyThese.has(node.name);
+        if (onlyThese && !isLit) continue;
         // Further away is fainter, which is what makes it read as depth at all.
         const fade = Math.max(0.3, Math.min(1, 6 / point.depth - 0.3));
 
-        context.globalAlpha = onlyThese ? (isLit ? 1 : 0.07) : fade;
+        context.globalAlpha = onlyThese ? 1 : fade;
         context.fillStyle = colourFor(node);
 
         /*
