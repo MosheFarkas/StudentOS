@@ -46,24 +46,51 @@ export interface VaultGraph {
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;
 
-/** Which course a note is filed under, following one link at a time. */
-function clusterOf(
-  name: string,
+/**
+ * Which course each note is filed under, for every note at once.
+ *
+ * Walked outward from the courses along links pointing back at them, rather
+ * than inward from each note in turn. Two things follow, and both matter.
+ *
+ * It is breadth-first, so a note reaches the course it is *closest* to. Asking
+ * each note separately meant a depth-first walk, which filed a note under
+ * whichever course the first branch happened to reach -- an email naming
+ * history directly could land in chemistry because it also mentioned a
+ * titration.
+ *
+ * And every note is settled in one pass instead of one traversal each. On a
+ * real vault of 1401 notes the old shape took 1.5 seconds of blocked event
+ * loop, in a server that has only the one, to answer a request for a picture.
+ *
+ * Cycles need no special handling here: a note is only ever assigned once, so
+ * two notes referring to each other cannot walk in a circle.
+ */
+function clustersFor(
   courses: ReadonlySet<string>,
   linksFrom: ReadonlyMap<string, string[]>,
-  seen = new Set<string>(),
-): string | null {
-  if (courses.has(name)) return name;
-  // A vault can contain a cycle if two notes reference each other, and this
-  // walks links, so it has to be able to stop.
-  if (seen.has(name)) return null;
-  seen.add(name);
-
-  for (const target of linksFrom.get(name) ?? []) {
-    const found = clusterOf(target, courses, linksFrom, seen);
-    if (found) return found;
+): Map<string, string> {
+  const linksTo = new Map<string, string[]>();
+  for (const [source, targets] of linksFrom) {
+    for (const target of targets) {
+      linksTo.set(target, [...(linksTo.get(target) ?? []), source]);
+    }
   }
-  return null;
+
+  const cluster = new Map<string, string>();
+  const queue = [...courses];
+  for (const course of courses) cluster.set(course, course);
+
+  for (let at = 0; at < queue.length; at += 1) {
+    const current = queue[at] as string;
+    const home = cluster.get(current) as string;
+    for (const source of linksTo.get(current) ?? []) {
+      if (cluster.has(source)) continue;
+      cluster.set(source, home);
+      queue.push(source);
+    }
+  }
+
+  return cluster;
 }
 
 export async function buildGraph(vault: Vault): Promise<VaultGraph> {
@@ -90,6 +117,7 @@ export async function buildGraph(vault: Vault): Promise<VaultGraph> {
   const courses = new Set(
     entities.filter((note) => note.description === 'Course').map((note) => note.name),
   );
+  const clusters = clustersFor(courses, linksFrom);
 
   /*
    * When each entity sits, from the episodes that happened to it.
@@ -122,7 +150,7 @@ export async function buildGraph(vault: Vault): Promise<VaultGraph> {
       description: note.description,
       degree: degree.get(note.name) ?? 0,
       at,
-      cluster: clusterOf(note.name, courses, linksFrom),
+      cluster: clusters.get(note.name) ?? null,
     };
   });
 

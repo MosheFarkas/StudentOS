@@ -76,6 +76,31 @@ describe('building the graph', () => {
     expect(by.get('titration')?.cluster).toBe('chemistry');
   });
 
+  it('files a note under the course it is closest to', async () => {
+    /*
+     * An episode can mention several things, and following its links
+     * depth-first files it under whichever course the first branch happened to
+     * reach -- here chemistry, two hops away through the titration, rather
+     * than the history it names directly.
+     *
+     * Nearest is the defensible answer, and it is also the one that can be
+     * computed by walking out from the courses once instead of walking in from
+     * every note separately. On a real vault of 1401 notes that was the
+     * difference between 1.5 seconds of blocked event loop and 40ms.
+     */
+    await vault.write({
+      name: '2026-10-01-mentions-both',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'Mentions both.',
+      occurred: '2026-10-01T10:00:00Z',
+      body: 'About [[titration]]\nIn [[history]]',
+    });
+
+    const { nodes } = await buildGraph(vault);
+    expect(nodes.find((node) => node.name === '2026-10-01-mentions-both')?.cluster).toBe('history');
+  });
+
   it('places an episode at the moment it happened', async () => {
     const { nodes } = await buildGraph(vault);
     const episode = nodes.find((node) => node.name === '2026-09-02-moved');
