@@ -128,6 +128,87 @@ describe('importing a snapshot', () => {
     expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
   });
 
+  it('makes a note for a file a teacher attached', async () => {
+    /*
+     * The files were being written into the body as `Attached: <title>` --
+     * dead text naming something the agent could not open, link to, or find
+     * again. Every attachment carries a Drive id, so this costs nothing and is
+     * the difference between knowing a reading exists and knowing which
+     * assignment it belongs to.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        materials: [
+          {
+            id: 'm1',
+            course: 'Chemistry',
+            title: 'Titration week',
+            attachments: [
+              { kind: 'file', title: 'Titration method.pdf', fileId: 'drive-1', url: 'https://drive/1' },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const file = await vault.read('entity', 'titration-method-pdf');
+    expect(file?.description).toBe('File');
+    expect(file?.externalId).toBe('drive-1');
+    expect(file?.sourceUrl).toBe('https://drive/1');
+    expect(file?.body).toContain('[[chemistry]]');
+
+    // And the material points at it, so the edge exists in both directions.
+    const material = await vault.read('entity', 'titration-week');
+    expect(material?.body).toContain('[[titration-method-pdf]]');
+  });
+
+  it('collects the files attached to an assignment', async () => {
+    // Where the actual homework lives. The assignment shape was dropping them
+    // entirely, so no amount of importing would have found them.
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [
+          {
+            id: 'w1',
+            course: 'Chemistry',
+            title: 'Lab writeup',
+            due: null,
+            attachments: [
+              { kind: 'file', title: 'Writeup template', fileId: 'drive-2' },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect((await vault.read('entity', 'writeup-template'))?.externalId).toBe('drive-2');
+    expect((await vault.read('entity', 'lab-writeup'))?.body).toContain('[[writeup-template]]');
+  });
+
+  it('does not make a note for a link or a video', async () => {
+    // Only a Drive file is a thing the agent can later open and read. A
+    // YouTube link is a URL, and a note for it would be a node with a title
+    // and nothing behind it.
+    await importClassroom(
+      vault,
+      snapshot({
+        materials: [
+          {
+            id: 'm1',
+            course: 'Chemistry',
+            title: 'Watch this',
+            attachments: [{ kind: 'video', title: 'Titration explained', url: 'https://yt/1' }],
+          },
+        ],
+      }),
+    );
+
+    const files = (await vault.list('entity')).filter((n) => n.description === 'File');
+    expect(files).toHaveLength(0);
+  });
+
   it('records an announcement as something that happened', async () => {
     /*
      * Two hundred and fifty-seven of these existed on a real account and none

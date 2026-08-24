@@ -1,6 +1,7 @@
 import type {
   Announcement,
   Assignment,
+  Attachment,
   CourseMaterial,
   SubmissionSummary,
   Topic,
@@ -75,6 +76,48 @@ export async function importClassroom(
   const takenNames = new Set([...existing, ...existingEpisodes].map((n) => n.name));
 
   const result: ImportResult = { written: 0, updated: 0 };
+
+  /**
+   * A note for each Drive file a teacher attached, and links back to it.
+   *
+   * These were being written into the parent's body as `Attached: <title>` --
+   * dead text naming something nothing could open, link to, or find again. The
+   * id has always been there, so this costs no model call and is the whole
+   * difference between knowing a reading exists and knowing which assignment
+   * it belongs to.
+   *
+   * Only files. A YouTube link or a form is a URL, and a note for one would be
+   * a title with nothing behind it -- the agent cannot open it later, so it
+   * stays a line in the parent instead of becoming a node.
+   */
+  const attach = async (
+    attachments: Attachment[] | undefined,
+    courseName: string,
+    parent: string,
+  ): Promise<string[]> => {
+    const lines: string[] = [];
+    for (const item of attachments ?? []) {
+      if (item.kind !== 'file' || !item.fileId) {
+        lines.push(`Attached: ${item.title}`);
+        continue;
+      }
+
+      const name = nameFor(item.fileId, item.title);
+      await save({
+        name,
+        kind: 'entity',
+        source: 'classroom',
+        description: 'File',
+        externalId: item.fileId,
+        ...(item.url ? { sourceUrl: item.url } : {}),
+        body: [`${item.title}.`, '', linkToCourse(courseName), `Attached to [[${parent}]].`].join(
+          '\n',
+        ),
+      });
+      lines.push(`Attached: [[${name}]]`);
+    }
+    return lines;
+  };
 
   /**
    * The name a note will have, reusing the one it already has.
@@ -201,6 +244,9 @@ export async function importClassroom(
       lines.push(`${state}${late}${grade}.`);
     }
 
+    const attached = await attach(work.attachments, work.course, name);
+    if (attached.length > 0) lines.push('', ...attached);
+
     await save({
       name,
       kind: 'entity',
@@ -217,9 +263,8 @@ export async function importClassroom(
     const name = nameFor(id, material.title);
     const lines = [`${material.title}.`, '', linkToCourse(material.course)];
     if (material.description) lines.push('', material.description);
-    if (material.attachments.length > 0) {
-      lines.push('', ...material.attachments.map((file) => `Attached: ${file.title}`));
-    }
+    const attached = await attach(material.attachments, material.course, name);
+    if (attached.length > 0) lines.push('', ...attached);
 
     await save({
       name,
@@ -249,10 +294,13 @@ export async function importClassroom(
       opening || `announcement in ${announcement.course}`,
     );
 
-    const lines = [linkToCourse(announcement.course).replace('Part of', 'In'), '', announcement.text];
-    if (announcement.attachments.length > 0) {
-      lines.push('', ...announcement.attachments.map((file) => `Attached: ${file.title}`));
-    }
+    const lines = [
+      linkToCourse(announcement.course).replace('Part of', 'In'),
+      '',
+      announcement.text,
+    ];
+    const attached = await attach(announcement.attachments, announcement.course, name);
+    if (attached.length > 0) lines.push('', ...attached);
 
     await save({
       name,

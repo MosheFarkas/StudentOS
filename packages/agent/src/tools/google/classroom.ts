@@ -142,6 +142,7 @@ interface CourseWorkList {
     dueTime?: { hours?: number; minutes?: number };
     alternateLink?: string;
     topicId?: string;
+    materials?: ClassroomMaterial[];
   }[];
 }
 
@@ -160,6 +161,14 @@ export interface Assignment {
   topicId?: string;
   due: string | null;
   link?: string;
+  /**
+   * What the teacher attached. Where the homework actually is.
+   *
+   * Classroom returns these and this was dropping them, so the vault knew an
+   * assignment existed and nothing about the template, the reading or the
+   * worksheet needed to do it.
+   */
+  attachments?: Attachment[];
 }
 
 export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> = {
@@ -211,6 +220,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
       if (isUnavailable(work)) continue;
 
       for (const item of work.courseWork ?? []) {
+        const attachments = toAttachments(item.materials);
         assignments.push({
           id: item.id,
           course: course.name ?? 'Unknown course',
@@ -218,6 +228,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
           due: formatDue(item.dueDate, item.dueTime),
           ...(item.topicId ? { topicId: item.topicId } : {}),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
+          ...(attachments.length > 0 ? { attachments } : {}),
         });
       }
     }
