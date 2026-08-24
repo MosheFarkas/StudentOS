@@ -250,6 +250,27 @@ describe('reading the files in the vault', () => {
     expect(llm.chat).toHaveBeenCalledTimes(1);
   });
 
+  it('says why a file failed, rather than only counting it', async () => {
+    /*
+     * The reason was being caught and dropped, so three separate passes over a
+     * real vault reported nothing but a number -- 196 failed, then 77, then
+     * 21 -- and every diagnosis of them was guesswork run from a throwaway
+     * script. Twice that guess was wrong.
+     *
+     * A count says something went wrong. Only the reason says what to do.
+     */
+    const result = await run({
+      llm: summary('unused'),
+      read: async () => {
+        throw new Error('403 The caller does not have permission');
+      },
+    });
+
+    expect(result.failed).toBe(1);
+    expect(result.reasons[0]).toMatch(/403/);
+    expect(result.reasons[0]).toContain('titration-method');
+  });
+
   it('carries on when one file fails', async () => {
     await vault.write({
       name: 'file-2',

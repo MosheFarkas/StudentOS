@@ -60,6 +60,15 @@ export interface FileReadResult {
   failed: number;
   /** Files still waiting, so a caller can say how far along this is. */
   remaining: number;
+  /**
+   * Why each failure happened, named by file.
+   *
+   * A count says something went wrong; only the reason says what to do about
+   * it. Three passes over a real vault reported 196 failures, then 77, then
+   * 21, and every diagnosis was guesswork run from a throwaway script because
+   * the reason had been caught and dropped. Two of those guesses were wrong.
+   */
+  reasons: string[];
 }
 
 /**
@@ -126,6 +135,15 @@ export async function readFileContents(
     unreadable: 0,
     failed: 0,
     remaining: Math.max(0, files.length - limit),
+    reasons: [],
+  };
+
+  const failed = (name: string, error: unknown): void => {
+    result.failed += 1;
+    const why = error instanceof Error ? error.message : String(error);
+    // Capped: some providers return an entire HTML error page, and a hundred
+    // of those is a log nobody reads.
+    result.reasons.push(`${name}: ${why.replace(/\s+/g, ' ').slice(0, 180)}`);
   };
 
   /*
@@ -140,11 +158,11 @@ export async function readFileContents(
     let text: string | null;
     try {
       text = await retrying(() => read(note.externalId as string));
-    } catch {
+    } catch (error) {
       // A file that failed today may read fine tomorrow -- a permission that
       // has since been granted, a service that was down -- so no mark is left
       // and the next pass will try it again.
-      result.failed += 1;
+      failed(note.name, error);
       continue;
     }
 
@@ -180,7 +198,10 @@ export async function readFileContents(
 
       const parsed = parse(answer.content);
       if (!parsed) {
-        result.failed += 1;
+        failed(
+          note.name,
+          `model did not answer in the shape asked for: ${answer.content.slice(0, 80)}`,
+        );
         continue;
       }
       await append(
