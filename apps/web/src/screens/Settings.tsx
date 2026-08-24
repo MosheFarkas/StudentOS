@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Agent, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { AgentMemory } from './AgentMemory.js';
 import { DeviceConnections } from './DeviceConnections.js';
 import { VaultSpace } from './VaultSpace.js';
 import { GoogleConnections } from './GoogleConnections.js';
@@ -63,6 +64,8 @@ export function Settings({ onBack }: { onBack: () => void }) {
           </dl>
         </div>
       )}
+
+      {agent && <AgentMemory agent={agent} onChange={setAgent} />}
 
       {agent && (
         <div className="panel">

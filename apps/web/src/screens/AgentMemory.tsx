@@ -13,7 +13,12 @@ import { api } from '../lib/api.js';
  *
  * So it is shown in the student's own words rather than summarised, and the
  * destructive option is offered plainly rather than buried. "Forget this" is
- * the reason to open the panel at all.
+ * the reason this exists at all.
+ *
+ * It sits in Settings, beside the vault, rather than behind a button in the
+ * chat header. A conversation is not the place to be told what is being
+ * remembered about you, and the header label announcing it read as strange
+ * every time it was seen.
  */
 
 const LIMIT = 1400;
@@ -25,16 +30,12 @@ interface Props {
 
 export function AgentMemory({ agent, onChange }: Props) {
   /*
-   * Defaulted rather than assumed present.
-   *
-   * This renders inside the chat header, so a missing string does not degrade
-   * the panel -- it takes down the conversation view with it. An agent
-   * serialised before this field existed, or a cached response from one, is
-   * enough to do it.
+   * Defaulted rather than assumed present. An agent serialised before this
+   * field existed, or a cached response from one, would otherwise take the
+   * whole screen down rather than degrade this one panel.
    */
   const profile = agent.profile ?? '';
 
-  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(profile);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,21 +60,10 @@ export function AgentMemory({ agent, onChange }: Props) {
     setDraft(body.agent.profile ?? '');
   }
 
-  if (!open) {
-    return (
-      <button className="quiet" onClick={() => setOpen(true)}>
-        What it knows about you
-      </button>
-    );
-  }
-
   return (
     <div className="panel">
       <div className="panel-head">
-        <h2>What it knows about you</h2>
-        <button className="quiet" onClick={() => setOpen(false)}>
-          Close
-        </button>
+        <h2>About you</h2>
       </div>
 
       {profile === '' ? (

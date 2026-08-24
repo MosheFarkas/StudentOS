@@ -6,8 +6,6 @@ import { api } from '../lib/api.js';
 import { sameConversation } from '../lib/conversation.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
-import { AgentMemory } from './AgentMemory.js';
-import { VaultBrowser } from './VaultBrowser.js';
 import { MessageText } from './MessageText.js';
 import { LogoMark } from './LogoMark.js';
 import { useReportWorking } from '../lib/working.js';
@@ -225,8 +223,6 @@ export function Chat({ agentId, onBack }: Props) {
           ← Agents
         </button>
         <strong>{agent.name}</strong>
-        <AgentMemory agent={agent} onChange={setAgent} />
-        <VaultBrowser agentId={agent.id} />
       </div>
 
       <div className="workspace">
