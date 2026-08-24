@@ -122,7 +122,9 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`       ${root}/${agent.id}`);
+    // The vault belongs to the student, not to this agent -- printing the
+    // agent's id here read as though each agent had its own.
+    console.log(`       ${root}/${owner.id}`);
   }
 
   process.exit(0);
