@@ -38,8 +38,14 @@ const MAX_PAGES = 20;
  * that is what a student means. The vault asks for everything, because last
  * year is exactly what a vault is for.
  */
-const STATES_NOW = 'ACTIVE';
-const STATES_EVER = 'ACTIVE,ARCHIVED';
+/*
+ * Whole query fragments, not values, because courseStates is a repeated field.
+ * `courseStates=ACTIVE,ARCHIVED` is a 400 from Classroom -- verified against
+ * the real API after a comma-joined version silently took the whole import
+ * down to zero courses.
+ */
+const STATES_NOW = 'courseStates=ACTIVE';
+const STATES_EVER = 'courseStates=ACTIVE&courseStates=ARCHIVED';
 
 const includeArchived = {
   includeArchived: z
@@ -66,7 +72,7 @@ export const listCourses: Tool<{ includeArchived?: boolean }, unknown> = {
     }
 
     const result = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-      `${COURSES_URL}?courseStates=${input.includeArchived ? STATES_EVER : STATES_NOW}`,
+      `${COURSES_URL}?${input.includeArchived ? STATES_EVER : STATES_NOW}`,
       token,
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
@@ -221,7 +227,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     }
 
     const courses = await googleFetch<CourseList>(
-      `https://classroom.googleapis.com/v1/courses?courseStates=${
+      `https://classroom.googleapis.com/v1/courses?${
         input.includeArchived ? STATES_EVER : STATES_NOW
       }`,
       token,
@@ -352,7 +358,7 @@ async function forEachCourse<T>(
   archived = false,
 ): Promise<T[] | ReturnType<typeof unavailable>> {
   const courses = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-    `${COURSES_URL}?courseStates=${archived ? STATES_EVER : STATES_NOW}`,
+    `${COURSES_URL}?${archived ? STATES_EVER : STATES_NOW}`,
     token,
     { ...(signal ? { signal } : {}) },
   );

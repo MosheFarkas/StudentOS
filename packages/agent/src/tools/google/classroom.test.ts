@@ -118,8 +118,14 @@ describe("which courses count as the student's", () => {
    */
   function courses(states: Record<string, string[]>) {
     vi.stubGlobal('fetch', async (url: string) => {
-      const asked = new URL(url).searchParams.get('courseStates');
-      const wanted = asked ? asked.split(',') : Object.keys(states);
+      /*
+       * getAll, because courseStates is a repeated parameter. Splitting a
+       * single value on commas is what the code did, and this stub agreed with
+       * it -- so a green test sat on top of a request Classroom answers with a
+       * 400. A stub has to model the API, not the caller.
+       */
+      const asked = new URL(url).searchParams.getAll('courseStates');
+      const wanted = asked.length > 0 ? asked : Object.keys(states);
       const list = wanted.flatMap((state) =>
         (states[state] ?? []).map((name, i) => ({
           id: `${state}-${i}`,
@@ -133,6 +139,23 @@ describe("which courses count as the student's", () => {
       });
     });
   }
+
+  it('asks for a repeated parameter, which is the only form Classroom accepts', async () => {
+    // `courseStates=ACTIVE,ARCHIVED` is a 400. Verified against the real API,
+    // after the comma-joined version took a whole import to zero courses.
+    let seen = '';
+    vi.stubGlobal('fetch', async (url: string) => {
+      seen = url;
+      return new Response(JSON.stringify({ courses: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    await listCourses.execute({ includeArchived: true } as never, ctx());
+    expect(seen).toContain('courseStates=ACTIVE&courseStates=ARCHIVED');
+    expect(seen).not.toContain('ACTIVE,ARCHIVED');
+  });
 
   it('gives a conversation the classes they are in now', async () => {
     courses({ ACTIVE: ['Grade 10 Math'], ARCHIVED: ['Extended History of Quebec and Canada 10'] });
