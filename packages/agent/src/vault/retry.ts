@@ -27,21 +27,58 @@ export function worthRetrying(error: unknown): boolean {
 /*
  * Backoff between attempts, in milliseconds.
  *
- * Long enough at the end to ride out a saturated minute rather than one
- * unlucky call: the token limit is per minute and an import is hundreds of
- * calls, so the work sits against the ceiling for a while. This is what
- * regulates it down to the rate actually allowed; concurrency only decides how
- * far past the ceiling it reaches first.
+ * The last two steps are long because the token limit resets on a rolling
+ * minute. A backoff that gives up inside one can never clear a saturated
+ * budget, which is exactly what happened: two full passes over a real vault
+ * failed 38% and then 43% of their files, and every sampled one read fine on
+ * a later attempt. Four tries over twenty-three seconds was never going to
+ * outlast a limit measured over sixty.
  */
-const BACKOFF = [500, 2000, 6000, 15_000];
+const BACKOFF = [1000, 5000, 20_000, 45_000, 60_000];
+
+/** Never park an import on a malformed or hostile hint. */
+const LONGEST = 90_000;
+
+/**
+ * How long to wait before attempt number `attempt`, or null to give up.
+ *
+ * The provider usually says: "Please try again in 28.878s". Guessing shorter
+ * than that is simply spending an attempt to be told the same thing again, so
+ * a stated wait always wins over the schedule -- with a margin, because coming
+ * back a moment early is another refusal.
+ */
+export function waitFor(error: unknown, attempt: number): number | null {
+  const step = BACKOFF[attempt];
+  if (step === undefined) return null;
+
+  const asked = suggestedWait(error);
+  return Math.min(LONGEST, Math.max(step, asked === null ? 0 : asked * 1.1 + 250));
+}
+
+/** The wait named in the provider's own message, in milliseconds. */
+function suggestedWait(error: unknown): number | null {
+  const message = (error as Error)?.message ?? '';
+  const seconds = /try again in ([\d.]+)\s*s\b/i.exec(message);
+  if (seconds?.[1]) return Number(seconds[1]) * 1000;
+
+  const millis = /try again in ([\d.]+)\s*ms\b/i.exec(message);
+  if (millis?.[1]) return Number(millis[1]);
+
+  const header = (error as { headers?: { get?: (k: string) => string | null } })?.headers?.get?.(
+    'retry-after',
+  );
+  if (header && !Number.isNaN(Number(header))) return Number(header) * 1000;
+
+  return null;
+}
 
 export async function retrying<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await fn();
     } catch (error) {
-      const wait = BACKOFF[attempt];
-      if (wait === undefined || !worthRetrying(error)) throw error;
+      const wait = worthRetrying(error) ? waitFor(error, attempt) : null;
+      if (wait === null) throw error;
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
   }
