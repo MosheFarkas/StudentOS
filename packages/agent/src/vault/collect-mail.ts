@@ -1,7 +1,7 @@
 import { isUnavailable } from '../tools/google/client.js';
 import { listAllMessageIds, readMail } from '../tools/google/gmail.js';
 import type { ToolContext } from '../tools/types.js';
-import { schoolMailQuery } from './mail-query.js';
+import { schoolDomains, schoolMailQuery } from './mail-query.js';
 import type { SchoolMessage } from './mail.js';
 
 /**
@@ -32,12 +32,18 @@ import type { SchoolMessage } from './mail.js';
  * what happened the first time: a broken filter listed two thousand messages
  * and the number looked like a finding instead of a ceiling. Hitting it is
  * reported loudly now, and the caller is expected to stop.
+ *
+ * Raised from six hundred once a real account turned out to have six hundred
+ * and sixty-seven genuine school messages across two domains -- the ceiling
+ * was rejecting the correct answer. Safe to raise because the bug it was
+ * catching can no longer be written: schoolMailQuery emits `from:` only, and a
+ * test holds it there.
  */
-const MAX_IDS = 600;
+const MAX_IDS = 2000;
 
 export interface MailCollectionOptions {
-  /** e.g. "wearelcc.ca". Everything else is somebody else's problem. */
-  domain: string;
+  /** Every domain the school uses. See discoverSchoolDomains. */
+  domains: string[];
   /** How far back to look, in months. */
   months?: number;
   /** Ceiling on ids listed, for an inbox far outside the ordinary. */
@@ -69,13 +75,56 @@ export function domainOf(email: string): string | null {
   return domain === '' || personal.includes(domain) ? null : domain;
 }
 
+/**
+ * Which domains belong to this student's school, from who they write to.
+ *
+ * Deriving it from their own address alone missed the school's staff domain
+ * entirely, and on the first real account that was 462 messages -- more of
+ * their school correspondence than was being imported. Classroom knows the
+ * staff addresses but will not say without a roster scope the school would
+ * have to approve.
+ *
+ * Their sent mail needs no new permission, and the signal was unambiguous:
+ * the two school domains were 45 and 34 of 81 sent messages, and personal
+ * webmail trailed at 4 and 3. Metadata only -- this wants the To line, not
+ * anything the student wrote.
+ */
+export async function discoverSchoolDomains(
+  ctx: ToolContext,
+  ownAddress: string,
+  months = 24,
+): Promise<string[]> {
+  const ids = await listAllMessageIds(ctx, `from:${ownAddress} newer_than:${months}m`, 400);
+  if (isUnavailable(ids)) return schoolDomains(ownAddress, []);
+
+  const wroteTo: string[] = [];
+  for (const messageId of ids) {
+    let full: unknown;
+    try {
+      full = await readMail.execute({ messageId } as never, ctx);
+    } catch {
+      // One unreadable message is not worth failing a whole import over; the
+      // domains come from the shape of the pile, not from any single message.
+      continue;
+    }
+    if (isUnavailable(full)) continue;
+
+    const { to = '', cc = '' } = full as { to?: string; cc?: string };
+    for (const match of `${to} ${cc}`.matchAll(/@([A-Za-z0-9.-]+)/g)) {
+      wroteTo.push((match[1] as string).replace(/[.,>"']+$/, ''));
+    }
+  }
+
+  return schoolDomains(ownAddress, wroteTo);
+}
+
 /** Every school message in the window. */
 export async function collectSchoolMail(
   ctx: ToolContext,
   options: MailCollectionOptions,
 ): Promise<CollectedMail> {
   const skipped: string[] = [];
-  const query = schoolMailQuery(options.domain, options.months ?? 12);
+  const query = schoolMailQuery(options.domains, options.months ?? 12);
 
   const ids = await listAllMessageIds(ctx, query, options.maxIds ?? MAX_IDS);
   if (isUnavailable(ids)) {

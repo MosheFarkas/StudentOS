@@ -1294,17 +1294,65 @@ a.button {
  * underneath it -- on a phone that is the difference between a control and an
  * obstacle.
  */
+.vault-space-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.vault-space-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.vault-space-find {
+  flex: 1;
+  min-width: 0;
+}
+
 .vault-space {
   display: block;
   width: 100%;
-  height: 22rem;
+  height: 30rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--wash);
+  /* Matches the canvas's own darkest stop, so the corners the radius cuts
+     away do not flash the page colour while the first frame is drawn. */
+  background: #07091c;
   cursor: grab;
   touch-action: none;
 }
 
 .vault-space:active {
   cursor: grabbing;
+}
+
+.vault-space-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.vault-space-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0;
+  align-items: center;
+}
+
+.vault-space-links button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.vault-space-links button:hover {
+  border-color: var(--violet);
+  color: var(--violet);
 }

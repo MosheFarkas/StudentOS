@@ -31,7 +31,12 @@ export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
 export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
 export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
-export { collectSchoolMail, domainOf, type CollectedMail } from './vault/collect-mail.js';
+export {
+  collectSchoolMail,
+  discoverSchoolDomains,
+  domainOf,
+  type CollectedMail,
+} from './vault/collect-mail.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';

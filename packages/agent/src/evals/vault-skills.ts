@@ -178,7 +178,7 @@ async function runWriteCase(apiKey: string, testCase: WriteCase): Promise<WriteO
         messages: [{ messageId: 'm-1', ...testCase.message }],
         entities: ENTITIES,
         userId: 'eval',
-        domain: 'school.example',
+        domains: ['school.example'],
       },
     );
 

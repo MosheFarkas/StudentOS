@@ -49,8 +49,8 @@ export interface MailImportOptions {
   /** Note names an episode may link to. Nothing else is accepted. */
   entities: string[];
   userId: string;
-  /** The school's domain. A sender outside it is not one of their teachers. */
-  domain?: string;
+  /** The school's domains. A sender outside them is not one of their teachers. */
+  domains?: string[];
 }
 
 export interface MailImportResult {
@@ -124,7 +124,7 @@ function parseSender(from: string): { display: string; address: string } {
 
 export async function importMail(
   { llm }: MailImportDeps,
-  { vault, messages, entities, userId, domain }: MailImportOptions,
+  { vault, messages, entities, userId, domains }: MailImportOptions,
 ): Promise<MailImportResult> {
   const existingEpisodes = await vault.list('episode');
   const already = new Set(existingEpisodes.map((note) => note.externalId).filter(Boolean));
@@ -204,7 +204,9 @@ export async function importMail(
      * people come from, and they are the most-linked nodes the vault lacked.
      */
     let personNote: string | undefined;
-    const atSchool = domain ? sender.address.endsWith(`@${domain}`) : false;
+    const atSchool = (domains ?? []).some((domain) =>
+      sender.address.toLowerCase().endsWith(`@${domain}`),
+    );
     if (atSchool && !AUTOMATED.test(sender.address) && parsed.actor.trim() !== '') {
       // The address decides identity. Whatever this message called them, a
       // person already seen keeps the note and the name they were given first.

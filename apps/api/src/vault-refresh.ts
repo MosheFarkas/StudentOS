@@ -4,6 +4,7 @@ import {
   Vault,
   collectClassroomSnapshot,
   collectSchoolMail,
+  discoverSchoolDomains,
   domainOf,
   importClassroom,
   importMail,
@@ -57,14 +58,16 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
    * per message to produce notes joined to nothing.
    */
   let mail = { written: 0, people: 0 };
-  const domain = domainOf(owner.email);
-  if (domain && (await vault.has())) {
-    const found = await collectSchoolMail(toolContext, { domain });
+  if (domainOf(owner.email) && (await vault.has())) {
+    // Asked each refresh rather than cached: a student changes schools, and a
+    // domain list frozen at first sign-in would quietly stop matching.
+    const domains = await discoverSchoolDomains(toolContext, owner.email);
+    const found = await collectSchoolMail(toolContext, { domains });
     if (!found.hitCeiling) {
       const entities = (await vault.list('entity')).map((note) => note.name);
       mail = await importMail(
         { llm: await ctx.llm.resolve(userId) },
-        { vault, messages: found.messages, entities, userId, domain },
+        { vault, messages: found.messages, entities, userId, domains },
       );
     }
   }

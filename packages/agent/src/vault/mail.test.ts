@@ -67,7 +67,7 @@ describe('importing school mail', () => {
       messages,
       entities,
       userId: 'u1',
-      domain: 'school.example',
+      domains: ['school.example'],
     });
 
   it('writes an episode for a message worth keeping', async () => {

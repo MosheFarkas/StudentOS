@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layout, pick, project, type GraphNode } from './cylinder.js';
+import { layout, neighbours, pick, project, type GraphNode } from './cylinder.js';
 
 /**
  * The shape has to mean something.
@@ -130,5 +130,35 @@ describe('clicking on something', () => {
   it('finds nothing in empty space', () => {
     const projected = project(layout([node()]), { spin: 0, tilt: 0, zoom: 1 }, 600, 400);
     expect(pick(projected, 5, 5)).toBeNull();
+  });
+});
+
+describe('what a node is connected to', () => {
+  const edges = [
+    { from: 'essay', to: 'history' },
+    { from: 'quiz', to: 'history' },
+    { from: 'history', to: 'school' },
+    { from: 'recipe', to: 'kitchen' },
+  ];
+
+  it('finds what points at it and what it points at', () => {
+    // Both directions. A student asking "what is this connected to" does not
+    // mean "what does this link out to" -- an assignment's course is upstream
+    // of it and is the most useful thing on the screen.
+    expect(neighbours(edges, 'history')).toEqual(new Set(['essay', 'quiz', 'school']));
+  });
+
+  it('does not include the node itself', () => {
+    expect(neighbours(edges, 'history').has('history')).toBe(false);
+  });
+
+  it('stops at one step', () => {
+    // One hop, not the whole component. Lighting up everything reachable from
+    // a course would light up the entire vault and say nothing.
+    expect(neighbours(edges, 'essay')).toEqual(new Set(['history']));
+  });
+
+  it('finds nothing for a node with no links', () => {
+    expect(neighbours(edges, 'orphan')).toEqual(new Set());
   });
 });

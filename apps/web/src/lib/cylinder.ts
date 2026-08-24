@@ -152,6 +152,26 @@ export function project(
     .sort((a, b) => b.depth - a.depth);
 }
 
+/**
+ * Everything one link away, in either direction.
+ *
+ * Both directions on purpose. Asked what an essay is connected to, the useful
+ * answer includes the course it belongs to -- which the essay links out to --
+ * and asked about the course, the useful answer is every piece of work that
+ * points at it. One hop rather than the whole component, because everything
+ * reachable from a course is most of the vault, and lighting up most of the
+ * vault says nothing.
+ */
+export function neighbours(edges: GraphEdge[], name: string): Set<string> {
+  const found = new Set<string>();
+  for (const edge of edges) {
+    if (edge.from === name) found.add(edge.to);
+    if (edge.to === name) found.add(edge.from);
+  }
+  found.delete(name);
+  return found;
+}
+
 /** The nearest node under the pointer, or nothing. */
 export function pick(projected: Projected[], x: number, y: number): Projected | null {
   let best: Projected | null = null;

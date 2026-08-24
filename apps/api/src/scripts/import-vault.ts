@@ -4,6 +4,7 @@ import {
   Vault,
   collectClassroomSnapshot,
   collectSchoolMail,
+  discoverSchoolDomains,
   domainOf,
   importClassroom,
   importMail,
@@ -103,14 +104,17 @@ async function main(): Promise<void> {
       if (!domain) {
         console.log('Mail: skipped, no school domain on this address');
       } else {
-        const found = await collectSchoolMail(toolContext, { domain });
+        const domains = await discoverSchoolDomains(toolContext, owner.email);
+        const found = await collectSchoolMail(toolContext, { domains });
         for (const reason of found.skipped) console.log(`  skipped ${reason}`);
-        console.log(`Mail: ${found.found} found at ${domain}, ${found.messages.length} fetched`);
+        console.log(
+          `Mail: ${found.found} found at ${domains.join(', ')}, ${found.messages.length} fetched`,
+        );
 
         const entities = (await vault.list('entity')).map((note) => note.name);
         const mail = await importMail(
           { llm: await ctx.llm.resolve(owner.id) },
-          { vault, messages: found.messages, entities, userId: owner.id, domain },
+          { vault, messages: found.messages, entities, userId: owner.id, domains },
         );
         console.log(
           `      ${mail.written} episodes, ${mail.people} people, ${mail.skipped} unparseable`,

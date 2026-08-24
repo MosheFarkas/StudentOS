@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import {
   layout,
+  neighbours,
   pick,
   project,
   type Camera,
@@ -18,41 +19,59 @@ import {
  * pulls a thing toward the core, and which course it belongs to decides its
  * bearing, so every subject is a thread running the length of the year.
  *
- * The point is not that it looks like something. It is that a student can turn
- * it and see that their busiest subject is a dense rope down the middle and the
- * week before an exam is a bulge, without anybody explaining it to them.
+ * Dark on purpose, inside an otherwise light app. A thousand small bright
+ * points need a ground to be bright against, and the same dots on white read
+ * as dust rather than as a structure. This is a window onto something, the way
+ * a map is, not another panel.
  */
 
 interface Props {
   agentId: string;
 }
 
+/** Brighter than the app's own palette, because these sit on near-black. */
 const COLOURS: Record<string, string> = {
-  Course: '#5010d0',
-  Assignment: '#4070ff',
-  Topic: '#2f9bbc',
-  Person: '#c090ff',
+  Course: '#a78bfa',
+  Assignment: '#60a5fa',
+  Topic: '#22d3ee',
+  Person: '#f0abfc',
+  Material: '#fbbf24',
 };
 
-/** Episodes are what happened; they read as marks rather than things. */
-const EPISODE = '#6b7194';
-
 function colourFor(node: GraphNode): string {
-  if (node.kind === 'episode') return node.source === 'student' ? '#12805c' : EPISODE;
+  if (node.kind === 'episode') {
+    // What the student said themselves is the one thing here they wrote.
+    if (node.source === 'student') return '#34d399';
+    return node.source === 'classroom' ? '#94a3b8' : '#7c8bb0';
+  }
   return COLOURS[node.description] ?? '#8a8fae';
 }
+
+/** Labels are only legible up to a point; past it they are texture. */
+const MAX_LABELS = 26;
 
 export function VaultSpace({ agentId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
-  const [hovered, setHovered] = useState<GraphNode | null>(null);
+  const [focused, setFocused] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Held in a ref rather than state: dragging repaints every frame, and React
-  // does not need to re-render for a camera that moved two degrees.
+  /*
+   * The camera is two cameras: where it is, and where it is going.
+   *
+   * Every frame the first eases toward the second, which is what turns a
+   * scroll notch into a glide and lets a click recentre the view instead of
+   * teleporting it. Both live in refs -- dragging repaints sixty times a
+   * second and React does not need to re-render for an angle that moved two
+   * degrees.
+   */
   const camera = useRef<Camera>({ spin: 0.5, tilt: 0.35, zoom: 1 });
+  const target = useRef<Camera>({ spin: 0.5, tilt: 0.35, zoom: 1 });
   const projected = useRef<Projected[]>([]);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  const idle = useRef(0);
 
   useEffect(() => {
     void (async () => {
@@ -64,6 +83,37 @@ export function VaultSpace({ agentId }: Props) {
       setGraph(await res.json());
     })();
   }, [agentId]);
+
+  /*
+   * What is lit.
+   *
+   * A search lights every match. Otherwise it is whatever is held or hovered,
+   * plus everything one link away from it -- which is the whole point of
+   * holding something: an assignment on its own is a dot, and an assignment
+   * with its course, its unit and the six emails about it is a story.
+   */
+  const lit = useMemo(() => {
+    if (!graph) return null;
+
+    const search = query.trim().toLowerCase();
+    if (search.length > 0) {
+      const matches = graph.nodes
+        .filter((node) => node.name.includes(search.replaceAll(' ', '-')))
+        .map((node) => node.name);
+      return new Set(matches);
+    }
+
+    const centre = focused ?? hovered;
+    if (!centre) return null;
+    return new Set([centre, ...neighbours(graph.edges, centre)]);
+  }, [graph, query, focused, hovered]);
+
+  // Read by the draw loop, which must not restart every time a pointer moves.
+  const view = useRef<{ lit: Set<string> | null; centre: string | null }>({
+    lit: null,
+    centre: null,
+  });
+  view.current = { lit, centre: focused ?? hovered };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -77,76 +127,181 @@ export function VaultSpace({ agentId }: Props) {
       const ratio = window.devicePixelRatio || 1;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
+      if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+        canvas.width = width * ratio;
+        canvas.height = height * ratio;
+      }
 
       const context = canvas.getContext('2d');
       if (!context) return;
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.clearRect(0, 0, width, height);
+
+      /*
+       * A slow drift when nobody is touching it.
+       *
+       * A still cylinder from one angle is a smear of dots; the depth only
+       * reads once it moves. Stopped the moment anything is held, because
+       * trying to read a label on something rotating away is maddening.
+       */
+      idle.current += 1;
+      if (!drag.current && !view.current.centre && idle.current > 90) {
+        target.current.spin += 0.0016;
+      }
+
+      for (const key of ['spin', 'tilt', 'zoom'] as const) {
+        camera.current[key] += (target.current[key] - camera.current[key]) * 0.12;
+      }
+
+      const ground = context.createRadialGradient(
+        width / 2,
+        height / 2,
+        0,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.7,
+      );
+      ground.addColorStop(0, '#141a3d');
+      ground.addColorStop(1, '#07091c');
+      context.fillStyle = ground;
+      context.fillRect(0, 0, width, height);
 
       const points = project(placed, camera.current, width, height);
       projected.current = points;
       const screen = new Map(points.map((point) => [point.placed.node.name, point]));
+      const { lit: onlyThese, centre } = view.current;
 
       /*
-       * Edges first and very faint.
+       * Edges first, and in two passes.
        *
        * There are more links than nodes, and drawn at any real strength they
-       * become a grey fog with the structure hidden inside it. They are here to
-       * suggest the threads, not to be read individually.
+       * are a grey fog with the structure hidden inside it -- so normally they
+       * only suggest the threads. When something is held, the handful of links
+       * that touch it are drawn over the top at full strength, and that
+       * contrast is the entire answer to "what is this connected to".
        */
       context.lineWidth = 0.5;
-      context.strokeStyle = 'rgba(107, 113, 148, 0.16)';
+      context.strokeStyle = onlyThese ? 'rgba(120, 132, 190, 0.05)' : 'rgba(130, 142, 200, 0.13)';
       context.beginPath();
       for (const edge of graph.edges) {
         const from = screen.get(edge.from);
         const to = screen.get(edge.to);
         if (!from || !to) continue;
+        if (onlyThese && centre && (edge.from === centre || edge.to === centre)) continue;
         context.moveTo(from.screenX, from.screenY);
         context.lineTo(to.screenX, to.screenY);
       }
       context.stroke();
 
+      if (onlyThese && centre) {
+        context.lineWidth = 1.2;
+        context.strokeStyle = 'rgba(167, 139, 250, 0.75)';
+        context.beginPath();
+        for (const edge of graph.edges) {
+          if (edge.from !== centre && edge.to !== centre) continue;
+          const from = screen.get(edge.from);
+          const to = screen.get(edge.to);
+          if (!from || !to) continue;
+          context.moveTo(from.screenX, from.screenY);
+          context.lineTo(to.screenX, to.screenY);
+        }
+        context.stroke();
+      }
+
       // Then nodes, far to near, so the shape reads the right way round.
       for (const point of points) {
         const node = point.placed.node;
+        const isLit = !onlyThese || onlyThese.has(node.name);
         // Further away is fainter, which is what makes it read as depth at all.
-        const fade = Math.max(0.25, Math.min(1, 6 / point.depth - 0.35));
-        context.globalAlpha = hovered && hovered.name === node.name ? 1 : fade;
+        const fade = Math.max(0.3, Math.min(1, 6 / point.depth - 0.3));
+
+        context.globalAlpha = onlyThese ? (isLit ? 1 : 0.07) : fade;
         context.fillStyle = colourFor(node);
+
+        /*
+         * Glow only on what is lit. shadowBlur is the most expensive thing on
+         * a 2D canvas, and asking for it on a thousand nodes every frame drops
+         * the whole thing to single figures.
+         */
+        if (isLit && onlyThese) {
+          context.shadowBlur = node.name === centre ? 22 : 11;
+          context.shadowColor = colourFor(node);
+        }
+
         context.beginPath();
-        context.arc(point.screenX, point.screenY, Math.max(1, point.size), 0, Math.PI * 2);
+        context.arc(
+          point.screenX,
+          point.screenY,
+          Math.max(1, point.size * (node.name === centre ? 1.7 : 1)),
+          0,
+          Math.PI * 2,
+        );
         context.fill();
+        context.shadowBlur = 0;
       }
       context.globalAlpha = 1;
+
+      /*
+       * Names, for the lit few.
+       *
+       * Only ever drawn for what is held or matched, and only the busiest of
+       * those: a thousand labels is a solid block of text, and the point of
+       * lighting something up is to be able to read it.
+       */
+      if (onlyThese) {
+        const labelled = points
+          .filter((point) => onlyThese.has(point.placed.node.name))
+          .sort((a, b) => b.placed.node.degree - a.placed.node.degree)
+          .slice(0, MAX_LABELS);
+
+        context.font = '11px ui-sans-serif, system-ui, sans-serif';
+        context.textBaseline = 'middle';
+        for (const point of labelled) {
+          const node = point.placed.node;
+          const text = node.name.replaceAll('-', ' ');
+          const x = point.screenX + point.size + 6;
+          const y = point.screenY;
+
+          const width_ = context.measureText(text).width;
+          context.fillStyle = 'rgba(7, 9, 28, 0.72)';
+          context.fillRect(x - 3, y - 8, width_ + 6, 16);
+          context.fillStyle = node.name === centre ? '#ffffff' : '#c7cbe4';
+          context.fillText(text, x, y);
+        }
+      }
 
       frame = requestAnimationFrame(draw);
     };
 
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [graph, hovered]);
+  }, [graph]);
+
+  function at(event: React.PointerEvent<HTMLCanvasElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
 
   function onPointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const { x, y } = at(event);
+    idle.current = 0;
 
     if (drag.current) {
-      camera.current.spin += (x - drag.current.x) * 0.01;
+      target.current.spin += (x - drag.current.x) * 0.01;
       // Stopped short of straight down the axis, where the cylinder becomes a
       // disc and there is nothing to see.
-      camera.current.tilt = Math.max(
+      target.current.tilt = Math.max(
         -1.2,
-        Math.min(1.2, camera.current.tilt + (y - drag.current.y) * 0.01),
+        Math.min(1.2, target.current.tilt + (y - drag.current.y) * 0.01),
       );
       drag.current = { x, y };
       return;
     }
 
-    setHovered(pick(projected.current, x, y)?.placed.node ?? null);
+    setHovered(pick(projected.current, x, y)?.placed.node.name ?? null);
   }
+
+  const node = graph?.nodes.find((candidate) => candidate.name === (focused ?? hovered));
+  const linked = graph && node ? [...neighbours(graph.edges, node.name)] : [];
 
   if (error) return <p className="muted">{error}</p>;
   if (!graph) return <p className="muted">Loading…</p>;
@@ -159,17 +314,46 @@ export function VaultSpace({ agentId }: Props) {
   }
 
   return (
-    <>
+    <div className="vault-space-wrap">
+      <div className="vault-space-bar">
+        <input
+          className="vault-space-find"
+          type="search"
+          value={query}
+          placeholder={`Find something among ${graph.nodes.length}…`}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {focused ? (
+          <button type="button" className="ghost" onClick={() => setFocused(null)}>
+            Let go
+          </button>
+        ) : null}
+      </div>
+
       <canvas
         ref={canvasRef}
         className="vault-space"
         onPointerDown={(event) => {
+          const { x, y } = at(event);
+          idle.current = 0;
+          /*
+           * Landing on something holds it; landing on nothing turns the whole
+           * cylinder. One gesture, and which one it is depends on what is
+           * under the finger -- so nothing has to be explained.
+           */
+          const hit = pick(projected.current, x, y);
+          if (hit) {
+            setFocused(hit.placed.node.name);
+            return;
+          }
+          setFocused(null);
           event.currentTarget.setPointerCapture(event.pointerId);
-          const rect = event.currentTarget.getBoundingClientRect();
-          drag.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+          drag.current = { x, y };
         }}
         onPointerUp={(event) => {
-          event.currentTarget.releasePointerCapture(event.pointerId);
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
           drag.current = null;
         }}
         onPointerLeave={() => {
@@ -178,20 +362,46 @@ export function VaultSpace({ agentId }: Props) {
         }}
         onPointerMove={onPointerMove}
         onWheel={(event) => {
-          camera.current.zoom = Math.max(
-            0.5,
-            Math.min(3, camera.current.zoom - event.deltaY * 0.001),
+          idle.current = 0;
+          target.current.zoom = Math.max(
+            0.4,
+            Math.min(6, target.current.zoom - event.deltaY * 0.0015),
           );
         }}
       />
 
-      <p className="muted">
-        {hovered
-          ? `${hovered.name.replaceAll('-', ' ')} — ${hovered.description}${
-              hovered.degree > 0 ? `, ${hovered.degree} things point at it` : ''
-            }`
-          : 'Drag to turn it, scroll to zoom. Along is time, toward the middle is how much everything else depends on it, and around is which subject.'}
-      </p>
-    </>
+      {node ? (
+        <div className="vault-space-card">
+          <strong>{node.name.replaceAll('-', ' ')}</strong>
+          <span className="muted">
+            {node.description}
+            {node.degree > 0 ? ` · ${node.degree} things point at it` : ''}
+            {node.cluster && node.cluster !== node.name
+              ? ` · ${node.cluster.replaceAll('-', ' ')}`
+              : ''}
+          </span>
+          {linked.length > 0 ? (
+            <p className="vault-space-links">
+              {/* Clicking one moves the light onto it, which is how you walk
+                  the vault rather than just look at it. */}
+              {linked.slice(0, 12).map((name) => (
+                <button key={name} type="button" onClick={() => setFocused(name)}>
+                  {name.replaceAll('-', ' ')}
+                </button>
+              ))}
+              {linked.length > 12 ? (
+                <span className="muted">and {linked.length - 12} more</span>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="muted">
+          Drag to turn it, scroll to zoom, and hold anything to light up what it is connected to.
+          Along is time, toward the middle is how much everything else depends on it, and around is
+          which subject.
+        </p>
+      )}
+    </div>
   );
 }
