@@ -178,7 +178,23 @@ async function extract(
     const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
     if (isUnavailable(bytes)) return bytes;
 
-    const extracted = await extractPdfText(new Uint8Array(bytes));
+    /*
+     * OCR gets its own copy, made before anything else touches the bytes.
+     *
+     * pdf.js takes ownership of the buffer it is handed and detaches it, and
+     * both reads were views over the same one -- so the fallback below
+     * constructed from a dead buffer and threw. It failed only on scans, which
+     * are the exact files OCR exists for, and in production that was part of
+     * 196 failures out of 512.
+     *
+     * A copy rather than a second download: the bytes are already here and
+     * capped in size, so this costs memory for the length of one read where
+     * the alternative costs another round trip to Google.
+     */
+    const source = new Uint8Array(bytes);
+    const forOcr = source.slice();
+
+    const extracted = await extractPdfText(source);
     if (extracted.ok) return extracted.text;
 
     if (extracted.reason === 'unreadable') {
@@ -190,7 +206,7 @@ async function extract(
      * seconds it costs: scanned worksheets are ordinary in schools, and the
      * alternative is telling a student their homework is unreadable.
      */
-    const read = await ocrPdf(new Uint8Array(bytes));
+    const read = await ocrPdf(forOcr);
     if (!read.ok) return unavailable(describeOcrFailure(read.reason, name));
     return read.text;
   }

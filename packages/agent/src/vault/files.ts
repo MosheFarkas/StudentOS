@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { LlmProvider } from '@contexto/llm';
 import { untrustedNote } from '../untrusted.js';
+import { retrying } from './retry.js';
 import type { Vault, VaultNote } from './vault.js';
 
 /**
@@ -138,7 +139,7 @@ export async function readFileContents(
   for (const note of files.slice(0, limit)) {
     let text: string | null;
     try {
-      text = await read(note.externalId as string);
+      text = await retrying(() => read(note.externalId as string));
     } catch {
       // A file that failed today may read fine tomorrow -- a permission that
       // has since been granted, a service that was down -- so no mark is left
@@ -154,24 +155,27 @@ export async function readFileContents(
     }
 
     try {
-      const answer = await llm.chat(
-        {
-          messages: [
-            {
-              role: 'system',
-              content:
-                courses.size > 0
-                  ? `${ASK}\n\nThe courses, and the only names inCourse may contain:\n${[...courses].join('\n')}`
-                  : ASK,
-            },
-            {
-              role: 'user',
-              content: `${note.name.replaceAll('-', ' ')}\n\n${text.slice(0, ENOUGH)}`,
-            },
-          ],
-          tools: undefined,
-        },
-        { userId },
+      const body = text;
+      const answer = await retrying(() =>
+        llm.chat(
+          {
+            messages: [
+              {
+                role: 'system',
+                content:
+                  courses.size > 0
+                    ? `${ASK}\n\nThe courses, and the only names inCourse may contain:\n${[...courses].join('\n')}`
+                    : ASK,
+              },
+              {
+                role: 'user',
+                content: `${note.name.replaceAll('-', ' ')}\n\n${body.slice(0, ENOUGH)}`,
+              },
+            ],
+            tools: undefined,
+          },
+          { userId },
+        ),
       );
 
       const parsed = parse(answer.content);

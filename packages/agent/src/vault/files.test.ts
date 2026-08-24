@@ -193,6 +193,63 @@ describe('reading the files in the vault', () => {
     expect((await vault.read('entity', 'chemistry'))?.body).toBe('Chemistry.');
   });
 
+  it('tries again when the model is rate limited', async () => {
+    /*
+     * A real run of 512 files failed 196 of them -- 38 per cent. Retrying 20
+     * of those by hand, 16 worked first time, so almost none of it was about
+     * the files: it was a per-minute token limit, and a reader with no retry
+     * turns "come back shortly" into a permanent failure.
+     *
+     * The mail pass already had this. It was written there, for this exact
+     * reason, and never carried across -- which is why both now share one
+     * implementation instead of two that drift.
+     */
+    let call = 0;
+    const llm = {
+      chat: vi.fn(async () => {
+        call += 1;
+        if (call === 1) throw new Error('429 Rate limit reached for gpt-5.6-luna');
+        return {
+          content: JSON.stringify({ what: 'A method.', kind: 'worksheet', inCourse: [] }),
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          finishReason: 'stop' as const,
+        };
+      }),
+    };
+
+    const result = await run({ llm, read: async () => 'text' });
+    expect(result.read).toBe(1);
+    expect(call).toBe(2);
+  });
+
+  it('tries again when reading the file itself fails transiently', async () => {
+    // Drive throws too -- a detached buffer, a stalled download. Same answer.
+    let call = 0;
+    const result = await run({
+      llm: summary('Fine.'),
+      read: async () => {
+        call += 1;
+        if (call === 1) throw new Error('503 Service Unavailable');
+        return 'text';
+      },
+    });
+
+    expect(result.read).toBe(1);
+  });
+
+  it('does not retry a file the model genuinely cannot answer for', async () => {
+    const llm = {
+      chat: vi.fn(async () => {
+        throw new Error('400 context length exceeded');
+      }),
+    };
+    const result = await run({ llm, read: async () => 'text' });
+
+    expect(result.failed).toBe(1);
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+  });
+
   it('carries on when one file fails', async () => {
     await vault.write({
       name: 'file-2',

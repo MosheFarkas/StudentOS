@@ -189,6 +189,31 @@ describe('readDriveFile', () => {
     expect((result as { content: string }).content).toContain('Define inertia');
   });
 
+  it('still reaches OCR when the PDF parser consumes the bytes', async () => {
+    /*
+     * pdf.js takes ownership of the buffer it is handed and detaches it. Both
+     * reads were views over the same one, so the OCR fallback constructed from
+     * a dead buffer and threw "Cannot perform Construct on a detached
+     * ArrayBuffer" -- and only ever on scans, the exact files OCR exists for.
+     *
+     * Found in production: 196 of 512 files failed a read, and this was among
+     * the reasons. The mock detaches for real, because a mock that politely
+     * leaves the buffer alone is what let this ship.
+     */
+    responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
+    extractTextMock.mockImplementation(async (bytes: Uint8Array) => {
+      // What pdf.js does: takes the buffer with it. Cast because the lib
+      // target predates ArrayBuffer.transfer, which Node 22 has.
+      (bytes.buffer as ArrayBuffer & { transfer(): ArrayBuffer }).transfer();
+      return pdfText('   ', 3);
+    });
+    ocrPdfMock.mockResolvedValue({ ok: true, text: 'Question 1. Define inertia.' });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect(ocrPdfMock).toHaveBeenCalledOnce();
+    expect((result as { content: string }).content).toContain('Define inertia');
+  });
+
   it('explains itself when OCR cannot read a scan either', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
     extractTextMock.mockResolvedValue(pdfText('  ', 3));
