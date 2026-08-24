@@ -64,11 +64,69 @@ export const listCourses: Tool<Record<string, never>, unknown> = {
  * useful without Classroom -- most students will never have it.
  */
 
+/**
+ * How many items a list tool hands the model in one call.
+ *
+ * Measured on a real account: one call to list_materials returned 46,613
+ * tokens and list_announcements 37,751. Two in a turn is 84,000 tokens before
+ * the model has said anything -- a turn that fails outright against a
+ * per-minute token limit, and on any account one that costs more than the
+ * entire one-off import of the student's Drive.
+ *
+ * The year really is that big. Handing all of it over at once is the mistake,
+ * not the size of the year. A caller that genuinely needs everything -- the
+ * vault importer, which spends no model call on it -- asks for it explicitly.
+ */
+export const MODEL_PAGE = 25;
+
+const pageInput = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(`How many to return. Defaults to ${MODEL_PAGE}, newest first.`),
+  course: z
+    .string()
+    .optional()
+    .describe('Only this course, by name. The way to see past the first page.'),
+};
+
+/** Narrow to one course, then to one page, and say what was left behind. */
+function page<T extends { course: string }>(
+  items: T[],
+  input: { limit?: number; course?: string },
+  noun: string,
+): { items: T[]; total: number; more?: string } {
+  const wanted = input.course
+    ? items.filter((item) => item.course.toLowerCase().includes(input.course!.toLowerCase()))
+    : items;
+
+  const limit = input.limit ?? MODEL_PAGE;
+  if (wanted.length <= limit) return { items: wanted, total: wanted.length };
+
+  /*
+   * Truncating silently is worse than refusing.
+   *
+   * The model reports "that is everything" about a slice it was never told
+   * was a slice, and the student believes it. So the count and the way to
+   * narrow travel with the page.
+   */
+  return {
+    items: wanted.slice(0, limit),
+    total: wanted.length,
+    more:
+      `Showing the newest ${limit} of ${wanted.length} ${noun}. ` +
+      'Ask again with a course name to see that course, or a bigger limit.',
+  };
+}
+
 const listCourseworkInput = z.object({
   includeCompleted: z
     .boolean()
     .default(false)
     .describe('Include assignments the student has already turned in'),
+  ...pageInput,
 });
 
 interface CourseList {
@@ -115,7 +173,7 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     'involves upcoming work, deadlines, or what a course requires.',
   inputSchema: listCourseworkInput,
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       // Says "or your school has not approved" deliberately. For a managed
@@ -167,7 +225,13 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     // Undated work sorts last -- "no due date" is not urgent.
     assignments.sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
 
-    return { assignments, count: assignments.length };
+    const shown = page(assignments, input, 'assignments');
+    return {
+      assignments: shown.items,
+      count: shown.items.length,
+      total: shown.total,
+      ...(shown.more ? { more: shown.more } : {}),
+    };
   },
 };
 
@@ -293,7 +357,7 @@ export interface CourseMaterial {
   link?: string;
 }
 
-export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
+export const listCourseMaterials: Tool<{ limit?: number; course?: string }, unknown> = {
   id: 'google_classroom_list_materials',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_MATERIALS_SCOPE],
   description:
@@ -304,9 +368,9 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
     'teachers attach files to announcements as well. Searching Drive by name ' +
     'will often miss them, because Drive omits files the student has never opened. ' +
     "Include each item's link as a markdown link too, so the student can open it themselves.",
-  inputSchema: z.object({}),
+  inputSchema: z.object(pageInput),
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       return unavailable(
@@ -330,7 +394,13 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
     );
     if (isUnavailable(materials)) return materials;
 
-    return { materials, count: materials.length };
+    const shown = page(materials, input, 'materials');
+    return {
+      materials: shown.items,
+      count: shown.items.length,
+      total: shown.total,
+      ...(shown.more ? { more: shown.more } : {}),
+    };
   },
 };
 
@@ -342,6 +412,7 @@ interface RawMaterial {
   materials?: ClassroomMaterial[];
 }
 
+
 export interface Announcement {
   /** Classroom's own id. What makes a re-import an update rather than a copy. */
   id: string;
@@ -352,7 +423,7 @@ export interface Announcement {
   link?: string;
 }
 
-export const listAnnouncements: Tool<Record<string, never>, unknown> = {
+export const listAnnouncements: Tool<{ limit?: number; course?: string }, unknown> = {
   id: 'google_classroom_list_announcements',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_ANNOUNCEMENTS_SCOPE],
   description:
@@ -361,9 +432,9 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
     'also attach FILES to announcements, and those attachments carry a fileId you can pass to ' +
     'google_drive_read_file. If a file is not in google_classroom_list_materials, look here ' +
     'before concluding it does not exist.',
-  inputSchema: z.object({}),
+  inputSchema: z.object(pageInput),
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       return unavailable(
@@ -387,9 +458,16 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
     );
     if (isUnavailable(announcements)) return announcements;
 
-    // Newest first -- "what did I miss" is almost always about recent posts.
+    // Newest first -- "what did I miss" is almost always about recent posts,
+    // and it is what makes the first page the right page.
     announcements.sort((a, b) => (b.postedAt ?? '').localeCompare(a.postedAt ?? ''));
-    return { announcements, count: announcements.length };
+    const shown = page(announcements, input, 'announcements');
+    return {
+      announcements: shown.items,
+      count: shown.items.length,
+      total: shown.total,
+      ...(shown.more ? { more: shown.more } : {}),
+    };
   },
 };
 
@@ -462,16 +540,16 @@ const SUBMISSION_STATES: Record<string, string> = {
  * one request per assignment per course -- on a 14-course account that is
  * hundreds of calls and a guaranteed rate limit.
  */
-export const listSubmissions: Tool<Record<string, never>, unknown> = {
+export const listSubmissions: Tool<{ limit?: number; course?: string }, unknown> = {
   id: 'google_classroom_list_submissions',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_SUBMISSIONS_SCOPE],
   description:
     "List the student's own work: what is turned in, what is missing, what is late, and any " +
     'grades they have been given. Call this when they ask how they are doing, what they still ' +
     'owe, what they got on something, or whether they handed something in.',
-  inputSchema: z.object({}),
+  inputSchema: z.object(pageInput),
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       return unavailable(
@@ -504,9 +582,12 @@ export const listSubmissions: Tool<Record<string, never>, unknown> = {
     const late = submissions.filter((s) => s.late).length;
     const missing = submissions.filter((s) => s.state === 'not turned in').length;
 
+    const shown = page(submissions, input, 'submissions');
     return {
-      submissions,
-      count: submissions.length,
+      submissions: shown.items,
+      count: shown.items.length,
+      total: shown.total,
+      ...(shown.more ? { more: shown.more } : {}),
       late,
       missing,
       note:

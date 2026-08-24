@@ -15,6 +15,9 @@ import {
 import type { ToolContext } from '../tools/types.js';
 import type { ClassroomSnapshot } from './classroom.js';
 
+/** Higher than any school's year. The importer wants the lot. */
+const ALL = 100_000;
+
 /**
  * Fetching what Classroom knows, through the tools that already know how.
  *
@@ -95,14 +98,14 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
     // everything the moment it is handed in.
     collect<Assignment>(
       'coursework',
-      () => listCoursework.execute({ includeCompleted: true } as never, ctx),
+      () => listCoursework.execute({ includeCompleted: true, limit: ALL } as never, ctx),
       'assignments',
       skipped,
     ),
     collect<Topic>('topics', () => listTopics.execute({} as never, ctx), 'topics', skipped),
     collect<SubmissionSummary>(
       'submissions',
-      () => listSubmissions.execute({} as never, ctx),
+      () => listSubmissions.execute({ limit: ALL } as never, ctx),
       'submissions',
       skipped,
     ),
@@ -114,15 +117,23 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
      * are the half that says what actually happened in a course rather than
      * what it contains.
      */
+    /*
+     * EVERYTHING, explicitly.
+     *
+     * These tools hand a conversation a page, because a year of announcements
+     * is forty thousand tokens and no turn should carry that. The importer is
+     * the opposite case: it wants all of them and spends no model call on any
+     * of them, so it says so rather than inheriting a limit meant for a chat.
+     */
     collect<Announcement>(
       'announcements',
-      () => listAnnouncements.execute({} as never, ctx),
+      () => listAnnouncements.execute({ limit: ALL } as never, ctx),
       'announcements',
       skipped,
     ),
     collect<CourseMaterial>(
       'materials',
-      () => listCourseMaterials.execute({} as never, ctx),
+      () => listCourseMaterials.execute({ limit: ALL } as never, ctx),
       'materials',
       skipped,
     ),
