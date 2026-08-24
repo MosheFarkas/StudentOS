@@ -1,4 +1,10 @@
-import type { Assignment, SubmissionSummary, Topic } from '../tools/google/classroom.js';
+import type {
+  Announcement,
+  Assignment,
+  CourseMaterial,
+  SubmissionSummary,
+  Topic,
+} from '../tools/google/classroom.js';
 import { slugForNote } from './slug.js';
 import type { Vault, VaultNote } from './vault.js';
 
@@ -11,10 +17,13 @@ import type { Vault, VaultNote } from './vault.js';
  * expensive half is mail, where a model has to decide what matters, and that
  * comes after the trust boundary rather than before it.
  *
- * Nothing here reads prose a teacher wrote. Assignment descriptions and
- * announcements are deliberately left behind: until imported notes are
- * rendered inside the warning gmail.ts and portal.ts already use, none of that
- * belongs in a file the agent will eventually read.
+ * Announcements and materials carry words a teacher wrote, and were left out
+ * of the first version because there was nowhere safe to put them. That is no
+ * longer true: a note records its source, and anything whose source is not the
+ * student is rendered inside the same warning the tools use. So they are here
+ * -- and on a real account they were more than half of everything Classroom
+ * held, which is the difference between a vault that knows a course exists and
+ * one that knows what happened in it.
  */
 
 export interface ClassroomSnapshot {
@@ -22,6 +31,8 @@ export interface ClassroomSnapshot {
   coursework: Assignment[];
   topics: Topic[];
   submissions: SubmissionSummary[];
+  announcements: Announcement[];
+  materials: CourseMaterial[];
 }
 
 export interface ImportResult {
@@ -32,13 +43,36 @@ export interface ImportResult {
 /** `Due: <date>` in a note body, so a moved deadline can be noticed. */
 const DUE_LINE = /^Due: (.+)$/m;
 
+/**
+ * A stable identity, falling back to what the thing is when the id is missing.
+ *
+ * Every note is stored under its external id, so two notes sharing one id are
+ * one file. Classroom always sends ids -- but a field nobody looks at going
+ * empty would silently collapse a term of announcements into whichever arrived
+ * last, and losing them quietly is worse than a duplicate.
+ */
+function identify(id: string, fallback: string): string {
+  return id || fallback;
+}
+
 export async function importClassroom(
   vault: Vault,
   snapshot: ClassroomSnapshot,
 ): Promise<ImportResult> {
-  const existing = await vault.list('entity');
-  const byExternalId = new Map(existing.filter((n) => n.externalId).map((n) => [n.externalId, n]));
-  const takenNames = new Set(existing.map((n) => n.name));
+  /*
+   * Episodes are listed too, not just entities.
+   *
+   * Announcements land as episodes, and a name is only free if nothing of
+   * either kind has it -- two notes with one name are one file.
+   */
+  const [existing, existingEpisodes] = await Promise.all([
+    vault.list('entity'),
+    vault.list('episode'),
+  ]);
+  const byExternalId = new Map(
+    [...existing, ...existingEpisodes].filter((n) => n.externalId).map((n) => [n.externalId, n]),
+  );
+  const takenNames = new Set([...existing, ...existingEpisodes].map((n) => n.name));
 
   const result: ImportResult = { written: 0, updated: 0 };
 
@@ -173,6 +207,67 @@ export async function importClassroom(
       source: 'classroom',
       description: 'Assignment',
       externalId: work.id,
+      body: lines.join('\n'),
+    });
+  }
+
+  // --- Materials: a reading or a slide deck, which sits there all term. ---
+  for (const material of snapshot.materials) {
+    const id = identify(material.id, `${material.course}:${material.title}`);
+    const name = nameFor(id, material.title);
+    const lines = [`${material.title}.`, '', linkToCourse(material.course)];
+    if (material.description) lines.push('', material.description);
+    if (material.attachments.length > 0) {
+      lines.push('', ...material.attachments.map((file) => `Attached: ${file.title}`));
+    }
+
+    await save({
+      name,
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Material',
+      externalId: id,
+      ...(material.link ? { sourceUrl: material.link } : {}),
+      body: lines.join('\n'),
+    });
+  }
+
+  /*
+   * --- Announcements: the one thing here that is an event. ---
+   *
+   * A course and an assignment are things that persist; a teacher saying
+   * "no class Thursday" happened at a moment and is only meaningful with that
+   * moment attached. So these are episodes, and they are what gives the
+   * quieter parts of the year anything on the timeline at all.
+   */
+  for (const announcement of snapshot.announcements) {
+    // Named from its own opening words rather than a number, so a person
+    // reading a list of filenames can tell them apart.
+    const opening = announcement.text.trim().split(/\s+/).slice(0, 8).join(' ');
+    const name = nameFor(
+      identify(announcement.id, `${announcement.course}:${announcement.postedAt ?? opening}`),
+      opening || `announcement in ${announcement.course}`,
+    );
+
+    const lines = [linkToCourse(announcement.course).replace('Part of', 'In'), '', announcement.text];
+    if (announcement.attachments.length > 0) {
+      lines.push('', ...announcement.attachments.map((file) => `Attached: ${file.title}`));
+    }
+
+    await save({
+      name,
+      kind: 'episode',
+      source: 'classroom',
+      description: `Announcement in ${announcement.course}`,
+      event: 'announcement',
+      externalId: identify(
+        announcement.id,
+        `${announcement.course}:${announcement.postedAt ?? opening}`,
+      ),
+      ...(announcement.postedAt
+        ? { occurred: new Date(announcement.postedAt).toISOString() }
+        : {}),
+      ...(announcement.link ? { sourceUrl: announcement.link } : {}),
       body: lines.join('\n'),
     });
   }

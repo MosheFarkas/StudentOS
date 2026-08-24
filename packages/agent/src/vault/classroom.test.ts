@@ -20,6 +20,8 @@ const snapshot = (over: Partial<ClassroomSnapshot> = {}): ClassroomSnapshot => (
   coursework: [{ id: 'w-1', course: 'Chemistry', title: 'Titration writeup', due: '2026-09-14' }],
   topics: [],
   submissions: [],
+  announcements: [],
+  materials: [],
   ...over,
 });
 
@@ -126,17 +128,104 @@ describe('importing a snapshot', () => {
     expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
   });
 
-  it('imports no prose written by a teacher', async () => {
+  it('records an announcement as something that happened', async () => {
     /*
-     * Stage one deliberately maps structure and nothing else. Descriptions and
-     * announcements are written by other people, and until imported notes are
-     * rendered inside the warning the tools already use, none of that belongs
-     * in a file the agent will later read.
+     * Two hundred and fifty-seven of these existed on a real account and none
+     * were imported. They were left out of stage one because they are prose a
+     * teacher wrote and there was nowhere safe to put it -- and then the trust
+     * boundary shipped and nobody came back for them.
      */
-    await importClassroom(vault, snapshot());
-    const notes = await vault.list('entity');
-    for (const note of notes) {
-      expect(note.body.length).toBeLessThan(400);
+    await importClassroom(
+      vault,
+      snapshot({
+        announcements: [
+          {
+            id: 'a1',
+            course: 'Chemistry',
+            text: 'Remember the titration writeup is due before half term.',
+            postedAt: '2026-09-02T10:00:00Z',
+            attachments: [],
+          },
+        ],
+      }),
+    );
+
+    const episodes = await vault.list('episode');
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0]?.event).toBe('announcement');
+    expect(episodes[0]?.source).toBe('classroom');
+    expect(episodes[0]?.occurred).toBe('2026-09-02T10:00:00.000Z');
+    expect(episodes[0]?.body).toContain('half term');
+    expect(episodes[0]?.body).toContain('In [[chemistry]]');
+  });
+
+  it('records a material as a thing that persists', async () => {
+    // A reading or a slide deck is not an event -- it sits there being useful
+    // all term -- so it is an entity, like the assignment it supports.
+    await importClassroom(
+      vault,
+      snapshot({
+        materials: [
+          { id: 'm1', course: 'Chemistry', title: 'Titration technique video', attachments: [] },
+        ],
+      }),
+    );
+
+    const note = await vault.read('entity', 'titration-technique-video');
+    expect(note?.description).toBe('Material');
+    expect(note?.body).toContain('Part of [[chemistry]]');
+  });
+
+  it('does not import the same announcement twice', async () => {
+    const withOne = snapshot({
+      announcements: [
+        { id: 'a1', course: 'Chemistry', text: 'Same notice.', postedAt: '2026-09-02T10:00:00Z', attachments: [] },
+      ],
+    });
+    await importClassroom(vault, withOne);
+    await importClassroom(vault, withOne);
+    expect(await vault.list('episode')).toHaveLength(1);
+  });
+
+  it('keeps announcements apart when Classroom sends no id', async () => {
+    /*
+     * The tool defaults a missing id to an empty string, and every note here is
+     * saved under its external id. Two announcements sharing one id are one
+     * file -- so an outage in a field nobody looks at would silently collapse
+     * a term of notices into the last one received.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        announcements: [
+          { id: '', course: 'Chemistry', text: 'First notice.', postedAt: '2026-09-01T10:00:00Z', attachments: [] },
+          { id: '', course: 'Chemistry', text: 'Second notice.', postedAt: '2026-09-08T10:00:00Z', attachments: [] },
+        ],
+      }),
+    );
+
+    expect(await vault.list('episode')).toHaveLength(2);
+  });
+
+  it('marks everything it writes as coming from Classroom', async () => {
+    /*
+     * Announcements and materials carry words a teacher wrote. They are safe
+     * to import now only because a note records its source and anything not
+     * written by the student is rendered inside a warning -- so getting this
+     * field right is what makes the rest of it allowed.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        announcements: [
+          { id: 'a1', course: 'Chemistry', text: 'A notice.', postedAt: '2026-09-02T10:00:00Z', attachments: [] },
+        ],
+        materials: [{ id: 'm1', course: 'Chemistry', title: 'A reading', attachments: [] }],
+      }),
+    );
+
+    for (const note of [...(await vault.list('entity')), ...(await vault.list('episode'))]) {
+      expect(note.source).toBe('classroom');
     }
   });
 });

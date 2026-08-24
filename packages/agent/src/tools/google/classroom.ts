@@ -284,6 +284,8 @@ async function forEachCourse<T>(
 }
 
 export interface CourseMaterial {
+  /** Classroom's own id. What makes a re-import an update rather than a copy. */
+  id: string;
   course: string;
   title: string;
   description?: string;
@@ -318,6 +320,7 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
       (id) => `${COURSES_URL}/${id}/courseWorkMaterials?pageSize=100`,
       (payload: { courseWorkMaterial?: RawMaterial[] }, courseName) =>
         (payload.courseWorkMaterial ?? []).map((item) => ({
+          id: item.id ?? '',
           course: courseName,
           title: item.title ?? 'Untitled',
           ...(item.description ? { description: item.description } : {}),
@@ -332,6 +335,7 @@ export const listCourseMaterials: Tool<Record<string, never>, unknown> = {
 };
 
 interface RawMaterial {
+  id?: string;
   title?: string;
   description?: string;
   alternateLink?: string;
@@ -339,6 +343,8 @@ interface RawMaterial {
 }
 
 export interface Announcement {
+  /** Classroom's own id. What makes a re-import an update rather than a copy. */
+  id: string;
   course: string;
   text: string;
   postedAt?: string;
@@ -371,6 +377,7 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
       (id) => `${COURSES_URL}/${id}/announcements?pageSize=100`,
       (payload: { announcements?: RawAnnouncement[] }, courseName) =>
         (payload.announcements ?? []).map((item) => ({
+          id: item.id ?? '',
           course: courseName,
           text: item.text ?? '',
           ...(item.creationTime ? { postedAt: item.creationTime } : {}),
@@ -387,6 +394,7 @@ export const listAnnouncements: Tool<Record<string, never>, unknown> = {
 };
 
 interface RawAnnouncement {
+  id?: string;
   text?: string;
   creationTime?: string;
   alternateLink?: string;

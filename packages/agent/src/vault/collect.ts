@@ -1,10 +1,14 @@
 import { isUnavailable } from '../tools/google/client.js';
 import {
+  listAnnouncements,
+  listCourseMaterials,
   listCourses,
   listCoursework,
   listSubmissions,
   listTopics,
+  type Announcement,
   type Assignment,
+  type CourseMaterial,
   type SubmissionSummary,
   type Topic,
 } from '../tools/google/classroom.js';
@@ -73,10 +77,20 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
   // Nothing else is reachable without courses, and asking anyway produces
   // three more identical failures for the same reason.
   if (courses.length === 0) {
-    return { snapshot: { courses: [], coursework: [], topics: [], submissions: [] }, skipped };
+    return {
+      snapshot: {
+        courses: [],
+        coursework: [],
+        topics: [],
+        submissions: [],
+        announcements: [],
+        materials: [],
+      },
+      skipped,
+    };
   }
 
-  const [coursework, topics, submissions] = await Promise.all([
+  const [coursework, topics, submissions, announcements, materials] = await Promise.all([
     // includeCompleted, because a vault of only outstanding work forgets
     // everything the moment it is handed in.
     collect<Assignment>(
@@ -92,7 +106,30 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
       'submissions',
       skipped,
     ),
+    /*
+     * The half that was missing.
+     *
+     * On a real account these two were four hundred and eighty-seven items
+     * against the four hundred that were already being imported -- and they
+     * are the half that says what actually happened in a course rather than
+     * what it contains.
+     */
+    collect<Announcement>(
+      'announcements',
+      () => listAnnouncements.execute({} as never, ctx),
+      'announcements',
+      skipped,
+    ),
+    collect<CourseMaterial>(
+      'materials',
+      () => listCourseMaterials.execute({} as never, ctx),
+      'materials',
+      skipped,
+    ),
   ]);
 
-  return { snapshot: { courses, coursework, topics, submissions }, skipped };
+  return {
+    snapshot: { courses, coursework, topics, submissions, announcements, materials },
+    skipped,
+  };
 }
