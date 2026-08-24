@@ -19,6 +19,22 @@ import type { ClassroomSnapshot } from './classroom.js';
 const ALL = 100_000;
 
 /**
+ * Last year counts.
+ *
+ * A school archives a course when the year ends, and asking only for active
+ * ones made six of this account's nineteen invisible -- both History courses,
+ * Science and Technology, Model UN, Debating and the IB Personal Project. The
+ * vault had no course to file a chemistry worksheet under and nothing at all
+ * to say about what the student got in Science, because as far as it knew they
+ * had never taken it.
+ *
+ * A conversation still defaults to current classes, because day to day that is
+ * what a student means. A vault is the opposite: remembering last year is the
+ * whole point of one.
+ */
+const EVERY_YEAR = true;
+
+/**
  * Fetching what Classroom knows, through the tools that already know how.
  *
  * Deliberately reuses the agent's own tools rather than calling the Google API
@@ -72,7 +88,7 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
 
   const courses = await collect<{ id: string; name: string }>(
     'courses',
-    () => listCourses.execute({} as never, ctx),
+    () => listCourses.execute({ includeArchived: EVERY_YEAR } as never, ctx),
     'courses',
     skipped,
   );
@@ -98,14 +114,23 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
     // everything the moment it is handed in.
     collect<Assignment>(
       'coursework',
-      () => listCoursework.execute({ includeCompleted: true, limit: ALL } as never, ctx),
+      () =>
+        listCoursework.execute(
+          { includeCompleted: true, limit: ALL, includeArchived: EVERY_YEAR } as never,
+          ctx,
+        ),
       'assignments',
       skipped,
     ),
-    collect<Topic>('topics', () => listTopics.execute({} as never, ctx), 'topics', skipped),
+    collect<Topic>(
+      'topics',
+      () => listTopics.execute({ includeArchived: EVERY_YEAR } as never, ctx),
+      'topics',
+      skipped,
+    ),
     collect<SubmissionSummary>(
       'submissions',
-      () => listSubmissions.execute({ limit: ALL } as never, ctx),
+      () => listSubmissions.execute({ limit: ALL, includeArchived: EVERY_YEAR } as never, ctx),
       'submissions',
       skipped,
     ),
@@ -127,13 +152,13 @@ export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collec
      */
     collect<Announcement>(
       'announcements',
-      () => listAnnouncements.execute({ limit: ALL } as never, ctx),
+      () => listAnnouncements.execute({ limit: ALL, includeArchived: EVERY_YEAR } as never, ctx),
       'announcements',
       skipped,
     ),
     collect<CourseMaterial>(
       'materials',
-      () => listCourseMaterials.execute({ limit: ALL } as never, ctx),
+      () => listCourseMaterials.execute({ limit: ALL, includeArchived: EVERY_YEAR } as never, ctx),
       'materials',
       skipped,
     ),

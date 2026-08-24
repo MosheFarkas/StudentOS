@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { listAnnouncements, listCourseMaterials, MODEL_PAGE } from './classroom.js';
+import { listAnnouncements, listCourseMaterials, listCourses, MODEL_PAGE } from './classroom.js';
 import type { ToolContext } from '../types.js';
 
 /**
@@ -101,5 +101,55 @@ describe('how much a list tool hands back', () => {
       announcements: unknown[];
     };
     expect(other.announcements).toHaveLength(0);
+  });
+});
+
+describe("which courses count as the student's", () => {
+  /*
+   * A school archives a course when the year ends. On a real account in
+   * August, six of nineteen were archived -- both History courses, Science and
+   * Technology, Model UN, Debating and the IB Personal Project -- and the
+   * vault had none of them, so "what did I get in Science" had no course to
+   * even look in.
+   *
+   * Day to day a student means their current classes, so a conversation still
+   * gets those by default. The vault is the opposite case: last year is
+   * exactly what it is for.
+   */
+  function courses(states: Record<string, string[]>) {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const asked = new URL(url).searchParams.get('courseStates');
+      const wanted = asked ? asked.split(',') : Object.keys(states);
+      const list = wanted.flatMap((state) =>
+        (states[state] ?? []).map((name, i) => ({
+          id: `${state}-${i}`,
+          name,
+          courseState: state,
+        })),
+      );
+      return new Response(JSON.stringify({ courses: list }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+  }
+
+  it('gives a conversation the classes they are in now', async () => {
+    courses({ ACTIVE: ['Grade 10 Math'], ARCHIVED: ['Extended History of Quebec and Canada 10'] });
+    const result = (await listCourses.execute({} as never, ctx())) as {
+      courses: { name: string }[];
+    };
+    expect(result.courses.map((c) => c.name)).toEqual(['Grade 10 Math']);
+  });
+
+  it('gives the importer last year as well, when it asks', async () => {
+    courses({ ACTIVE: ['Grade 10 Math'], ARCHIVED: ['Extended History of Quebec and Canada 10'] });
+    const result = (await listCourses.execute({ includeArchived: true } as never, ctx())) as {
+      courses: { name: string }[];
+    };
+    expect(result.courses.map((c) => c.name).sort()).toEqual([
+      'Extended History of Quebec and Canada 10',
+      'Grade 10 Math',
+    ]);
   });
 });

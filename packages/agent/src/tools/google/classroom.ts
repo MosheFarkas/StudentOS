@@ -24,15 +24,40 @@ const MAX_PAGES = 20;
  * group at all -- so a student whose school approved a subset always has at
  * least this working, rather than a connection that is green and does nothing.
  */
-export const listCourses: Tool<Record<string, never>, unknown> = {
+/**
+ * Which course states count.
+ *
+ * A school archives a course when the year ends. On a real account in August,
+ * six of nineteen were archived -- both History courses, Science and
+ * Technology, Model UN, Debating and the IB Personal Project -- and asking for
+ * ACTIVE alone made every one of them invisible. The vault had no course to
+ * file a chemistry worksheet under and no way to answer what a student got in
+ * Science, because as far as it knew they had never taken it.
+ *
+ * A conversation still gets the current classes by default, because day to day
+ * that is what a student means. The vault asks for everything, because last
+ * year is exactly what a vault is for.
+ */
+const STATES_NOW = 'ACTIVE';
+const STATES_EVER = 'ACTIVE,ARCHIVED';
+
+const includeArchived = {
+  includeArchived: z
+    .boolean()
+    .optional()
+    .describe('Also list courses from previous years, which the school has archived.'),
+};
+
+export const listCourses: Tool<{ includeArchived?: boolean }, unknown> = {
   id: 'google_classroom_list_courses',
   requiredScopes: [CLASSROOM_COURSES_SCOPE],
   description:
     'List the courses the student is enrolled in. Call this when they ask what classes ' +
-    'they are taking, or when you need a course name or id for another lookup.',
-  inputSchema: z.object({}),
+    'they are taking, or when you need a course name or id for another lookup. Pass ' +
+    'includeArchived when they ask about a previous year or a subject they no longer take.',
+  inputSchema: z.object(includeArchived),
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       return unavailable(
@@ -41,7 +66,7 @@ export const listCourses: Tool<Record<string, never>, unknown> = {
     }
 
     const result = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-      `${COURSES_URL}?courseStates=ACTIVE`,
+      `${COURSES_URL}?courseStates=${input.includeArchived ? STATES_EVER : STATES_NOW}`,
       token,
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
@@ -80,6 +105,7 @@ export const listCourses: Tool<Record<string, never>, unknown> = {
 export const MODEL_PAGE = 25;
 
 const pageInput = {
+  ...includeArchived,
   limit: z
     .number()
     .int()
@@ -195,7 +221,9 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
     }
 
     const courses = await googleFetch<CourseList>(
-      'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE',
+      `https://classroom.googleapis.com/v1/courses?courseStates=${
+        input.includeArchived ? STATES_EVER : STATES_NOW
+      }`,
       token,
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
@@ -321,9 +349,10 @@ async function forEachCourse<T>(
   signal: AbortSignal | undefined,
   path: (courseId: string) => string,
   extract: (payload: never, courseName: string) => T[],
+  archived = false,
 ): Promise<T[] | ReturnType<typeof unavailable>> {
   const courses = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-    `${COURSES_URL}?courseStates=ACTIVE`,
+    `${COURSES_URL}?courseStates=${archived ? STATES_EVER : STATES_NOW}`,
     token,
     { ...(signal ? { signal } : {}) },
   );
@@ -368,7 +397,10 @@ export interface CourseMaterial {
   link?: string;
 }
 
-export const listCourseMaterials: Tool<{ limit?: number; course?: string }, unknown> = {
+export const listCourseMaterials: Tool<
+  { limit?: number; course?: string; includeArchived?: boolean },
+  unknown
+> = {
   id: 'google_classroom_list_materials',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_MATERIALS_SCOPE],
   description:
@@ -402,6 +434,7 @@ export const listCourseMaterials: Tool<{ limit?: number; course?: string }, unkn
           attachments: toAttachments(item.materials),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
         })),
+      input.includeArchived,
     );
     if (isUnavailable(materials)) return materials;
 
@@ -433,7 +466,10 @@ export interface Announcement {
   link?: string;
 }
 
-export const listAnnouncements: Tool<{ limit?: number; course?: string }, unknown> = {
+export const listAnnouncements: Tool<
+  { limit?: number; course?: string; includeArchived?: boolean },
+  unknown
+> = {
   id: 'google_classroom_list_announcements',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_ANNOUNCEMENTS_SCOPE],
   description:
@@ -465,6 +501,7 @@ export const listAnnouncements: Tool<{ limit?: number; course?: string }, unknow
           attachments: toAttachments(item.materials),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
         })),
+      input.includeArchived,
     );
     if (isUnavailable(announcements)) return announcements;
 
@@ -550,7 +587,10 @@ const SUBMISSION_STATES: Record<string, string> = {
  * one request per assignment per course -- on a 14-course account that is
  * hundreds of calls and a guaranteed rate limit.
  */
-export const listSubmissions: Tool<{ limit?: number; course?: string }, unknown> = {
+export const listSubmissions: Tool<
+  { limit?: number; course?: string; includeArchived?: boolean },
+  unknown
+> = {
   id: 'google_classroom_list_submissions',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_SUBMISSIONS_SCOPE],
   description:
@@ -586,6 +626,7 @@ export const listSubmissions: Tool<{ limit?: number; course?: string }, unknown>
           courseWorkId: s.courseWorkId ?? '',
           ...(s.alternateLink ? { link: s.alternateLink } : {}),
         })),
+      input.includeArchived,
     );
     if (isUnavailable(submissions)) return submissions;
 
@@ -623,15 +664,15 @@ export interface Topic {
   topicId: string;
 }
 
-export const listTopics: Tool<Record<string, never>, unknown> = {
+export const listTopics: Tool<{ includeArchived?: boolean }, unknown> = {
   id: 'google_classroom_list_topics',
   requiredScopes: [CLASSROOM_COURSES_SCOPE, CLASSROOM_TOPICS_SCOPE],
   description:
     'List the topics (units or sections) teachers use to organise each course. Useful when a ' +
     'student asks what a class covers, or refers to a unit by name.',
-  inputSchema: z.object({}),
+  inputSchema: z.object(includeArchived),
 
-  async execute(_input, ctx) {
+  async execute(input, ctx) {
     const token = await ctx.google?.getAccessToken('classroom');
     if (!token) {
       return unavailable(
@@ -649,6 +690,7 @@ export const listTopics: Tool<Record<string, never>, unknown> = {
           name: t.name ?? 'Untitled topic',
           topicId: t.topicId ?? '',
         })),
+      input.includeArchived,
     );
     if (isUnavailable(topics)) return topics;
 
