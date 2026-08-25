@@ -3,6 +3,7 @@ import type { Agent, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { DeviceConnections } from './DeviceConnections.js';
 import { VaultSpace } from './VaultSpace.js';
+import { VaultBuild } from './VaultBuild.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 
@@ -64,18 +65,23 @@ export function Settings({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
-      {agent && (
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Your vault</h2>
-          </div>
-          <p className="muted">
-            Everything the agent has worked out about your school, as a shape. It built this from
-            your own Classroom and mail.
-          </p>
-          <VaultSpace agentId={agent.id} />
+      <div className="panel">
+        <div className="panel-head">
+          <h2>Your vault</h2>
         </div>
-      )}
+        <p className="muted">
+          Everything your agents have worked out about your school, as a shape. Built from your own
+          Classroom, Drive and mail.
+        </p>
+        {/*
+         * Outside the agent check on purpose. The vault belongs to the
+         * student, and an account with no agents still has one -- so gating
+         * the whole panel on an agent showed the largest vault on this
+         * deployment to nobody.
+         */}
+        <VaultBuild />
+        {agent && <VaultSpace agentId={agent.id} />}
+      </div>
 
       <GoogleConnections />
 

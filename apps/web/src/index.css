@@ -1271,6 +1271,21 @@ a.button {
  * underneath it -- on a phone that is the difference between a control and an
  * obstacle.
  */
+.vault-build {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.vault-build-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .vault-space-wrap {
   display: flex;
   flex-direction: column;

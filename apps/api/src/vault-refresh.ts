@@ -62,6 +62,16 @@ export function studentsToRefresh(
   return [...seen];
 }
 
+/**
+ * Import everything for one student.
+ *
+ * Exported so the "build vault" button runs exactly what the timer runs, and
+ * the two cannot drift into doing different things.
+ */
+export async function refreshVaultFor(ctx: AppContext, userId: string): Promise<string> {
+  return refreshOne(ctx, userId, userId);
+}
+
 async function refreshOne(ctx: AppContext, agentId: string, userId: string): Promise<string> {
   const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
   if (!owner) return 'no owner';

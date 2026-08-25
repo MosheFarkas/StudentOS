@@ -11,6 +11,7 @@ import { createAgentRoutes } from './agents.js';
 import { createChannelRoutes } from './channels.js';
 import { createDeviceRoutes } from './devices.js';
 import { createGoogleRoutes } from './google.js';
+import { createVaultRoutes } from './vault.js';
 
 /**
  * Application routes.
@@ -78,6 +79,7 @@ export function createRoutes(ctx: AppContext) {
 
       .route('/agents', createAgentRoutes(ctx))
       .route('/google', createGoogleRoutes(ctx))
+      .route('/vault', createVaultRoutes(ctx))
       .route('/channels', createChannelRoutes(ctx))
       .route('/devices', createDeviceRoutes(ctx))
 
