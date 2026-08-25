@@ -61,9 +61,20 @@ function decodeBody(data: string): string {
  * Pull readable text out of a message.
  *
  * Walks the MIME tree preferring text/plain, because the HTML alternative of
- * the same message is the same words wrapped in markup that costs context and
- * adds nothing. HTML is stripped only when plain text is absent, which is
- * common for marketing mail and rare for anything a teacher sends.
+ * the same message is usually the same words wrapped in markup that costs
+ * context and adds nothing.
+ *
+ * Usually. Mailing platforms send a text/plain part that is a stub -- the
+ * school's weekly mailbag carried twenty-two bytes reading
+ * "<!--placeholder-->" beside fifty kilobytes of HTML holding graduation
+ * dates, report card dates and what to do before September. Preferring plain
+ * unconditionally meant forty newsletters across the year arrived empty, and
+ * a model then judged, correctly, that there was nothing in them worth
+ * keeping.
+ *
+ * So plain wins only while it is a fair account of the message. When stripping
+ * the HTML yields substantially more, the HTML is the message and the plain
+ * part was a formality.
  */
 function extractText(payload: GmailPart | undefined): string {
   if (!payload) return '';
@@ -81,11 +92,26 @@ function extractText(payload: GmailPart | undefined): string {
   };
   walk(payload);
 
-  if (plain.length > 0) return plain.join('\n').trim();
-  if (html.length === 0) return '';
+  const plainText = plain.join('\n').trim();
+  if (html.length === 0) return plainText;
 
+  const htmlText = stripHtml(html.join('\n'));
+
+  /*
+   * Half is the line, and it is deliberately generous to plain text.
+   *
+   * A real alternative pair differs only in markup, so the two come out within
+   * a few percent of each other and plain wins. A stub loses by an order of
+   * magnitude. Nothing sits near the boundary in practice, so the exact
+   * fraction matters far less than having one at all.
+   */
+  if (plainText.length >= htmlText.length * 0.5) return plainText;
+  return htmlText;
+}
+
+/** Readable text out of an HTML part. */
+function stripHtml(html: string): string {
   return html
-    .join('\n')
     .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<\/(p|div|tr|h[1-6]|li)\s*>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')

@@ -32,6 +32,86 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe('choosing which part of a message to read', () => {
+  /** A multipart/alternative message, as every mailing platform sends. */
+  const alternative = (plain: string, html: string) => ({
+    match: /messages\/m1/,
+    json: {
+      id: 'm1',
+      payload: {
+        mimeType: 'multipart/alternative',
+        headers: [{ name: 'Subject', value: 'LCC Mail' }],
+        parts: [
+          { mimeType: 'text/plain', body: { data: b64url(plain) } },
+          { mimeType: 'text/html', body: { data: b64url(html) } },
+        ],
+      },
+    },
+  });
+
+  it('reads the HTML when the plain part is only a placeholder', async () => {
+    /*
+     * The school's weekly mailbag, verbatim: a 22-byte text/plain part reading
+     * "<!--placeholder-->" beside 50KB of HTML holding 1,496 characters of
+     * real content -- graduation dates, report card dates, what to do before
+     * September. Preferring plain unconditionally meant forty newsletters
+     * across the year arrived empty, and a model correctly judged that there
+     * was nothing in them to keep.
+     */
+    const message = alternative(
+      '<!--placeholder-->',
+      '<html><body><p>Grade 11: Graduation Dinner June 20</p>' +
+        '<p>Junior, Middle and Senior School Reports June 25</p></body></html>',
+    );
+    responses = [message];
+
+    const result = (await readMail.execute({ messageId: 'm1' } as never, ctx())) as {
+      body: string;
+    };
+    expect(result.body).toContain('Graduation Dinner June 20');
+    expect(result.body).toContain('Reports June 25');
+    expect(result.body).not.toContain('placeholder');
+  });
+
+  it('still prefers plain text when it is the same message', async () => {
+    // The usual case, and the reason plain is preferred at all: the HTML is
+    // the same words wrapped in markup that costs context and adds nothing.
+    responses = [
+      alternative(
+        'Hello Lucas, the deadline moved to Friday the 21st. Best, Mrs Bell',
+        '<html><body><p>Hello Lucas, the deadline moved to Friday the 21st. Best, Mrs Bell</p></body></html>',
+      ),
+    ];
+
+    const result = (await readMail.execute({ messageId: 'm1' } as never, ctx())) as {
+      body: string;
+    };
+    expect(result.body).not.toContain('<p>');
+    expect(result.body).toContain('Friday the 21st');
+  });
+
+  it('reads HTML when there is no plain part at all', async () => {
+    responses = [
+      {
+        match: /messages\/m1/,
+        json: {
+          id: 'm1',
+          payload: {
+            mimeType: 'text/html',
+            headers: [{ name: 'Subject', value: 'Reminder' }],
+            body: { data: b64url('<p>Bring your calculator.</p>') },
+          },
+        },
+      },
+    ];
+
+    const result = (await readMail.execute({ messageId: 'm1' } as never, ctx())) as {
+      body: string;
+    };
+    expect(result.body).toContain('Bring your calculator');
+  });
+});
+
 describe('reading mail', () => {
   it('prefers the plain-text part over the HTML twin', async () => {
     responses = [
