@@ -102,3 +102,65 @@ describe('readPptx', () => {
     expect(() => readPptx(zipSync({ 'ppt/other.xml': strToU8('<a/>') }))).toThrow(ArchiveError);
   });
 });
+
+describe('what it will and will not decompress', () => {
+  /**
+   * The cap used to be checked after unzipSync had already expanded the whole
+   * archive into memory, which is the one moment it needed to act. It limited
+   * what was kept, not what was allocated -- so a real bomb would have taken
+   * the process down before any check ran, inside a 512MB cgroup shared with
+   * the rest of the service.
+   *
+   * fflate can be told, per entry, whether to decompress at all. The declared
+   * uncompressed size is in the archive's own index, so the decision costs
+   * nothing and happens before the memory does.
+   */
+  it('skips the geometry and decompresses only what could hold words', async () => {
+    /*
+     * A real robotics field kit: 93MB compressed, 236MB across 36 files, and
+     * a single 144MB .obj model inside it. Not a bomb -- the expansion is
+     * 2.5x, where a bomb is a thousand -- but 236MB inside a 512MB cgroup
+     * shared with the live service is its own way to fall over.
+     *
+     * Of those 36 files, six were PDFs and the other thirty were .obj, .fbx,
+     * .3mf, .dxf and .step: geometry, which holds coordinates and no words.
+     * Decompressing them costs the memory and yields nothing, so the answer
+     * is not a bigger ceiling but opening fewer of them.
+     */
+    const kit = zipSync({
+      'field/CRC Mo-Duel.obj': strToU8('v 1.0 2.0 3.0\n'.repeat(200_000)),
+      'field/CRC Mo-Duel.step': strToU8('ISO-10303-21;\n'.repeat(100_000)),
+      'field/Assembly guide.pdf': strToU8('%PDF-1.4 assembly instructions'),
+      'field/notes.txt': strToU8('Tighten the M3 bolts last.'),
+    });
+
+    const entries = readZip(kit);
+    const paths = entries.map((e) => e.path);
+    expect(paths).toContain('field/Assembly guide.pdf');
+    expect(paths).toContain('field/notes.txt');
+    expect(paths).not.toContain('field/CRC Mo-Duel.obj');
+    expect(paths).not.toContain('field/CRC Mo-Duel.step');
+  });
+
+  it('opens a large archive of many ordinary files', async () => {
+    // 400 files of 200KB is 80MB decompressed: bigger than the old ceiling and
+    // completely unremarkable. A robotics field kit looked exactly like this.
+    const many: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 400; i += 1) {
+      many[`part-${i}.txt`] = strToU8('x'.repeat(200 * 1024));
+    }
+    const entries = readZip(zipSync(many));
+    expect(entries.length).toBeGreaterThan(300);
+  });
+
+  it('refuses a single entry that claims to expand absurdly', () => {
+    // The shape of a bomb: one small entry, one enormous expansion.
+    const bomb = zipSync({ 'bomb.txt': strToU8('a'.repeat(50 * 1024 * 1024)) });
+    expect(() => readZip(bomb)).toThrow(/too large/i);
+  });
+
+  it('still reads a Word file, which is a zip underneath', () => {
+    const docx = zipSync({ 'word/document.xml': strToU8('<w:t>Hello</w:t>') });
+    expect(readDocx(docx)).toContain('Hello');
+  });
+});

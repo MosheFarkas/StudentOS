@@ -13,9 +13,112 @@ import { unzipSync } from 'fflate';
  * the service.
  */
 
-/** Total decompressed bytes we will hold, across all entries. */
-const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
-const MAX_ENTRIES = 400;
+/**
+ * What may be decompressed, decided before anything is.
+ *
+ * The old check ran after unzipSync had already expanded the whole archive
+ * into memory, which is the one moment it needed to act: it limited what was
+ * kept, not what was allocated, so a real bomb would have taken the process
+ * down before any check ran. fflate can be asked per entry instead, and the
+ * declared uncompressed size sits in the archive's own index, so the decision
+ * costs nothing and happens before the memory does.
+ *
+ * A bomb is one small entry claiming an enormous expansion, so the per-entry
+ * limit is what actually catches one. The total is generous because a
+ * hundred-megabyte kit of ordinary files is ordinary -- a robotics field
+ * archive on a real account was exactly that -- and the old forty-megabyte
+ * ceiling refused it.
+ */
+const MAX_ENTRY_BYTES = 32 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 200 * 1024 * 1024;
+const MAX_ENTRIES = 2000;
+
+/**
+ * Extensions worth decompressing at all.
+ *
+ * A real robotics field kit was 93MB compressed and 236MB across 36 files,
+ * and thirty of those were .obj, .fbx, .3mf, .dxf and .step -- geometry, which
+ * holds coordinates and no words. Expanding them costs the memory and yields
+ * nothing. The six PDFs beside them were the entire point of the archive.
+ *
+ * So the guard against a huge archive is not a bigger ceiling, it is opening
+ * fewer of the files in it. Anything without an extension is admitted: a
+ * README or a LICENSE is worth reading, and Office formats keep their XML
+ * parts through the .xml entry here.
+ */
+const TEXT_BEARING = new Set([
+  // Documents and data.
+  'txt',
+  'md',
+  'markdown',
+  'csv',
+  'tsv',
+  'json',
+  'xml',
+  'html',
+  'htm',
+  'rtf',
+  'pdf',
+  'docx',
+  'doc',
+  'pptx',
+  'ppt',
+  'odt',
+  'odp',
+  'ods',
+  'rels',
+  'log',
+  'yml',
+  'yaml',
+  'srt',
+  'vtt',
+  'tex',
+  'bib',
+  /*
+   * And source code, which is text and is coursework. A robotics archive is
+   * as likely to hold the code that drives the robot as the drawings of it,
+   * and a student asking what their program does deserves an answer.
+   */
+  'py',
+  'js',
+  'mjs',
+  'ts',
+  'tsx',
+  'jsx',
+  'java',
+  'c',
+  'h',
+  'cpp',
+  'hpp',
+  'cc',
+  'cs',
+  'rb',
+  'go',
+  'rs',
+  'swift',
+  'kt',
+  'php',
+  'sh',
+  'bash',
+  'sql',
+  'r',
+  'ino',
+  'm',
+  'scm',
+  'lisp',
+  'lua',
+  'pl',
+  'toml',
+  'ini',
+  'cfg',
+  'env',
+]);
+
+/** Whether an entry could hold words, judged from its name. */
+function couldHoldText(path: string): boolean {
+  const extension = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase();
+  return extension === undefined || TEXT_BEARING.has(extension);
+}
 
 export interface ArchiveEntry {
   path: string;
@@ -31,24 +134,49 @@ export class ArchiveError extends Error {}
  * with the caps below; it would not be for arbitrary uploads.
  */
 export function readZip(bytes: Uint8Array): ArchiveEntry[] {
+  let promised = 0;
+  let refused = false;
+
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
+    files = unzipSync(bytes, {
+      /*
+       * Decided from the archive's index, before a byte is decompressed.
+       *
+       * Returning false skips the entry entirely, so an entry that claims a
+       * huge expansion never costs the memory it was asking for. Throwing
+       * here would come back as a corrupt-archive error, so the refusal is
+       * recorded and raised once the listing is done.
+       */
+      filter: (file) => {
+        if (file.name.endsWith('/')) return false;
+        // Geometry and media are skipped before they cost anything, rather
+        // than decompressed and then found to contain no words.
+        if (!couldHoldText(file.name)) return false;
+        if (file.originalSize !== undefined && file.originalSize > MAX_ENTRY_BYTES) {
+          refused = true;
+          return false;
+        }
+        promised += file.originalSize ?? 0;
+        if (promised > MAX_TOTAL_BYTES) {
+          refused = true;
+          return false;
+        }
+        return true;
+      },
+    });
   } catch {
     throw new ArchiveError('That file is not a readable zip archive.');
   }
 
+  if (refused) throw new ArchiveError('That archive is too large to open.');
+
   const entries: ArchiveEntry[] = [];
-  let total = 0;
-
   for (const [path, content] of Object.entries(files)) {
-    // Directory markers carry no content.
     if (path.endsWith('/') || content.length === 0) continue;
-
-    total += content.length;
-    if (total > MAX_TOTAL_BYTES || entries.length >= MAX_ENTRIES) {
-      throw new ArchiveError('That archive is too large to open.');
-    }
+    // A hard stop on count as well as bytes: ten thousand tiny files is its
+    // own denial of service, in object churn rather than in memory.
+    if (entries.length >= MAX_ENTRIES) break;
     entries.push({ path, bytes: content });
   }
 
