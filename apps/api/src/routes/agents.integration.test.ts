@@ -443,6 +443,70 @@ describe('browsing the vault', () => {
     expect(body.episodes).toBe(0);
   });
 
+  it('shows a student their vault when they have no agents at all', async () => {
+    /*
+     * The vault belongs to the student and outlives the agents that read it.
+     * Reaching it through an agent meant deleting your agents hid three and a
+     * half thousand notes of your own school -- which is exactly what happened
+     * to the account this was built against.
+     */
+    const alice = await createUser();
+    await new Vault(vaultRoot, alice.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    const body = (await res.json()) as { nodes: unknown[] };
+
+    expect(res.status).toBe(200);
+    expect(body.nodes).toHaveLength(1);
+  });
+
+  it("will not hand one student another student's graph", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    await new Vault(vaultRoot, bob.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    expect(((await res.json()) as { nodes: unknown[] }).nodes).toHaveLength(0);
+  });
+
+  it('reads one note, and what points at it, without an agent', async () => {
+    const alice = await createUser();
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+    await vault.write({
+      name: '2026-09-02-moved',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'A deadline moved.',
+      occurred: '2026-09-02T10:00:00Z',
+      body: 'In [[chemistry]].',
+    });
+
+    const res = await withVaults.request('/api/vault/note/chemistry', as(alice.token));
+    const body = (await res.json()) as { note: { name: string }; timeline: unknown[] };
+
+    expect(body.note.name).toBe('chemistry');
+    expect(body.timeline).toHaveLength(1);
+  });
+
   it("is the same vault whichever of a student's agents asks for it", async () => {
     /*
      * The vault is built from the student's own Classroom and mail. It is

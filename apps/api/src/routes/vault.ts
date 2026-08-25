@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, readUserDoc } from '@contexto/agent';
+import { Vault, buildGraph, readUserDoc } from '@contexto/agent';
+import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { getGoogleGrant } from '../google/connections.js';
@@ -77,6 +78,62 @@ export function createVaultRoutes(ctx: AppContext) {
                 startedAt: progress.startedAt,
               }
             : null,
+        });
+      })
+
+      /*
+       * The whole vault as a shape, for the picture in Settings.
+       *
+       * Scoped by student, not by agent. It was reached through an agent
+       * before, which meant a student who deleted their agents lost sight of
+       * their own school -- three and a half thousand notes, still on disk,
+       * with nothing on the page to say so.
+       *
+       * Everything a drawing needs and nothing it does not: no note bodies,
+       * because a picture of three thousand notes should not cost three
+       * thousand note bodies over the wire.
+       */
+      .get('/graph', auth, async (c) => {
+        const root = ctx.env?.VAULT_ROOT;
+        if (!root) return c.json({ nodes: [], edges: [] });
+        return c.json(await buildGraph(new Vault(root, c.get('userId'))));
+      })
+
+      /** One note, and everything that ever pointed at it. */
+      .get('/note/:name', auth, async (c) => {
+        const root = ctx.env?.VAULT_ROOT;
+        if (!root) throw new ContextoError('not_found', 'No vault for this student.');
+
+        const vault = new Vault(root, c.get('userId'));
+        const name = c.req.param('name');
+        const note = (await vault.read('entity', name)) ?? (await vault.read('episode', name));
+        if (!note) throw new ContextoError('not_found', 'No such note.');
+
+        /*
+         * Mapped rather than returned whole. The stored note carries types
+         * belonging to the vault, and handing them straight out makes this
+         * route's shape depend on the agent package's internals.
+         */
+        return c.json({
+          note: {
+            name: note.name,
+            kind: note.kind,
+            source: note.source,
+            description: note.description,
+            body: note.body,
+            occurred: note.occurred ?? null,
+            actor: note.actor ?? null,
+            event: (note.event as string | undefined) ?? null,
+            sourceUrl: note.sourceUrl ?? null,
+          },
+          timeline: (await vault.backlinks(name)).map((entry) => ({
+            name: entry.name,
+            description: entry.description,
+            source: entry.source,
+            occurred: entry.occurred ?? null,
+            actor: entry.actor ?? null,
+            event: (entry.event as string | undefined) ?? null,
+          })),
         });
       })
 

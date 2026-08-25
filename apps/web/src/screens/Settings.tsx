@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Agent, UsageStatus } from '@contexto/shared';
+import type { UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { DeviceConnections } from './DeviceConnections.js';
 import { VaultSpace } from './VaultSpace.js';
@@ -16,16 +16,18 @@ import { TelegramConnection } from './TelegramConnection.js';
  */
 export function Settings({ onBack }: { onBack: () => void }) {
   const [usage, setUsage] = useState<UsageStatus | null>(null);
-  const [agent, setAgent] = useState<Agent | null>(null);
 
+  /*
+   * No agent is fetched any more.
+   *
+   * Settings is about the person, and so is everything on this page: the
+   * vault belongs to the student now. Loading an agent to reach it was what
+   * hid a three and a half thousand note vault from the student who owns it,
+   * the moment they deleted their agents.
+   */
   async function load() {
     const res = await api.usage.$get();
     if (res.ok) setUsage(await res.json());
-
-    // The vault belongs to an agent, and Settings is about the person. Nearly
-    // every student has one, so the first is the right one to show.
-    const agents = await api.agents.$get();
-    if (agents.ok) setAgent((await agents.json()).agents[0] ?? null);
   }
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
          * deployment to nobody.
          */}
         <VaultBuild />
-        {agent && <VaultSpace agentId={agent.id} />}
+        <VaultSpace />
       </div>
 
       <GoogleConnections />

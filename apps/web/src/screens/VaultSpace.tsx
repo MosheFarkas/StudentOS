@@ -25,9 +25,13 @@ import {
  * a map is, not another panel.
  */
 
-interface Props {
-  agentId: string;
-}
+/*
+ * No props.
+ *
+ * This used to take an agent id, because the vault used to belong to an agent.
+ * It belongs to the student now, and the gate meant that deleting your agents
+ * hid your own school from you -- the notes were all still there.
+ */
 
 /** Brighter than the app's own palette, because these sit on near-black. */
 const COLOURS: Record<string, string> = {
@@ -105,7 +109,7 @@ function withLinks(body: string, go: (name: string) => void) {
   });
 }
 
-export function VaultSpace({ agentId }: Props) {
+export function VaultSpace() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
@@ -131,14 +135,14 @@ export function VaultSpace({ agentId }: Props) {
 
   useEffect(() => {
     void (async () => {
-      const res = await api.agents[':id'].vault.graph.$get({ param: { id: agentId } });
+      const res = await api.vault.graph.$get();
       if (!res.ok) {
         setError('That could not be loaded.');
         return;
       }
       setGraph(await res.json());
     })();
-  }, [agentId]);
+  }, []);
 
   /*
    * The note itself, once something is actually held.
@@ -154,9 +158,7 @@ export function VaultSpace({ agentId }: Props) {
     }
     let dropped = false;
     void (async () => {
-      const res = await api.agents[':id'].vault[':name'].$get({
-        param: { id: agentId, name: focused },
-      });
+      const res = await api.vault.note[':name'].$get({ param: { name: focused } });
       // A click that lands while an older request is in flight must win, or
       // the panel fills in with whatever the student stopped caring about.
       if (!res.ok || dropped) return;
@@ -166,7 +168,7 @@ export function VaultSpace({ agentId }: Props) {
     return () => {
       dropped = true;
     };
-  }, [agentId, focused]);
+  }, [focused]);
 
   /*
    * What is lit.
