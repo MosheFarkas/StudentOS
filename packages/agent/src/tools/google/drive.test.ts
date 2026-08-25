@@ -159,7 +159,7 @@ describe('readDriveFile', () => {
   });
 
   it('refuses an oversized file before downloading it', async () => {
-    responses = [meta('application/pdf', { size: String(80 * 1024 * 1024) })];
+    responses = [meta('application/pdf', { size: String(900 * 1024 * 1024) })];
 
     // No stub for the media URL: if it tried to download, fetch would throw.
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
@@ -179,6 +179,115 @@ describe('readDriveFile', () => {
    * whitespace. Rather than dead-ending, they now go to OCR -- which is the
    * whole reason a student can ask about a photographed handout at all.
    */
+  it('reads a locked document off its own thumbnail', async () => {
+    /*
+     * Some owners set "disable download, print and copy". Drive then answers
+     * every export with a 403 -- text and PDF alike -- while still handing out
+     * a thumbnail: on a real account one such document exported 403 and its
+     * thumbnail came back 200 and 143KB. The picture is a picture of the page,
+     * so OCR reads it.
+     *
+     * It is the first page only, and that is worth having: a title and an
+     * opening paragraph beat a note that says nothing at all.
+     */
+    responses = [
+      meta('application/vnd.google-apps.document', {
+        thumbnailLink: 'https://lh3.googleusercontent.com/abc=s220',
+      }),
+      {
+        match: /export\?mimeType/,
+        status: 403,
+        json: { error: { message: 'cannot be exported' } },
+      },
+      { match: /googleusercontent/, bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) },
+    ];
+    ocrImageMock.mockResolvedValue({ ok: true, text: 'Charity Financials - Notes' });
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { content: string }).content).toContain('Charity Financials');
+  });
+
+  it('asks for a thumbnail big enough to read', async () => {
+    // Drive offers a 220-pixel-wide preview by default, which OCR cannot do
+    // anything with. The link takes a size, so it is asked for one.
+    let asked = '';
+    responses = [
+      meta('application/vnd.google-apps.document', {
+        thumbnailLink: 'https://lh3.googleusercontent.com/abc=s220',
+      }),
+      {
+        match: /export\?mimeType/,
+        status: 403,
+        json: { error: { message: 'cannot be exported' } },
+      },
+      { match: /googleusercontent/, bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) },
+    ];
+    ocrImageMock.mockImplementation(async () => ({ ok: true, text: 'read' }));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.includes('googleusercontent')) asked = url;
+      return realFetch(url as never, init as never);
+    });
+
+    await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect(asked).toMatch(/=s\d{4,}/);
+  });
+
+  it('says the document is locked when there is no thumbnail either', async () => {
+    responses = [
+      meta('application/vnd.google-apps.document'),
+      {
+        match: /export\?mimeType/,
+        status: 403,
+        json: { error: { message: 'cannot be exported' } },
+      },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect(String((result as { reason?: string }).reason)).toMatch(/export/i);
+  });
+
+  it('reads a huge Google Slides deck, whose stored size says nothing', async () => {
+    /*
+     * A Google file is exported, not downloaded, and the size Drive reports is
+     * what the deck occupies in Drive -- not what its text weighs. Two history
+     * revision decks on a real account were 31MB and 67MB of images and were
+     * refused as "too large to read", when exporting them as text would have
+     * produced a few kilobytes. The cap was being applied to a number that had
+     * nothing to do with the thing being fetched.
+     */
+    responses = [
+      meta('application/vnd.google-apps.presentation', { size: String(67 * 1024 * 1024) }),
+      { match: /export\?mimeType/, body: 'Chapter 2: Nationalisms and Canadian Autonomy.' },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { content: string }).content).toContain('Nationalisms');
+  });
+
+  it('still refuses a download that genuinely would not fit in memory', async () => {
+    // The cap earns its place for real bytes: this one is downloaded whole.
+    responses = [meta('application/pdf', { size: String(900 * 1024 * 1024) })];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect(String((result as { reason?: string }).reason)).toMatch(/too large/i);
+  });
+
+  it('reads a PDF that the old thirty-megabyte ceiling would have refused', async () => {
+    // That ceiling was low enough to turn away ordinary course readers, and
+    // the biggest files are often the ones worth reading.
+    responses = [
+      meta('application/pdf', { size: String(80 * 1024 * 1024) }),
+      { match: /alt=media/, bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
+    ];
+    // One page's worth of text on one page. Claiming forty pages here would
+    // correctly read as a scan and route to OCR, testing the wrong path.
+    extractTextMock.mockResolvedValue(pdfText('Chapter 1. The Patriots Rebellion.'));
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { content: string }).content).toContain('Patriots');
+  });
+
   it('sends a scan with no text layer to OCR', async () => {
     responses = [meta('application/pdf'), { match: /alt=media/, body: '%PDF' }];
     extractTextMock.mockResolvedValue(pdfText('  \n \n ', 12));

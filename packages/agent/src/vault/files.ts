@@ -195,7 +195,17 @@ export async function readFileContents(
     }
 
     if (text === null || text.trim() === '') {
-      await append(vault, note, UNREADABLE, '');
+      /*
+       * Nothing to read, but still something to file.
+       *
+       * A photographed worksheet, a rehearsal video, a CAD part: none hold
+       * text and all of them belong to a subject. "MHS_Trig_WP_Num1" is
+       * trigonometry whether or not anything can see inside it, and an
+       * unlinked note is a loose dot in a vault whose whole value is what
+       * connects to what. The name is enough to place it, and asking about a
+       * name costs a fraction of asking about a document.
+       */
+      await append(vault, note, UNREADABLE, '', await placeByName(note));
       result.unreadable += 1;
       continue;
     }
@@ -246,6 +256,48 @@ export async function readFileContents(
   }
 
   return result;
+
+  /** Which course a file belongs to, judged on its name alone. */
+  async function placeByName(note: VaultNote): Promise<string[]> {
+    if (courses.size === 0) return [];
+
+    try {
+      const answer = await retrying(() =>
+        llm.chat(
+          {
+            messages: [
+              {
+                role: 'system',
+                content: [
+                  "You are told the name of a file from a student's school work. Nothing",
+                  'inside it can be read, so the name is all there is.',
+                  '',
+                  'Reply with JSON only: {"inCourse": string[]}',
+                  '',
+                  'Name at most one course, using only a name from the list, and only when',
+                  'the file plainly belongs to it. An empty list is the right answer more',
+                  'often than not -- a wrong subject is worse than no subject.',
+                  '',
+                  'The courses:',
+                  ...courses,
+                ].join('\n'),
+              },
+              { role: 'user', content: note.name.replaceAll('-', ' ') },
+            ],
+            tools: undefined,
+          },
+          { userId },
+        ),
+      );
+
+      const parsed = parse(answer.content);
+      return parsed ? links(parsed, courses, note) : [];
+    } catch {
+      // A file with no links is still a file. This is a nicety on a path that
+      // has already failed once, and it must not turn into a second failure.
+      return [];
+    }
+  }
 }
 
 /**

@@ -53,8 +53,15 @@ const PLAIN_TEXT = /^(text\/|application\/(json|xml|x-yaml|javascript|rtf$))/;
  */
 const MAX_CHARS = 40_000;
 
-/** Never download the bytes of something huge to discover it is a video. */
-const MAX_BYTES = 30 * 1024 * 1024;
+/**
+ * The most we will pull into memory for a file we download whole.
+ *
+ * Raised from thirty megabytes, which was low enough to refuse ordinary course
+ * readers -- and the biggest files are often the ones worth reading. It still
+ * exists because a download lands in a buffer, and a gigabyte video would take
+ * the process with it.
+ */
+const MAX_BYTES = 250 * 1024 * 1024;
 
 interface FileMeta {
   id: string;
@@ -63,6 +70,8 @@ interface FileMeta {
   size?: string;
   modifiedTime?: string;
   webViewLink?: string;
+  /** A rendered picture of the first page. The way into a locked document. */
+  thumbnailLink?: string;
 }
 
 /*
@@ -109,7 +118,7 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
     }
 
     const meta = await googleFetch<FileMeta>(
-      `${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size,modifiedTime,webViewLink&supportsAllDrives=true`,
+      `${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink&supportsAllDrives=true`,
       token,
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
@@ -131,8 +140,18 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
 
     const size = Number(meta.size ?? 0);
     const streams = mimeType.startsWith('video/') || mimeType.startsWith('audio/');
+    /*
+     * A Google file is exported, not downloaded, and the size Drive reports
+     * for one is what it occupies in Drive -- not what its text weighs. Two
+     * history revision decks on a real account were 31MB and 67MB of images
+     * and were refused as too large, when exporting them as text produces a
+     * few kilobytes. The cap was being applied to a number with nothing to do
+     * with what was about to be fetched.
+     */
+    const exported = mimeType.startsWith('application/vnd.google-apps.');
+
     // Streamed media has its own, much higher ceiling; it never lands in memory.
-    if (!streams && size > MAX_BYTES) {
+    if (!streams && !exported && size > MAX_BYTES) {
       return unavailable(`"${name}" is too large to read (${Math.round(size / 1024 / 1024)} MB).`);
     }
 
@@ -154,6 +173,38 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
   },
 };
 
+/**
+ * Read a locked file off the picture Drive renders of it.
+ *
+ * Returns null when there is no thumbnail or nothing legible in it, so the
+ * caller can report the original refusal rather than a second, vaguer one.
+ */
+async function fromThumbnail(
+  meta: FileMeta,
+  signal: AbortSignal | undefined,
+): Promise<string | null> {
+  if (!meta.thumbnailLink) return null;
+
+  // Drive offers a 220-pixel preview by default, which OCR can do nothing
+  // with. The size is a parameter on the link, so ask for a legible one.
+  const big = meta.thumbnailLink.replace(/=s\d+(-[a-z]+)?$/i, `=s${THUMBNAIL_WIDTH}`);
+
+  try {
+    const response = await fetch(big, { ...(signal ? { signal } : {}) });
+    if (!response.ok) return null;
+
+    const read = await ocrImage(new Uint8Array(await response.arrayBuffer()));
+    return read.ok && read.text.trim() !== '' ? read.text : null;
+  } catch {
+    // The thumbnail host is not the Drive API and has its own failures. This
+    // is already the fallback path, so there is nothing below it to try.
+    return null;
+  }
+}
+
+/** Wide enough that body text survives; Drive renders up to about this. */
+const THUMBNAIL_WIDTH = 1600;
+
 async function extract(
   meta: FileMeta,
   mimeType: string,
@@ -170,7 +221,21 @@ async function extract(
       token,
       signal,
     );
-    if (isUnavailable(bytes)) return bytes;
+    if (isUnavailable(bytes)) {
+      /*
+       * A document whose owner has turned off download, print and copy.
+       *
+       * Drive then refuses every export -- text and PDF alike -- while still
+       * handing out a thumbnail, which is a rendered picture of the page. On a
+       * real account one such document exported 403 and its thumbnail came
+       * back 200 and 143KB, so OCR can simply read the picture.
+       *
+       * The first page only, and worth having: a title and an opening
+       * paragraph beat a note that says nothing at all.
+       */
+      const seen = await fromThumbnail(meta, signal);
+      return seen ?? bytes;
+    }
     return decode(bytes);
   }
 

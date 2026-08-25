@@ -100,6 +100,58 @@ describe('reading the files in the vault', () => {
     expect(result.read).toBe(2);
   });
 
+  it('still files an unreadable file under a course, from its name alone', async () => {
+    /*
+     * A photographed worksheet, a rehearsal video, a CAD part -- none of them
+     * hold text, and all of them still belong to a subject. "MHS_Trig_WP_Num1"
+     * is trigonometry whether or not anything can read inside it, and left
+     * unlinked it is a loose dot in a vault where being connected is the whole
+     * point.
+     *
+     * The title is enough, and asking about a title costs a fraction of what
+     * asking about a document costs.
+     */
+    await vault.write({
+      name: 'grade-10-math',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Grade 10 Math.',
+    });
+    await vault.write({
+      name: 'mhs-trig-wp-num1-jpg',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'img-1',
+      body: 'MHS_Trig_WP_Num1.JPG.',
+    });
+
+    const result = await run({
+      llm: summary('unused', ['grade-10-math']),
+      read: async () => null,
+    });
+
+    expect(result.unreadable).toBe(2);
+    const note = await vault.read('entity', 'mhs-trig-wp-num1-jpg');
+    expect(note?.body).toContain('Part of [[grade-10-math]]');
+    expect(note?.body).toContain('Nothing readable');
+  });
+
+  it('does not ask about a title when there are no courses to choose from', async () => {
+    // Nothing to link to, so nothing to pay for.
+    const llm = {
+      chat: vi.fn(async () => ({
+        content: '{}',
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        finishReason: 'stop' as const,
+      })),
+    };
+    await run({ llm, read: async () => null });
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
   it('gives up on a file it cannot read, and does not come back to it', async () => {
     /*
      * A scanned photo with no text, a file the student lost access to, a
