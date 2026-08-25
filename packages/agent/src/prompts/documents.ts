@@ -132,6 +132,15 @@ export const PROFILE_DOC = loadPromptDocument('profile');
  * definition rather than one per importer, because three importers with three
  * ideas of what an episode is produce a vault with three shapes in it.
  */
+/**
+ * How to write the document describing a student's school life.
+ *
+ * Read by the pass that runs after a vault is built. Not loaded on a turn --
+ * what it produces is, which is why its rules about judgement are the
+ * strictest in this directory.
+ */
+export const USER_DOC = loadPromptDocument('user-doc');
+
 export const VAULT_WRITING = loadPromptDocument('vault-writing');
 
 /**

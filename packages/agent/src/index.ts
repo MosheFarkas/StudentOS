@@ -34,6 +34,8 @@ export { importMail, type SchoolMessage, type MailImportResult } from './vault/m
 export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
+export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
+export { vaultDigest, type VaultDigest } from './vault/digest.js';
 export { collectDriveFiles } from './vault/collect-drive.js';
 export {
   collectSchoolMail,

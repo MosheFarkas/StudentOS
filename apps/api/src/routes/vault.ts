@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault } from '@contexto/agent';
+import { Vault, readUserDoc } from '@contexto/agent';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { getGoogleGrant } from '../google/connections.js';
@@ -78,6 +78,20 @@ export function createVaultRoutes(ctx: AppContext) {
               }
             : null,
         });
+      })
+
+      /*
+       * The document the agent reads before every reply.
+       *
+       * Behind the same session check as everything else here, so a student
+       * can only ever fetch their own. Not rendered anywhere in the app yet:
+       * it is new and generated, and something a model has written about a
+       * person should be read by a person before it is shown to them.
+       */
+      .get('/about', auth, async (c) => {
+        const root = ctx.env?.VAULT_ROOT;
+        if (!root) return c.json({ about: null });
+        return c.json({ about: await readUserDoc(new Vault(root, c.get('userId'))) });
       })
 
       /*

@@ -33,11 +33,11 @@ export const PROFILE_CHAR_LIMIT = 1400;
  * A profile truncated mid-word leaves the agent reading half a fact and
  * believing it. Sentences are the smallest unit that survives being cut after.
  */
-export function capProfile(profile: string): string {
+export function capProfile(profile: string, limit = PROFILE_CHAR_LIMIT): string {
   const trimmed = profile.trim();
-  if (trimmed.length <= PROFILE_CHAR_LIMIT) return trimmed;
+  if (trimmed.length <= limit) return trimmed;
 
-  const window = trimmed.slice(0, PROFILE_CHAR_LIMIT);
+  const window = trimmed.slice(0, limit);
   const lastSentence = Math.max(
     window.lastIndexOf('. '),
     window.lastIndexOf('.\n'),

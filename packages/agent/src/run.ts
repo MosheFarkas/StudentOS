@@ -36,6 +36,8 @@ export interface AgentRunInput {
    * learned anything yet.
    */
   profile?: string;
+  /** What the vault says about their school life, from vault/user-doc.ts. */
+  about?: string;
   message: string;
   /**
    * IANA timezone. Defaults to UTC.
@@ -123,6 +125,7 @@ export async function runAgentTurn(
         input.purpose,
         availableSkills,
         input.profile,
+        input.about,
         Boolean(input.vault),
       ),
     },
@@ -286,6 +289,8 @@ export function buildSystemPrompt(
   purpose: string,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
   profile?: string,
+  /** What the vault says about their school life. See vault/user-doc.ts. */
+  about?: string,
   hasVault = false,
 ): string {
   /*
@@ -338,6 +343,22 @@ export function buildSystemPrompt(
   const knownAboutStudent = profileSection(profile ?? '');
   if (knownAboutStudent) {
     perAgent.push(knownAboutStudent);
+  }
+
+  /*
+   * Their school, in a paragraph.
+   *
+   * Kept apart from the profile above rather than merged into it. The two have
+   * different sources and different lifetimes -- this is rewritten wholesale
+   * from the vault when a term changes, that accumulates as somebody talks --
+   * and one writer holding both would discard whichever half it could not see.
+   *
+   * Placed after it for the same reason the profile sits where it does: it is
+   * rewritten only between conversations, so it stays byte-identical for a
+   * whole conversation and keeps its place in the cached prefix.
+   */
+  if (about && about.trim() !== '') {
+    perAgent.push(`Their school, as their vault has it:\n${about.trim()}`);
   }
 
   if (skills.length > 0) {

@@ -6,6 +6,7 @@ import {
   collectSchoolMail,
   discoverSchoolDomains,
   readFileContents,
+  writeUserDoc,
   collectDriveFiles,
   importDrive,
   domainOf,
@@ -177,9 +178,23 @@ async function refreshOne(
     { vault, userId, ...(fileLimit === undefined ? {} : { limit: fileLimit }) },
   );
 
+  /*
+   * Last, because it describes everything above it.
+   *
+   * Written from counts rather than notes, so it costs one model call however
+   * large the vault is -- and rewritten whole every time, because the vault is
+   * ground truth and a document that accumulates ends up describing a student
+   * who left two years ago.
+   */
+  const about = await writeUserDoc(
+    { llm: await ctx.llm.resolve(userId) },
+    { vault, userId, ...(owner.name ? { name: owner.name } : {}) },
+  );
+
   return (
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
-    `${drive.written} drive files, ${files.read} read (${files.remaining} to go)`
+    `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
+    `${about ? `, wrote user.md (${about.length} chars)` : ''}`
   );
 }
 

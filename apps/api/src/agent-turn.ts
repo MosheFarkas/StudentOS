@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
 import type { Message } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
-import { Vault, buildToolRegistry, runAgentTurn } from '@contexto/agent';
+import { Vault, buildToolRegistry, readUserDoc, runAgentTurn } from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
@@ -81,6 +81,14 @@ export async function runTurnForAgent(
         purpose: agent.purpose,
         // What the summarisation job has learned about them, if anything yet.
         profile: agent.profile,
+        /*
+         * Their school, in a paragraph, written when the vault was last built.
+         *
+         * Read from disk on every turn rather than cached in memory: it
+         * changes only when a vault is rebuilt, a read is one small file, and
+         * a stale copy in a long-lived process would describe last term.
+         */
+        ...(vault ? { about: (await readUserDoc(vault)) ?? undefined } : {}),
         ...(vault ? { vault } : {}),
         message: content,
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),

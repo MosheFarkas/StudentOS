@@ -128,6 +128,70 @@ describe('importing a snapshot', () => {
     expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
   });
 
+  it('does not call work "not turned in" when the student attached some', async () => {
+    /*
+     * Classroom leaves an assignment in CREATED unless the student presses
+     * "turn in", and plenty of teachers never ask them to -- the work is done
+     * in the document and that is the end of it. On a real account 205 of 298
+     * assignments sat in that state, including ones with the student's own
+     * finished file attached to them.
+     *
+     * Rendering all of that as "Not turned in" would have told a profile
+     * generator that this student misses two thirds of their work, and that
+     * sentence would then have sat in every conversation they ever had.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [{ id: 'w1', course: 'Chemistry', title: 'Culture essay', due: null }],
+        submissions: [
+          {
+            course: 'Chemistry',
+            assignment: 'w1',
+            state: 'not turned in',
+            late: true,
+            grade: null,
+            maxPoints: null,
+            submissionId: 's1',
+            courseId: 'c1',
+            courseWorkId: 'w1',
+            attachments: [{ kind: 'file', title: 'Lucas - Culture essay', fileId: 'mine-1' }],
+          },
+        ],
+      }),
+    );
+
+    const note = await vault.read('entity', 'culture-essay');
+    expect(note?.body).not.toMatch(/^Not turned in/m);
+    expect(note?.body).toMatch(/attached|not submitted/i);
+  });
+
+  it('says no submission was recorded when there is genuinely nothing', async () => {
+    // Still worth recording, and still not an accusation: the honest statement
+    // is about the record, not about the student.
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [{ id: 'w2', course: 'Chemistry', title: 'Lab writeup', due: null }],
+        submissions: [
+          {
+            course: 'Chemistry',
+            assignment: 'w2',
+            state: 'not turned in',
+            late: false,
+            grade: null,
+            maxPoints: null,
+            submissionId: 's2',
+            courseId: 'c1',
+            courseWorkId: 'w2',
+          },
+        ],
+      }),
+    );
+
+    expect((await vault.read('entity', 'lab-writeup'))?.body).toMatch(/no submission recorded/i);
+  });
+
   it('does not make a note for a template the student can never open', async () => {
     /*
      * Classroom names the master behind "make a copy for each student"

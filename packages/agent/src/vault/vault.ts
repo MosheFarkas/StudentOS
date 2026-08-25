@@ -89,6 +89,17 @@ export class Vault {
   readonly #dir: string;
 
   /**
+   * Where this vault lives.
+   *
+   * Exposed for the one thing that belongs beside a vault without being a note
+   * in it: the document describing the student, which has no links and should
+   * not appear in a picture of what their school looks like.
+   */
+  get directory(): string {
+    return this.#dir;
+  }
+
+  /**
    * @param ownerId The student the vault belongs to, never an agent.
    *
    * It is built from their own Classroom and their own mail, so it is theirs

@@ -287,8 +287,27 @@ export async function importClassroom(
        * arrives rather than matching one value. Matching TURNED_IN looked right
        * and would have silently taken the fallback path on every real account.
        */
-      const state = submission.state.charAt(0).toUpperCase() + submission.state.slice(1);
-      const late = submission.late ? ', late' : '';
+      /*
+       * What the record says, not what it implies about the student.
+       *
+       * Classroom leaves an assignment in CREATED -- which its API calls "not
+       * turned in" -- unless the student presses a button, and plenty of
+       * teachers never ask them to. On a real account 205 of 298 assignments
+       * sat there, some with the student's own finished work attached. Written
+       * as "Not turned in, late" that is an accusation, and it would have gone
+       * into every summary and every conversation downstream of this note.
+       *
+       * So an unsubmitted assignment says what is actually known: whether a
+       * file is attached to it, and whether its due date has passed.
+       */
+      const attached = (submission.attachments ?? []).length > 0;
+      const unsubmitted = submission.state === 'not turned in';
+      const state = unsubmitted
+        ? attached
+          ? 'Work attached, not submitted'
+          : 'No submission recorded'
+        : submission.state.charAt(0).toUpperCase() + submission.state.slice(1);
+      const late = submission.late ? (unsubmitted ? ', due date passed' : ', late') : '';
       const grade =
         submission.grade === null
           ? ''
