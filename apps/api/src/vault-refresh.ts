@@ -38,6 +38,30 @@ const EVERY = 6 * 60 * 60 * 1000;
 /** Agents refreshed per pass, so one wake cannot run for an hour. */
 const BATCH = 5;
 
+/**
+ * The students to refresh this pass, from a listing of their agents.
+ *
+ * The vault used to belong to an agent, so this loop was over agents. It
+ * belongs to the student now, and iterating agents breaks at both ends: a
+ * student with three agents had their whole year imported three times every
+ * pass, and a student with none was never refreshed at all -- while their
+ * vault, three and a half thousand notes of it, sat there going stale.
+ *
+ * Both cases are real. The account this was built against has no agents left
+ * and the largest vault on the deployment.
+ */
+export function studentsToRefresh(
+  rows: readonly { userId: string; agentId: string | null }[],
+  batch: number,
+): string[] {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.size >= batch && !seen.has(row.userId)) break;
+    seen.add(row.userId);
+  }
+  return [...seen];
+}
+
 async function refreshOne(ctx: AppContext, agentId: string, userId: string): Promise<string> {
   const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
   if (!owner) return 'no owner';
@@ -126,19 +150,26 @@ export function startVaultRefresh(ctx: AppContext): () => void {
 
   const pass = async (): Promise<void> => {
     try {
-      // Only agents whose student has connected Google. Everyone else has
-      // nothing to import and would cost a query each to discover that.
-      const owned = await ctx.db
-        .select({ agentId: agents.id, userId: agents.userId })
-        .from(agents)
-        .limit(BATCH);
+      /*
+       * Every student, and their agents if they have any.
+       *
+       * A left join rather than a select from agents: a vault outlives the
+       * agents that were reading it, and one with no agents still needs
+       * keeping up to date. The batch bounds students, which is the thing a
+       * pass actually costs.
+       */
+      const rows = await ctx.db
+        .select({ userId: user.id, agentId: agents.id })
+        .from(user)
+        .leftJoin(agents, eq(agents.userId, user.id));
 
-      for (const { agentId, userId } of owned) {
+      for (const userId of studentsToRefresh(rows, BATCH)) {
         try {
-          console.log(`Vault ${agentId}: ${await refreshOne(ctx, agentId, userId)}`);
+          const agentId = rows.find((row) => row.userId === userId)?.agentId ?? userId;
+          console.log(`Vault ${userId}: ${await refreshOne(ctx, agentId, userId)}`);
         } catch (error) {
           // One student's expired token must not stop the rest.
-          console.error(`Vault refresh failed for ${agentId}`, error);
+          console.error(`Vault refresh failed for ${userId}`, error);
         }
       }
     } catch (error) {
