@@ -216,3 +216,33 @@ describe('Vault', () => {
     expect((await vault.list('entity')).map((n) => n.name)).toEqual(['chemistry']);
   });
 });
+
+describe('removing a note', () => {
+  it('takes a note out of the vault', async () => {
+    /*
+     * Needed because notes can be imported that should never have been: the
+     * 36 "[Template]" masters on a real account were files no student can
+     * open, and they sat there unreadable with links that opened nothing.
+     */
+    const root = mkdtempSync(join(tmpdir(), 'contexto-remove-'));
+    const vault = new Vault(root, 'student-1');
+    await vault.write({
+      name: 'gone-soon',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'File',
+      body: 'A template.',
+    });
+
+    expect(await vault.remove('entity', 'gone-soon')).toBe(true);
+    expect(await vault.read('entity', 'gone-soon')).toBeNull();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('says so when there was nothing to remove', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'contexto-remove-'));
+    const vault = new Vault(root, 'student-1');
+    expect(await vault.remove('entity', 'never-existed')).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+});

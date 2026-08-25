@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join, resolve, sep } from 'node:path';
 
@@ -154,6 +154,25 @@ export class Vault {
    * and whether the reading rules are loaded onto the prompt. A student who has
    * connected nothing should carry neither.
    */
+  /**
+   * Take a note out of the vault.
+   *
+   * Needed because an import can create notes that should never have existed:
+   * Classroom's "[Template]" masters are files no student can open, and they
+   * sat in a real vault as unreadable notes whose links opened nothing.
+   *
+   * @returns whether there was anything there to remove.
+   */
+  async remove(kind: NoteKind, name: string): Promise<boolean> {
+    try {
+      await rm(this.#pathFor(kind, name));
+      return true;
+    } catch {
+      // Already gone is the outcome the caller wanted either way.
+      return false;
+    }
+  }
+
   async has(): Promise<boolean> {
     return (await this.list('entity')).length > 0;
   }

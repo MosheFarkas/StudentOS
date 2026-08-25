@@ -128,6 +128,44 @@ describe('importing a snapshot', () => {
     expect((await vault.read('entity', 'titration-writeup'))?.body).toContain('[[chemistry]]');
   });
 
+  it('does not make a note for a template the student can never open', async () => {
+    /*
+     * Classroom names the master behind "make a copy for each student"
+     * "[Template] ...", and never shares it with the student. A note for one
+     * is a dead end in three ways: it can never be read, its link opens
+     * nothing, and it is indistinguishable from a genuinely missing file --
+     * so it would be retried on every refresh for the rest of the year.
+     *
+     * On a real account there were 36 of them. What the student actually
+     * worked on arrives separately, on their submission.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [
+          {
+            id: 'w1',
+            course: 'Chemistry',
+            title: 'Activities Ch 4',
+            due: null,
+            attachments: [
+              { kind: 'file', title: '[Template] Activities Ch 4', fileId: 'tpl-1' },
+              { kind: 'file', title: 'Chapter 4 reading', fileId: 'real-1' },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const files = (await vault.list('entity')).filter((n) => n.description === 'File');
+    expect(files.map((f) => f.externalId)).toEqual(['real-1']);
+
+    // And the assignment does not point at something that was never written.
+    const work = await vault.read('entity', 'activities-ch-4');
+    expect(work?.body).toContain('[[chapter-4-reading]]');
+    expect(work?.body).not.toContain('Template');
+  });
+
   it('keeps the work the student handed in, not just the blank they started from', async () => {
     /*
      * Classroom's "make a copy for each student" attaches the teacher's master

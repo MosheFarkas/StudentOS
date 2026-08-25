@@ -41,6 +41,16 @@ export interface ImportResult {
   updated: number;
 }
 
+/**
+ * How Classroom names a per-student template master.
+ *
+ * A string match, which is the only signal the API offers -- there is no flag
+ * on the material saying it is a template. If a school's Classroom is in
+ * another language this will not match, and those files simply fall through to
+ * being imported and found unreadable, which is where they were before.
+ */
+const TEMPLATE_PREFIX = '[Template]';
+
 /** `Due: <date>` in a note body, so a moved deadline can be noticed. */
 const DUE_LINE = /^Due: (.+)$/m;
 
@@ -106,6 +116,18 @@ export async function importClassroom(
   ): Promise<string[]> => {
     const lines: string[] = [];
     for (const item of attachments ?? []) {
+      /*
+       * The master behind "make a copy for each student", which Classroom
+       * names this way and never shares with the student.
+       *
+       * A note for one is a dead end three times over: it can never be read,
+       * its link opens nothing, and Drive answers it with the same "not
+       * found" as a genuinely missing file -- so it would be retried on every
+       * refresh for the rest of the year. There were 36 on a real account.
+       * What the student actually worked on arrives on their submission.
+       */
+      if (item.title.startsWith(TEMPLATE_PREFIX)) continue;
+
       if (item.kind !== 'file' || !item.fileId) {
         lines.push(`Attached: ${item.title}`);
         continue;
