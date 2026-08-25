@@ -179,6 +179,64 @@ describe('readDriveFile', () => {
    * whitespace. Rather than dead-ending, they now go to OCR -- which is the
    * whole reason a student can ask about a photographed handout at all.
    */
+  it('reads a zip whatever Windows called its type', async () => {
+    /*
+     * Drive reports zips uploaded from Windows as
+     * application/x-zip-compressed, which is the same format under a second
+     * name. Matching one spelling meant a real archive came back as "I cannot
+     * read this yet".
+     */
+    responses = [
+      meta('application/x-zip-compressed'),
+      {
+        match: /alt=media/,
+        bytes: zipSync({ 'notes.txt': strToU8('The Patriots Rebellion of 1837.') }),
+      },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect((result as { content: string }).content).toContain('Patriots Rebellion');
+  });
+
+  it('lists what is in a folder instead of refusing it', async () => {
+    /*
+     * A teacher sharing a whole folder is ordinary, and the vault held two of
+     * them as notes that said only "this is a folder". One had 22 photographs
+     * of a robotics build in it. Naming the contents is not the same as
+     * reading them, and it is the difference between a dead end and a place
+     * to go next.
+     */
+    responses = [
+      meta('application/vnd.google-apps.folder', { name: '2026 MODUEL' }),
+      {
+        match: /files\?q=/,
+        json: {
+          files: [
+            { id: 'k1', name: '20260121_173636.jpg', mimeType: 'image/jpeg' },
+            { id: 'k2', name: 'Field drawings.pdf', mimeType: 'application/pdf' },
+          ],
+        },
+      },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    const content = (result as { content: string }).content;
+    expect(content).toContain('20260121_173636.jpg');
+    expect(content).toContain('Field drawings.pdf');
+    // The ids travel too, so the agent can go and read one.
+    expect(content).toContain('k2');
+  });
+
+  it('says a folder is empty rather than pretending it is unreadable', async () => {
+    responses = [
+      meta('application/vnd.google-apps.folder', { name: 'Empty' }),
+      { match: /files\?q=/, json: { files: [] } },
+    ];
+
+    const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
+    expect(String((result as { reason?: string }).reason)).toMatch(/nothing in it|empty/i);
+  });
+
   it('reads a locked document off its own thumbnail', async () => {
     /*
      * Some owners set "disable download, print and copy". Drive then answers
@@ -526,10 +584,23 @@ describe('picked folders', () => {
     expect(result.count).toBe(1);
   });
 
-  it('tells the agent to list a folder rather than read it', async () => {
-    responses = [meta(FOLDER)];
+  it('opens a folder rather than turning the agent away from it', async () => {
+    /*
+     * This used to refuse and point at google_drive_list_files, which was a
+     * dead end wherever the folder arrived as a Classroom attachment -- there
+     * was nothing to search for. Listing it in place is strictly better, and
+     * the ids come with it so the agent can read any of them.
+     */
+    responses = [
+      meta(FOLDER, { name: 'Unit 3' }),
+      {
+        match: /files\?q=/,
+        json: { files: [{ id: 'k1', name: 'Reading.pdf', mimeType: 'application/pdf' }] },
+      },
+    ];
+
     const result = await readDriveFile.execute({ fileId: 'f1' }, ctx());
-    expect((result as { reason: string }).reason).toContain('is a folder');
+    expect((result as { content: string }).content).toContain('Reading.pdf');
   });
 });
 

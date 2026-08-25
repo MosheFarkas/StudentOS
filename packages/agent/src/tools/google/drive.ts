@@ -214,6 +214,39 @@ async function extract(
 ): Promise<string | ReturnType<typeof unavailable>> {
   const name = meta.name ?? 'Untitled';
 
+  /*
+   * A folder is not a document, and refusing it is not the only option.
+   *
+   * A teacher sharing a whole folder is ordinary, and the vault held two of
+   * them as notes saying nothing but "this is a folder" -- one with 22
+   * photographs of a robotics build inside. Naming the contents is not the
+   * same as reading them, and it is the difference between a dead end and
+   * somewhere to go next: the ids travel with the names, so the agent can
+   * open any of them.
+   */
+  if (mimeType === FOLDER_MIME) {
+    const children = await googleFetch<{ files?: FileMeta[] }>(
+      `${FILES_URL}?q=${encodeURIComponent(`'${meta.id}' in parents and trashed = false`)}` +
+        '&pageSize=200&fields=files(id,name,mimeType)' +
+        '&supportsAllDrives=true&includeItemsFromAllDrives=true',
+      token,
+      { ...(signal ? { signal } : {}) },
+    );
+    if (isUnavailable(children)) return children;
+
+    const inside = children.files ?? [];
+    if (inside.length === 0) return unavailable(`"${name}" is a folder with nothing in it.`);
+
+    return [
+      `"${name}" is a folder holding ${inside.length} ${inside.length === 1 ? 'item' : 'items'}:`,
+      '',
+      ...inside.map(
+        (child) =>
+          `${child.name ?? 'Untitled'} (${describeKind(child.mimeType ?? '')}) — fileId ${child.id}`,
+      ),
+    ].join('\n');
+  }
+
   const exportable = EXPORT_AS[mimeType];
   if (exportable) {
     const bytes = await googleFetchRaw(
@@ -342,7 +375,13 @@ async function extract(
     }
   }
 
-  if (mimeType === 'application/zip') {
+  /*
+   * Both spellings. Drive reports a zip uploaded from Windows as
+   * application/x-zip-compressed, which is the same format under a second
+   * name -- and matching one of them turned a real archive into "I cannot
+   * read this yet".
+   */
+  if (mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed') {
     const bytes = await googleFetchRaw(`${FILES_URL}/${meta.id}?alt=media`, token, signal);
     if (isUnavailable(bytes)) return bytes;
     return readArchive(new Uint8Array(bytes), name);
