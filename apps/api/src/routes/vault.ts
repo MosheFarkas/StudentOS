@@ -5,7 +5,7 @@ import { Vault } from '@contexto/agent';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { getGoogleGrant } from '../google/connections.js';
-import { buildRunning, startBuild, vaultReadiness } from '../vault-build.js';
+import { buildProgress, buildRunning, startBuild, vaultReadiness } from '../vault-build.js';
 import { refreshVaultFor } from '../vault-refresh.js';
 
 /**
@@ -31,18 +31,52 @@ export function createVaultRoutes(ctx: AppContext) {
         );
 
         const root = ctx.env?.VAULT_ROOT;
-        if (!root) return c.json({ ...readiness, entities: 0, episodes: 0, building: false });
+        if (!root) {
+          return c.json({
+            ...readiness,
+            entities: 0,
+            episodes: 0,
+            building: false,
+            progress: null,
+          });
+        }
 
+        /*
+         * Counted, not listed. This is polled every few seconds while a build
+         * runs, and listing a vault reads and parses every note in it -- which
+         * on three thousand notes would be the polling competing with the
+         * build it reports on.
+         */
+        const progress = buildProgress(userId);
         const vault = new Vault(root, userId);
-        const [entities, episodes] = (await vault.has())
-          ? await Promise.all([vault.list('entity'), vault.list('episode')])
-          : [[], []];
+        const [entities, episodes] = await Promise.all([
+          vault.count('entity'),
+          vault.count('episode'),
+        ]);
 
         return c.json({
           ...readiness,
-          entities: entities.length,
-          episodes: episodes.length,
+          entities,
+          episodes,
           building: buildRunning(userId),
+          /*
+           * Mapped rather than returned whole, and phase widened to a string.
+           *
+           * Handing the stored shape straight out makes this route's inferred
+           * type depend on a union declared inside the API package, which the
+           * web app then cannot name -- the compiler says so rather than
+           * anyone discovering it later. Null rather than absent, because the
+           * page draws a bar from this and an optional field that is
+           * sometimes missing is a shape to guess at.
+           */
+          progress: progress
+            ? {
+                phase: progress.phase as string,
+                done: progress.done,
+                total: progress.total,
+                startedAt: progress.startedAt,
+              }
+            : null,
         });
       })
 

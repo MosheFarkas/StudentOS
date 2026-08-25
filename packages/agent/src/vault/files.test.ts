@@ -70,6 +70,55 @@ describe('reading the files in the vault', () => {
     expect(note?.body).toContain('[[chemistry]]');
   });
 
+  it('reports how far through it is, as it goes', async () => {
+    /*
+     * Reading a vault's files takes hours -- 1,810 of them at four seconds
+     * each on a real account. A student who pressed a button deserves to see
+     * that moving rather than a spinner, and a note count climbing does not
+     * say how much is left.
+     */
+    for (const n of [2, 3, 4]) {
+      await vault.write({
+        name: `file-${n}`,
+        kind: 'entity',
+        source: 'classroom',
+        description: 'File',
+        externalId: `drive-${n}`,
+        body: `File ${n}.`,
+      });
+    }
+
+    const seen: Array<{ done: number; total: number }> = [];
+    await readFileContents(
+      {
+        llm: summary('Something.'),
+        read: async () => 'text',
+        onProgress: (done: number, total: number) => seen.push({ done, total }),
+      } as never,
+      { vault, userId: 'u1' },
+    );
+
+    expect(seen).toHaveLength(4);
+    expect(seen.map((s) => s.done)).toEqual([1, 2, 3, 4]);
+    // The total is the whole job, so a bar can be drawn against it.
+    expect(new Set(seen.map((s) => s.total))).toEqual(new Set([4]));
+  });
+
+  it('counts a file it could not read towards progress too', async () => {
+    // Otherwise a vault of unreadable video stalls at zero and looks stuck.
+    const seen: number[] = [];
+    await readFileContents(
+      {
+        llm: summary('unused'),
+        read: async () => null,
+        onProgress: (done: number) => seen.push(done),
+      } as never,
+      { vault, userId: 'u1' },
+    );
+
+    expect(seen).toEqual([1]);
+  });
+
   it('never reads the same file twice', async () => {
     // The expensive half of the whole vault. A pass that re-reads what it has
     // already read costs the same as the first pass, for nothing.

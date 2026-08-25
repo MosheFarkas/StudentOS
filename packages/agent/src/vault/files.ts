@@ -37,6 +37,15 @@ const UNREADABLE = 'Nothing readable in this file.';
 export interface FileReadDeps {
   llm: Pick<LlmProvider, 'chat'>;
   /**
+   * Called after each file, however it went.
+   *
+   * Reading a vault's files takes hours -- 1,810 of them at four seconds each
+   * on a real account -- and somebody who pressed a button deserves to watch
+   * that move rather than a spinner. A failure counts too: otherwise a Drive
+   * full of video stalls at nought and looks stuck.
+   */
+  onProgress?: (done: number, total: number) => void;
+  /**
    * The file's text, or null when there is none to be had.
    *
    * Injected rather than reaching for Drive directly so this is testable
@@ -138,7 +147,7 @@ const ASK = [
 ].join('\n');
 
 export async function readFileContents(
-  { llm, read }: FileReadDeps,
+  { llm, read, onProgress }: FileReadDeps,
   { vault, userId, limit = PER_PASS }: FileReadOptions,
 ): Promise<FileReadResult> {
   const entities = await vault.list('entity');
@@ -182,7 +191,28 @@ export async function readFileContents(
    * actually using the product. Slow and out of the way beats fast and in
    * the way, and the limit is what bounds the run rather than concurrency.
    */
-  for (const note of files.slice(0, limit)) {
+  const batch = files.slice(0, limit);
+  let done = 0;
+
+  for (const note of batch) {
+    /*
+     * Reported in a finally, not at each exit.
+     *
+     * There are five ways out of this loop body and sprinkling a call down
+     * each of them means the next person to add a sixth silently stalls the
+     * progress bar. This way a file counts once, however it went.
+     */
+    try {
+      await readOne(note);
+    } finally {
+      done += 1;
+      onProgress?.(done, batch.length);
+    }
+  }
+
+  return result;
+
+  async function readOne(note: VaultNote): Promise<void> {
     let text: string | null;
     try {
       text = await retrying(() => read(note.externalId as string));
@@ -191,7 +221,7 @@ export async function readFileContents(
       // has since been granted, a service that was down -- so no mark is left
       // and the next pass will try it again.
       failed(note.name, error);
-      continue;
+      return;
     }
 
     if (text === null || text.trim() === '') {
@@ -207,7 +237,7 @@ export async function readFileContents(
        */
       await append(vault, note, UNREADABLE, '', await placeByName(note));
       result.unreadable += 1;
-      continue;
+      return;
     }
 
     try {
@@ -240,7 +270,7 @@ export async function readFileContents(
           note.name,
           `model did not answer in the shape asked for: ${answer.content.slice(0, 80)}`,
         );
-        continue;
+        return;
       }
       await append(
         vault,
@@ -250,12 +280,10 @@ export async function readFileContents(
         links(parsed, courses, note),
       );
       result.read += 1;
-    } catch {
-      result.failed += 1;
+    } catch (error) {
+      failed(note.name, error);
     }
   }
-
-  return result;
 
   /** Which course a file belongs to, judged on its name alone. */
   async function placeByName(note: VaultNote): Promise<string[]> {

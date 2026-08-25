@@ -63,10 +63,44 @@ export function vaultReadiness(scopes: readonly string[], email: string): Readin
  * notes -- and a student whose button appears to do nothing will press it
  * again.
  */
-const building = new Set<string>();
+const building = new Map<string, Progress>();
+
+/**
+ * What a build is doing right now.
+ *
+ * The phases are wildly uneven and it matters that a student can tell them
+ * apart: on a real account the structure takes twenty seconds, the mail eight
+ * minutes, and the files two hours. A single spinner over all three says the
+ * same thing at second ten and at hour two.
+ */
+export type BuildPhase = 'classroom' | 'drive' | 'mail' | 'files';
+
+export interface Progress {
+  phase: BuildPhase;
+  /** Items finished in this phase, and how many there are. */
+  done: number;
+  total: number;
+  /** When the build began, so a rate and a finish time can be worked out. */
+  startedAt: number;
+}
 
 export function buildRunning(userId: string): boolean {
   return building.has(userId);
+}
+
+/** How far along a student's build is, or null when none is running. */
+export function buildProgress(userId: string): Progress | null {
+  return building.get(userId) ?? null;
+}
+
+/** Called by each phase as it goes. Ignored if the build has already ended. */
+export function reportProgress(
+  userId: string,
+  at: Pick<Progress, 'phase' | 'done' | 'total'>,
+): void {
+  const current = building.get(userId);
+  if (!current) return;
+  building.set(userId, { ...at, startedAt: current.startedAt });
 }
 
 /**
@@ -77,7 +111,15 @@ export function buildRunning(userId: string): boolean {
  */
 export function startBuild(userId: string, work: () => Promise<string>): boolean {
   if (building.has(userId)) return false;
-  building.add(userId);
+
+  /*
+   * Recorded as started before any work happens.
+   *
+   * A student presses the button and polls two seconds later. If progress only
+   * appeared once a phase had finished, they would see a spinner and no phase
+   * at all through the first minute of a two-hour job.
+   */
+  building.set(userId, { phase: 'classroom', done: 0, total: 0, startedAt: Date.now() });
 
   void work()
     .then((summary) => {

@@ -42,6 +42,14 @@ export interface SchoolMessage {
 
 export interface MailImportDeps {
   llm: Pick<LlmProvider, 'chat'>;
+  /**
+   * Called as each message is extracted.
+   *
+   * The second longest phase of a build -- 668 messages at three seconds each,
+   * six at a time -- and the one where a student is most likely to think
+   * nothing is happening.
+   */
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface MailImportOptions {
@@ -124,7 +132,7 @@ function parseSender(from: string): { display: string; address: string } {
 }
 
 export async function importMail(
-  { llm }: MailImportDeps,
+  { llm, onProgress }: MailImportDeps,
   { vault, messages, entities, userId, domains }: MailImportOptions,
 ): Promise<MailImportResult> {
   const existingEpisodes = await vault.list('episode');
@@ -174,6 +182,7 @@ export async function importMail(
    * would produce exactly the duplicates the ids were meant to prevent.
    */
   const pending = messages.filter((message) => !already.has(message.messageId));
+  let seen = 0;
 
   /*
    * Extract a chunk, write a chunk, repeat.
@@ -194,6 +203,11 @@ export async function importMail(
 
   async function extractAndWrite(batch: SchoolMessage[]): Promise<void> {
     const extracted = await pooled(batch, EXTRACT_CONCURRENCY, async (message) => {
+      /*
+       * Counted in a finally, so a message counts once however it went.
+       * Otherwise a run of failures leaves the bar frozen and looking hung
+       * at exactly the moment something has gone wrong.
+       */
       try {
         const answer = await retrying(() =>
           // No tools. Not an omission -- the containment argument rests on it.
@@ -213,6 +227,9 @@ export async function importMail(
          * reached disk, so starting again meant paying again.
          */
         return { message, parsed: null };
+      } finally {
+        seen += 1;
+        onProgress?.(seen, pending.length);
       }
     });
 

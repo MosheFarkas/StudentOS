@@ -15,12 +15,49 @@ import { api } from '../lib/api.js';
  * meaningful percentage.
  */
 
+interface Progress {
+  /*
+   * A plain string, matching what the route sends. Narrowing it to a union
+   * here would only be a second copy of a list the server already owns, and
+   * the two would drift the first time a phase was added.
+   */
+  phase: string;
+  done: number;
+  total: number;
+  startedAt: number;
+}
+
 interface Status {
   ready: boolean;
   missing: string[];
   entities: number;
   episodes: number;
   building: boolean;
+  progress: Progress | null;
+}
+
+/*
+ * The four phases, in the order they run, with what each is doing.
+ *
+ * They are wildly uneven -- on a real account the structure took twenty
+ * seconds, the mail eight minutes and the files two hours -- so naming the
+ * phase is most of what makes a two-hour wait legible.
+ */
+const PHASES: { key: string; label: string }[] = [
+  { key: 'classroom', label: 'Reading your courses' },
+  { key: 'drive', label: 'Finding your files' },
+  { key: 'mail', label: 'Going through your school mail' },
+  { key: 'files', label: 'Reading what is in each file' },
+];
+
+/** "about 40 minutes left", from how long the work so far actually took. */
+function timeLeft(at: Progress): string | null {
+  if (at.done < 3 || at.total <= at.done) return null;
+  const each = (Date.now() - at.startedAt) / at.done;
+  const minutes = Math.round((each * (at.total - at.done)) / 60000);
+  if (minutes < 1) return 'nearly done';
+  if (minutes < 90) return `about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} left`;
+  return `about ${Math.round(minutes / 60)} hours left`;
 }
 
 /** Often enough to feel live, rarely enough to be free. */
@@ -64,7 +101,7 @@ export function VaultBuild() {
       <div className="vault-build-row">
         <span className="muted">
           {status.building
-            ? `Building… ${total.toLocaleString()} notes so far`
+            ? `${total.toLocaleString()} notes so far`
             : total === 0
               ? 'Nothing in it yet.'
               : `${total.toLocaleString()} notes.`}
@@ -88,10 +125,45 @@ export function VaultBuild() {
         </p>
       )}
 
-      {status.building && (
-        <p className="muted">
-          This takes a while: every email and every file is read once. You can leave this page.
-        </p>
+      {status.building && status.progress && (
+        <div className="vault-progress">
+          <ol className="vault-phases">
+            {PHASES.map(({ key, label }) => {
+              const at = PHASES.findIndex((p) => p.key === status.progress!.phase);
+              const mine = PHASES.findIndex((p) => p.key === key);
+              const state = mine < at ? 'done' : mine === at ? 'now' : 'todo';
+              return (
+                <li key={key} data-state={state}>
+                  {label}
+                  {state === 'now' && status.progress!.total > 0 && (
+                    <span className="count">
+                      {' '}
+                      {status.progress!.done.toLocaleString()} of{' '}
+                      {status.progress!.total.toLocaleString()}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          {status.progress.total > 0 && (
+            <div
+              className="vault-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={status.progress.total}
+              aria-valuenow={status.progress.done}
+            >
+              <span style={{ width: `${(status.progress.done / status.progress.total) * 100}%` }} />
+            </div>
+          )}
+
+          <p className="muted">
+            {timeLeft(status.progress) ?? 'Working out how long this will take…'} — every email and
+            every file is read once. You can leave this page.
+          </p>
+        </div>
       )}
 
       {error && <p className="muted">{error}</p>}

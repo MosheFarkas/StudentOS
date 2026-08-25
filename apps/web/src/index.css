@@ -1286,6 +1286,71 @@ a.button {
   flex-wrap: wrap;
 }
 
+/* The phases of a build. Uneven enough that naming them is most of what
+   makes a two-hour wait legible. */
+.vault-phases {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.86rem;
+}
+
+.vault-phases li {
+  color: var(--ink-faint);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.vault-phases li::before {
+  content: '○';
+  font-size: 0.7rem;
+}
+
+.vault-phases li[data-state='done'] {
+  color: var(--ink-soft);
+}
+
+.vault-phases li[data-state='done']::before {
+  content: '●';
+  color: var(--ok);
+}
+
+.vault-phases li[data-state='now'] {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.vault-phases li[data-state='now']::before {
+  content: '◐';
+  color: var(--violet);
+}
+
+.vault-phases .count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+
+.vault-bar {
+  height: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.3rem 0 0.5rem;
+}
+
+.vault-bar span {
+  display: block;
+  height: 100%;
+  background: var(--violet);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
 .vault-space-wrap {
   display: flex;
   flex-direction: column;

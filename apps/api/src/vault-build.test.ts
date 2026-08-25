@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildRunning, startBuild, vaultReadiness } from './vault-build.js';
+import {
+  buildProgress,
+  buildRunning,
+  reportProgress,
+  startBuild,
+  vaultReadiness,
+} from './vault-build.js';
 
 /**
  * Whether there is anything to build a vault out of.
@@ -95,5 +101,43 @@ describe('not building the same vault twice at once', () => {
 
     expect(buildRunning('carol')).toBe(false);
     expect(startBuild('carol', async () => 'ok')).toBe(true);
+  });
+});
+
+describe('what a build says about itself', () => {
+  it('reports the phase and how far through it is', () => {
+    startBuild('dave', async () => new Promise(() => {}));
+    reportProgress('dave', { phase: 'files', done: 340, total: 1810 });
+
+    const at = buildProgress('dave');
+    expect(at?.phase).toBe('files');
+    expect(at?.done).toBe(340);
+    expect(at?.total).toBe(1810);
+  });
+
+  it('starts at the first phase rather than at nothing', () => {
+    /*
+     * A student presses the button and polls two seconds later. If progress
+     * only exists once a phase has finished, they see a spinner and no phase
+     * for the first minute of a two-hour job.
+     */
+    startBuild('erin', async () => new Promise(() => {}));
+    const at = buildProgress('erin');
+    expect(at).not.toBeNull();
+    expect(at?.phase).toBe('classroom');
+    expect(at?.startedAt).toBeGreaterThan(0);
+  });
+
+  it('forgets a build once it is over', async () => {
+    startBuild('frank', async () => 'done');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(buildProgress('frank')).toBeNull();
+  });
+
+  it('keeps one student progress separate from another', () => {
+    startBuild('gina', async () => new Promise(() => {}));
+    reportProgress('gina', { phase: 'mail', done: 5, total: 668 });
+    expect(buildProgress('gina')?.done).toBe(5);
+    expect(buildProgress('helen')).toBeNull();
   });
 });

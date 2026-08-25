@@ -17,6 +17,7 @@ import {
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import type { AppContext } from './context.js';
+import { reportProgress, type BuildPhase } from './vault-build.js';
 
 /**
  * Keeping ContextoVault current.
@@ -69,6 +70,7 @@ export function studentsToRefresh(
  * the two cannot drift into doing different things.
  */
 export async function refreshVaultFor(ctx: AppContext, userId: string): Promise<string> {
+  // Only a build reports progress; the timer has nobody watching it.
   /*
    * Everything, because somebody asked for it.
    *
@@ -78,7 +80,7 @@ export async function refreshVaultFor(ctx: AppContext, userId: string): Promise<
    * files would mean forty-five presses, or eleven days of waiting for the
    * timer, to finish a thing they asked for once.
    */
-  return refreshOne(ctx, userId, userId, EVERY_FILE);
+  return refreshOne(ctx, userId, userId, EVERY_FILE, (at) => reportProgress(userId, at));
 }
 
 /** Higher than any student's Drive. Reads until there is nothing left. */
@@ -90,6 +92,8 @@ async function refreshOne(
   userId: string,
   /** How many files to read. Left alone, the timer's modest per-pass default. */
   fileLimit?: number,
+  /** Called as each phase begins and advances. Absent for the timer. */
+  onPhase?: (at: { phase: BuildPhase; done: number; total: number }) => void,
 ): Promise<string> {
   const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
   if (!owner) return 'no owner';
@@ -104,6 +108,8 @@ async function refreshOne(
   };
 
   const vault = new Vault(ctx.env.VAULT_ROOT as string, userId);
+
+  onPhase?.({ phase: 'classroom', done: 0, total: 0 });
   const { snapshot } = await collectClassroomSnapshot(toolContext);
   const classroom = await importClassroom(vault, snapshot);
 
@@ -118,12 +124,21 @@ async function refreshOne(
   if (domainOf(owner.email) && (await vault.has())) {
     // Asked each refresh rather than cached: a student changes schools, and a
     // domain list frozen at first sign-in would quietly stop matching.
+    onPhase?.({ phase: 'mail', done: 0, total: 0 });
     const domains = await discoverSchoolDomains(toolContext, owner.email);
     const found = await collectSchoolMail(toolContext, { domains });
     if (!found.hitCeiling) {
       const entities = (await vault.list('entity')).map((note) => note.name);
       mail = await importMail(
-        { llm: await ctx.llm.resolve(userId) },
+        {
+          llm: await ctx.llm.resolve(userId),
+          ...(onPhase
+            ? {
+                onProgress: (done: number, total: number) =>
+                  onPhase({ phase: 'mail', done, total }),
+              }
+            : {}),
+        },
         { vault, messages: found.messages, entities, userId, domains },
       );
     }
@@ -136,6 +151,7 @@ async function refreshOne(
    * up whatever is new. What each file is actually about is settled by the
    * reading pass below, which has to open it anyway.
    */
+  onPhase?.({ phase: 'drive', done: 0, total: 0 });
   const drive = await importDrive(vault, await collectDriveFiles(toolContext));
 
   /*
