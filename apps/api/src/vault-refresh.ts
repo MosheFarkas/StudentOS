@@ -11,8 +11,8 @@ import {
   domainOf,
   importClassroom,
   importMail,
-  isUnavailable,
   readDriveFile,
+  textFromDriveRead,
 } from '@contexto/agent';
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
@@ -97,11 +97,14 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
   const files = await readFileContents(
     {
       llm: await ctx.llm.resolve(userId),
-      read: async (fileId) => {
-        const out = await readDriveFile.execute({ fileId } as never, toolContext);
-        if (isUnavailable(out)) return null;
-        return (out as { content?: string }).content ?? null;
-      },
+      /*
+       * null means the document has no text; a throw means we could not get
+       * at it. Only the first is worth recording against the file, and
+       * telling them apart is what stops an account without Drive access
+       * marking every file it owns as empty. See vault/drive-text.ts.
+       */
+      read: async (fileId) =>
+        textFromDriveRead(await readDriveFile.execute({ fileId } as never, toolContext)),
     },
     { vault, userId },
   );

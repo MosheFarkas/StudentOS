@@ -365,6 +365,18 @@ async function forEachCourse<T>(
   if (isUnavailable(courses)) return courses;
 
   const out: T[] = [];
+  /*
+   * Whether a single request was actually answered.
+   *
+   * Without this a withheld scope is indistinguishable from a quiet year:
+   * every per-course fetch 403s, each one is skipped so that one locked
+   * course cannot spoil the rest, and the caller gets an empty list that
+   * reads as "the teachers posted nothing". A student is then told their
+   * school has no announcements, when the truth is that nobody was allowed
+   * to look.
+   */
+  let answered = false;
+
   for (const course of courses.courses ?? []) {
     let pageToken: string | undefined;
 
@@ -384,11 +396,18 @@ async function forEachCourse<T>(
         ...(signal ? { signal } : {}),
       });
       if (isUnavailable(payload)) break;
+      answered = true;
 
       out.push(...extract(payload as never, course.name ?? 'Unknown course'));
       pageToken = payload.nextPageToken;
       if (!pageToken) break;
     }
+  }
+
+  // Courses existed and not one of them could be read: that is a refusal, not
+  // an empty year, and the difference is the whole point of saying so.
+  if (!answered && (courses.courses ?? []).length > 0) {
+    return unavailable('Classroom refused every course for this. The scope may not be granted.');
   }
   return out;
 }
