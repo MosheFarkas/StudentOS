@@ -80,10 +80,15 @@ async function main(): Promise<void> {
   for (const reason of skipped) console.log(`  skipped ${reason}`);
   for (const course of snapshot.courses) console.log(`  course: ${course.name}`);
 
-  if (owned.length === 0) {
-    console.log('\nNo agents on this account, so nothing was written.');
-    process.exit(0);
-  }
+  /*
+   * No guard on agents.
+   *
+   * A vault belongs to the student and outlives the agents that read it, so
+   * refusing to import without one refuses the account with the largest vault
+   * on this deployment. This was the third place holding the old assumption
+   * after the refresh loop and the settings panel, and it is the one that
+   * quietly did nothing while reporting success.
+   */
 
   /*
    * Mail second, and only when asked for.
