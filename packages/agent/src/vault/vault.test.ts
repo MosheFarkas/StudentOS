@@ -246,3 +246,42 @@ describe('removing a note', () => {
     rmSync(root, { recursive: true, force: true });
   });
 });
+
+describe('counting without reading', () => {
+  it('counts notes without opening any of them', async () => {
+    /*
+     * The settings page polls this every few seconds while a vault is being
+     * built, and a build can run for hours. list() reads and parses every
+     * note, so polling it on a three thousand note vault meant millions of
+     * file reads competing with the build they were reporting on.
+     */
+    const root = mkdtempSync(join(tmpdir(), 'contexto-count-'));
+    const vault = new Vault(root, 'student-1');
+    for (const n of [1, 2, 3]) {
+      await vault.write({
+        name: `note-${n}`,
+        kind: 'entity',
+        source: 'classroom',
+        description: 'Course',
+        body: `Course ${n}.`,
+      });
+    }
+    await vault.write({
+      name: 'something-happened',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'A thing.',
+      body: 'It happened.',
+    });
+
+    expect(await vault.count('entity')).toBe(3);
+    expect(await vault.count('episode')).toBe(1);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('counts nothing for a vault that does not exist yet', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'contexto-count-'));
+    expect(await new Vault(root, 'nobody').count('entity')).toBe(0);
+    rmSync(root, { recursive: true, force: true });
+  });
+});

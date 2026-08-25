@@ -69,10 +69,28 @@ export function studentsToRefresh(
  * the two cannot drift into doing different things.
  */
 export async function refreshVaultFor(ctx: AppContext, userId: string): Promise<string> {
-  return refreshOne(ctx, userId, userId);
+  /*
+   * Everything, because somebody asked for it.
+   *
+   * The per-pass cap on file reading exists to stop a background timer
+   * spending hours nobody requested. A student pressing "build vault" has
+   * requested exactly that, and stopping at forty of their eighteen hundred
+   * files would mean forty-five presses, or eleven days of waiting for the
+   * timer, to finish a thing they asked for once.
+   */
+  return refreshOne(ctx, userId, userId, EVERY_FILE);
 }
 
-async function refreshOne(ctx: AppContext, agentId: string, userId: string): Promise<string> {
+/** Higher than any student's Drive. Reads until there is nothing left. */
+const EVERY_FILE = 100_000;
+
+async function refreshOne(
+  ctx: AppContext,
+  agentId: string,
+  userId: string,
+  /** How many files to read. Left alone, the timer's modest per-pass default. */
+  fileLimit?: number,
+): Promise<string> {
   const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
   if (!owner) return 'no owner';
 
@@ -140,7 +158,7 @@ async function refreshOne(ctx: AppContext, agentId: string, userId: string): Pro
       read: async (fileId) =>
         textFromDriveRead(await readDriveFile.execute({ fileId } as never, toolContext)),
     },
-    { vault, userId },
+    { vault, userId, ...(fileLimit === undefined ? {} : { limit: fileLimit }) },
   );
 
   return (

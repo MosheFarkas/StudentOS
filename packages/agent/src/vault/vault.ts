@@ -211,6 +211,24 @@ export class Vault {
    * vault is a folder, a folder handed to a student will eventually contain
    * whatever they put in it, and Obsidian leaves its own files about.
    */
+  /**
+   * How many notes of a kind there are, without opening any of them.
+   *
+   * The settings page polls this every few seconds while a vault is building,
+   * and a build runs for hours. list() reads and parses every note, so polling
+   * it on a three thousand note vault meant millions of file reads competing
+   * with the build they were reporting on.
+   */
+  async count(kind: NoteKind): Promise<number> {
+    try {
+      const files = await readdir(join(this.#dir, DIRECTORY[kind]));
+      return files.filter((file) => file.endsWith('.md')).length;
+    } catch {
+      // No vault yet is nought notes, not an error.
+      return 0;
+    }
+  }
+
   async list(kind: NoteKind): Promise<VaultNote[]> {
     const directory = join(this.#dir, DIRECTORY[kind]);
 
