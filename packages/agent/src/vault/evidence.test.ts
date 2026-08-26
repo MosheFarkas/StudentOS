@@ -187,6 +187,77 @@ describe('gathering what could answer who teaches a course', () => {
     expect(question?.evidence.some((e) => e.quote.includes('I marked your essays'))).toBe(true);
   });
 
+  it('sends a short sharp bundle rather than filling the space available', async () => {
+    /*
+     * A cap is a ceiling, not a quota.
+     *
+     * Two notes where the teacher says what they did answer the question
+     * completely. Sending ten more that merely mention somebody does not add
+     * anything to them -- it makes them harder to read, which is the whole
+     * finding about long contexts and the reason this pass narrows at all.
+     * Under a hundred and twenty ordinary notices the cover-teacher case began
+     * failing consistently: the sentence saying she was covering was in the
+     * bundle every time, and buried.
+     */
+    for (let day = 10; day < 34; day++) {
+      await wrote(String(day), 'Anna Marzilli', `Mme Marzilli. Notice ${day}. In [[french-10]].`);
+    }
+    await wrote('35', 'Lucia Coretti', 'Mme Coretti. I marked your essays. In [[french-10]].');
+    await wrote(
+      '36',
+      'Lucia Coretti',
+      'Mme Coretti. My lesson moves to Tuesday. In [[french-10]].',
+    );
+
+    const question = await askWhoTeaches(vault, 'french-10', { studentDomain: 'wearelcc.ca' });
+    expect(question?.evidence.length).toBeLessThanOrEqual(4);
+    // Both direct accounts survive; they are what the question is about.
+    expect(question?.evidence.filter((e) => e.quote.includes('Coretti'))).toHaveLength(2);
+  });
+
+  it('still shows the rivals, so a contest cannot go unnoticed', async () => {
+    /*
+     * Sharpening must not become hiding. The wrong French teacher was picked
+     * because a rival reading was never visible to anything that could have
+     * weighed it, and a bundle trimmed to only the leading candidate rebuilds
+     * exactly that blindness at a different layer.
+     *
+     * So the strongest evidence goes in whole, and what is left over tops it
+     * up to a floor: enough to see who else was around, never enough to bury
+     * the answer.
+     */
+    for (let day = 10; day < 34; day++) {
+      await wrote(String(day), 'Anna Marzilli', `Mme Marzilli. Notice ${day}. In [[french-10]].`);
+    }
+    await wrote('35', 'Lucia Coretti', 'Mme Coretti. I marked your essays. In [[french-10]].');
+    await wrote(
+      '36',
+      'Lucia Coretti',
+      'Mme Coretti. My lesson moves to Tuesday. In [[french-10]].',
+    );
+
+    const question = await askWhoTeaches(vault, 'french-10', { studentDomain: 'wearelcc.ca' });
+    expect(question?.candidates).toContain('Lucia Coretti');
+    expect(question?.candidates).toContain('Anna Marzilli');
+  });
+
+  it('dates every quote, because who holds a role changes', async () => {
+    /*
+     * A course that changed hands is unreadable without dates. One note says
+     * "this is my last week, Ms Adeyemi will take over" and another says "I am
+     * taking this class from now on" -- which of those is current depends
+     * entirely on when each was written, and the bundle used to say nothing
+     * about when anything was written.
+     *
+     * A reader shown both undated concluded, reasonably, that the handover was
+     * still in the future and the departing teacher was the current one.
+     */
+    await wrote('05', 'Lucia Coretti', 'Mme Coretti. I marked your essays. In [[french-10]].');
+
+    const question = await askWhoTeaches(vault, 'french-10', { studentDomain: 'wearelcc.ca' });
+    expect(question?.evidence[0]?.quote).toContain('2026-01-05');
+  });
+
   it('says how much it left out rather than trimming quietly', async () => {
     // A bundle that was cut silently reads downstream as the whole story.
     for (let day = 10; day < 40; day++) {
@@ -441,6 +512,16 @@ describe('gathering what could say what kind of thing a course is', () => {
     const question = await askWhatKindOfThing(vault, 'french-10', {});
     const quotes = question?.evidence.map((e) => e.quote).join(' ') ?? '';
     expect(quotes).toContain('houses compete');
+    /*
+     * And the boilerplate does not come along for the ride. Twenty-four
+     * identical notices tell a reader nothing except how many of them there
+     * are, and a bundle mostly made of them reads as an administrative group
+     * whatever else is in it.
+     *
+     * Five: the course's own name, which is always the first thing shown, and
+     * a floor of four notes beneath it.
+     */
+    expect(question?.evidence.length).toBeLessThanOrEqual(5);
   });
 
   it('says what each of the answers it offers actually means', async () => {
@@ -566,6 +647,25 @@ describe('gathering what could say whether a course is running', () => {
 
     const question = await askWhetherItIsRunning(vault, 'history-10', { today: '2026-08-26' });
     expect(question?.candidates).toEqual(['running', 'finished', 'not yet started']);
+  });
+
+  it('says when the rest of the school was still going', async () => {
+    /*
+     * Silence means nothing on its own. A course that stopped in November is
+     * finished if everything else ran on until June, and merely on holiday if
+     * everything else stopped in November too.
+     *
+     * Without that comparison a reader is right to refuse: shown one course
+     * that went quiet, it cannot tell whether the course ended or the school
+     * did, and it said so -- "they do not establish the course's school year,
+     * its end date, or that it will not resume".
+     */
+    await on('n1', '2025-11-20', 'Exam revision. In [[history-10]].');
+    await course('french-10');
+    await on('n2', '2026-06-10', 'Last lesson before the summer. In [[french-10]].');
+
+    const question = await askWhetherItIsRunning(vault, 'history-10', { today: '2026-08-26' });
+    expect(question?.guarantees?.join(' ')).toContain('2026-06-10');
   });
 
   it('asks nothing when nothing in the course is dated', async () => {

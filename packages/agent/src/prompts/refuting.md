@@ -30,6 +30,7 @@ Real examples from this vault, each of which passed a proposer and should not ha
 
 - **Another candidate fits the same evidence.** If swapping the name changes nothing about how well the evidence reads, the evidence does not pick anybody. Refuted.
 - **The evidence shows involvement, not the relation claimed.** Being named in a course, writing to it, appearing on a document about it: all of that is presence. The claim says something more specific than presence, and presence does not get you there.
+- **The evidence points at somebody else in the role, even without naming them.** "While your usual teacher is away", "her supervisor will confirm", "the head of department has asked me to" -- each of these says the role belongs to a person who is not the one being claimed. An unnamed holder is still a holder, and somebody standing in for them is a stand-in however much of the work they do. Refuted, and the fact that the real holder is not in the candidate list is the reason the answer is nobody rather than a reason to accept the stand-in.
 - **The link is a shared word.** Two things named alike are two things until something joins them.
 - **The quoted evidence does not say what the claim needs.** Read the quotes as written, not as summarised. A claim resting on a sentence that turns out to be about something else is refuted even if the answer happens to be right.
 - **A title, a template line or a signature block was read as a name.**
@@ -41,6 +42,8 @@ Real examples from this vault, each of which passed a proposer and should not ha
 **A relation nobody declared.** No teacher emails a class to say they teach it. Evidence that somebody set the work, marked it and took the lesson is evidence that they taught it; refusing until the words "I teach this" appear means refusing always.
 
 **A role named the way institutions name roles.** "Library", "Academic Support", "Admissions", "Head of Grade 10" -- a department, a team or a place after somebody's name is how a school says what that person does, and is the only form the answer ever takes. Refusing it for naming a place rather than describing an activity refuses every real case and accepts none.
+
+**A rival answer that merely fits.** Not every question names a person. Some ask which of a few defined states or categories something is in, and there a rival is nearly always _compatible_ with the evidence -- that is what makes it a judgement rather than a lookup. Compatibility is not competition. Refute only if the evidence supports the rival **better**, and say which quote does it. "The same evidence would also fit X" is the general condition of not being certain, which is what confidence is for, and it can be said against every answer to every question of this kind.
 
 **Thin evidence pointing one way.** That is thin evidence, not a refutation, and the confidence attached to it is where it gets handled. If the claim says what the quotes say and no candidate on the list fits them as well, let it through: `{"refuted": false}`.
 

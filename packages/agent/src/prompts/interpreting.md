@@ -41,6 +41,10 @@ What settles a relation is somebody doing the thing the relation consists of, in
 
 So the question is never "did the evidence declare this". It is "does this evidence show the thing itself, and would anybody else in the candidate list produce the same evidence". One candidate doing the work of the relation, unopposed, is an answer -- around 0.9, not a decline.
 
+One exception, and it is the common one. Where the evidence points at somebody else as holding the role -- "while your usual teacher is away", "I would like to introduce X, who will be taking some of your lessons", "her supervisor will confirm" -- the role belongs to that person and not to whoever is doing the work in their place. If they are on the candidate list, they are the answer. If they are not, the answer is null: a stand-in is not the holder however much of the work they do.
+
+Where quotes disagree, the later one is current. Every quote carries the date it was written.
+
 Declining is for contested evidence and for evidence about the wrong thing. It is not for evidence that is merely informal.
 
 ## Rules that are checked afterwards

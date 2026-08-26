@@ -1,5 +1,6 @@
 import type { LlmProvider } from '@contexto/llm';
 import { INTERPRETING, REFUTING } from '../prompts/documents.js';
+import { retrying } from './retry.js';
 import type { Claim, Evidence } from './claims.js';
 
 /**
@@ -80,6 +81,15 @@ export interface InterpretContext {
   userId: string;
 }
 
+/**
+ * How many independent attempts to break a claim it has to survive.
+ *
+ * Two, not because two is principled but because it was measured: one caught
+ * two thirds of the cover-teacher cases, and the cases it missed were not the
+ * hard ones -- they were the same case on a different day.
+ */
+const REFUTERS = 2;
+
 interface Proposal {
   answer: string | null;
   confidence?: number;
@@ -121,8 +131,22 @@ export async function interpret(
     bundle,
   ].join('\n');
 
+  /*
+   * Retried, because a vault build makes hundreds of these.
+   *
+   * Without it a rate limit is indistinguishable from an abstention: the call
+   * throws, the caller treats a missing claim as nothing worth saying, and the
+   * vault quietly knows less than it did. That is exactly the silent loss this
+   * whole design is built to refuse, and it was in the pass itself. It showed
+   * up first in the eval, where two dozen swallowed 429s read as the pass
+   * having become cautious.
+   */
   const proposed = parse<Proposal>(
-    (await llm.chat({ messages: [system(INTERPRETING.body), user(brief)] }, { userId })).content,
+    (
+      await retrying(() =>
+        llm.chat({ messages: [system(INTERPRETING.body), user(brief)] }, { userId }),
+      )
+    ).content,
   );
 
   // An unreadable proposal is an abstention. Salvaging a name out of prose the
@@ -181,13 +205,32 @@ export async function interpret(
     .filter(Boolean)
     .join('\n');
 
-  const verdict = parse<{ refuted?: boolean }>(
-    (await llm.chat({ messages: [system(REFUTING.body), user(challenge)] }, { userId })).content,
+  /*
+   * Asked more than once, because one refuter is one sample.
+   *
+   * The judgement is not deterministic, and treating a single sample as a
+   * verdict is the mistake this whole file exists to stop -- one reading,
+   * promoted to settled. Measured under a hundred and twenty ordinary notices,
+   * a lone refuter caught the cover-teacher case about two times in three, and
+   * the other third shipped a wrong teacher.
+   *
+   * Disagreement between them is contention, and contention withholds. That is
+   * the same rule settling uses between rival readings of a slot, applied to
+   * rival readings of one claim. It costs a little recall and buys back the
+   * kind of error that is read aloud before every conversation a student has,
+   * which is the trade this system makes everywhere else too.
+   */
+  const verdicts = await Promise.all(
+    Array.from({ length: REFUTERS }, () =>
+      retrying(() =>
+        llm.chat({ messages: [system(REFUTING.body), user(challenge)] }, { userId }),
+      ).then((reply) => parse<{ refuted?: boolean }>(reply.content)),
+    ),
   );
 
   // A refuter that cannot be read has not cleared the claim. Silence from the
-  // one step whose job is doubt is not consent.
-  if (!verdict || verdict.refuted !== false) return null;
+  // step whose whole job is doubt is not consent.
+  if (verdicts.some((verdict) => !verdict || verdict.refuted !== false)) return null;
 
   /*
    * A qualifier has to be in the evidence, word for word.

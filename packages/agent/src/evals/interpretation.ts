@@ -128,6 +128,8 @@ const NOISE_STAFF = [
 
 interface Outcome {
   answered: string | null;
+  /** The call failed. Never to be confused with having nothing to say. */
+  errored?: boolean;
   /** The words limiting the claim, where it carried any. */
   qualifier?: string;
   /** Model calls spent, for the cost column. */
@@ -193,8 +195,19 @@ async function fixture(root: string, testCase: InterpretationCase): Promise<Vaul
    * look like one that had, so the pass was marked wrong for reading the
    * fixture correctly.
    */
+  /*
+   * The window is the subject course's own notes, not every note in the case.
+   *
+   * Some cases carry a note about a different course, so the vault looks like
+   * a vault rather than like one class in isolation. Dating the filler across
+   * that wider span pushed traffic into the subject course months after it had
+   * actually stopped, and a case about a finished course quietly became a case
+   * about a running one.
+   */
   const when = testCase.episodes
-    .map((e, index) => e.on ?? `2026-01-${String(index + 1).padStart(2, '0')}`)
+    .map((e, index) => ({ e, at: e.on ?? `2026-01-${String(index + 1).padStart(2, '0')}` }))
+    .filter(({ e }) => e.body.includes(`[[${testCase.course}]]`))
+    .map(({ at }) => at)
     .sort();
   const from = Date.parse(`${when[0] ?? '2026-01-01'}T09:00:00Z`);
   const to = Date.parse(`${when.at(-1) ?? '2026-01-02'}T09:00:00Z`);
@@ -391,13 +404,14 @@ function nameFrom(reply: string): string | null {
     : line.replace(/^(?:M|Mme|Mr|Mrs|Ms|Madame|Monsieur|Dr)\.?\s+/i, '');
 }
 
-type Verdict = 'correct' | 'hallucinated' | 'missed' | 'abstained';
+type Verdict = 'correct' | 'hallucinated' | 'missed' | 'abstained' | 'errored';
 
 const MARK: Record<Verdict, string> = {
   correct: '✓',
   abstained: '·',
   missed: '?',
   hallucinated: '✗',
+  errored: '!',
 };
 
 /** Deterministic, and unkind on purpose. */
@@ -405,7 +419,8 @@ function grade(testCase: InterpretationCase, outcome: Outcome): Verdict {
   const same = (a: string, b: string) =>
     a.trim().toLowerCase().replace(/\s+/g, ' ') === b.trim().toLowerCase().replace(/\s+/g, ' ');
 
-  const { answered, qualifier } = outcome;
+  const { answered } = outcome;
+  if (outcome.errored) return 'errored';
   if (answered === null) return testCase.expect === null ? 'abstained' : 'missed';
   if (testCase.expect === null) return 'hallucinated';
 
@@ -413,16 +428,6 @@ function grade(testCase: InterpretationCase, outcome: Outcome): Verdict {
   // credit for a wrong teacher.
   if (!same(answered, testCase.expect)) return 'hallucinated';
 
-  /*
-   * The right name, stated more flatly than the evidence allows, is still a
-   * claim the vault should not be making.
-   */
-  if (
-    testCase.expectQualifier &&
-    !(qualifier ?? '').toLowerCase().includes(testCase.expectQualifier.toLowerCase())
-  ) {
-    return 'hallucinated';
-  }
   return 'correct';
 }
 
@@ -469,18 +474,48 @@ async function main(): Promise<void> {
   const trials = Math.max(1, Number(process.env.TRIALS ?? 3));
   const width = Math.max(1, Number(process.env.CONCURRENCY ?? 6));
 
-  const llm = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
+  const base = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
+
+  /*
+   * CASE=<id> VERBOSE=1 prints every call the pass makes for one case.
+   *
+   * Built into the eval rather than kept as a scratch script, because the
+   * scratch script drifted from production and spent an afternoon reporting a
+   * step still broken that had already been fixed.
+   */
+  const llm = process.env.VERBOSE
+    ? ({
+        ...base,
+        chat: async (
+          request: Parameters<typeof base.chat>[0],
+          ctx: Parameters<typeof base.chat>[1],
+        ) => {
+          const asked = request.messages.at(-1)?.content ?? '';
+          const reply = await base.chat(request, ctx);
+          const role = (request.messages[0]?.content ?? '').includes('knock a claim down')
+            ? 'refute'
+            : 'ask   ';
+          if (process.env.VERBOSE === 'full') console.log(`\n--- ${role} ---\n${asked}`);
+          console.log(`  ${role}: ${reply.content.replace(/\s+/g, ' ').slice(0, 300)}`);
+          return reply;
+        },
+      } as LlmProvider)
+    : base;
   const arms: ArmName[] = (process.env.ARMS?.split(',') as ArmName[]) ?? [
     'naive',
     'contract',
     'full',
   ];
 
-  const byDomain = (domain: Domain) => INTERPRETATION_CASES.filter((c) => c.domain === domain);
+  const only = process.env.CASE?.split(',');
+  const cases = only
+    ? INTERPRETATION_CASES.filter((c) => only.includes(c.id))
+    : INTERPRETATION_CASES;
+  const byDomain = (domain: Domain) => cases.filter((c) => c.domain === domain);
   const domains: Domain[] = ['role', 'kind', 'teacher', 'running'];
 
   console.log(
-    `Model ${PLATFORM_MODEL} | ${INTERPRETATION_CASES.length} cases across ${domains.length} ` +
+    `Model ${PLATFORM_MODEL} | ${cases.length} cases across ${domains.length} ` +
       `kinds of reasoning | ${arms.length} arms x ${trials} trials | noise ${NOISE}\n`,
   );
   for (const domain of domains) {
@@ -503,17 +538,26 @@ async function main(): Promise<void> {
 
     for (let trial = 0; trial < trials; trial++) {
       process.stdout.write(`${arm.padEnd(9)} ${trial + 1}/${trials}  `);
-      const outcomes = await pool(INTERPRETATION_CASES, width, async (testCase) => {
+      const outcomes = await pool(cases, width, async (testCase) => {
         try {
           return await runArm(arm, llm, testCase);
         } catch (error) {
-          console.error(`\n  ${testCase.id} failed:`, error);
-          return { answered: null, calls: 0 } as Outcome;
+          /*
+           * An error is not an abstention.
+           *
+           * This used to return a null answer, which graded as "declined to
+           * say" -- so two dozen rate limits in one run read as the pass
+           * having gone quiet, and the arm that makes the most calls looked
+           * the most cautious. An instrument that turns its own failures into
+           * results is worse than no instrument.
+           */
+          console.error(`  ${testCase.id}: ${(error as Error).message?.slice(0, 120)}`);
+          return { answered: null, calls: 0, errored: true } as Outcome;
         }
       });
 
       for (const [index, outcome] of outcomes.entries()) {
-        const testCase = INTERPRETATION_CASES[index] as InterpretationCase;
+        const testCase = cases[index] as InterpretationCase;
         calls += outcome.calls;
         const verdict = grade(testCase, outcome);
         verdicts.set(testCase.id, [...(verdicts.get(testCase.id) ?? []), verdict]);
@@ -536,16 +580,17 @@ async function main(): Promise<void> {
   const rate = (list: Verdict[], of: Verdict) =>
     list.length === 0 ? 0 : list.filter((v) => v === of).length / list.length;
 
-  console.log('arm        hallucination rate    right   silent   missed   calls');
+  console.log('arm        hallucination rate    right   silent   missed   failed   calls');
   for (const arm of arms) {
-    const all = marks(arm, INTERPRETATION_CASES);
-    const answerable = INTERPRETATION_CASES.filter((c) => c.expect !== null).length * trials;
+    const all = marks(arm, cases);
+    const answerable = cases.filter((c) => c.expect !== null).length * trials;
     console.log(
       `${arm.padEnd(10)} ${bar(rate(all, 'hallucinated'))} ` +
         `${(rate(all, 'hallucinated') * 100).toFixed(0).padStart(3)}%` +
         `${`${all.filter((v) => v === 'correct').length}/${answerable}`.padStart(9)}` +
         `${String(all.filter((v) => v === 'abstained').length).padStart(9)}` +
         `${String(all.filter((v) => v === 'missed').length).padStart(9)}` +
+        `${String(all.filter((v) => v === 'errored').length).padStart(8)}` +
         `${String(spent.get(arm) ?? 0).padStart(8)}`,
     );
   }
@@ -574,7 +619,7 @@ async function main(): Promise<void> {
   }
 
   console.log('\nper case (one mark per trial):\n');
-  const width2 = Math.max(...INTERPRETATION_CASES.map((c) => c.id.length));
+  const width2 = Math.max(...cases.map((c) => c.id.length));
   console.log(`${'case'.padEnd(width2)}  ${arms.map((a) => a.padEnd(trials + 3)).join('')}`);
   for (const domain of domains) {
     for (const testCase of byDomain(domain)) {
@@ -590,7 +635,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const unstable = INTERPRETATION_CASES.filter((c) =>
+  const unstable = cases.filter((c) =>
     arms.some((arm) => new Set(seen.get(arm)?.get(c.id) ?? []).size > 1),
   );
   if (unstable.length > 0) {
@@ -601,7 +646,7 @@ async function main(): Promise<void> {
    * Everything the best arm still gets wrong, with the reason where there was
    * one. This is the list the next round of work comes from.
    */
-  const wrong = INTERPRETATION_CASES.filter((c) =>
+  const wrong = cases.filter((c) =>
     (seen.get(best)?.get(c.id) ?? []).some((v) => v === 'hallucinated' || v === 'missed'),
   );
   if (wrong.length > 0) {

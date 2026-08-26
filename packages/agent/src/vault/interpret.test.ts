@@ -18,7 +18,14 @@ import { interpret, type Question } from './interpret.js';
  * were given, here, where a model cannot argue with it.
  */
 
-/** A scripted model. Each reply is returned in order, and calls are recorded. */
+/**
+ * A scripted model. Each reply is returned in order, and calls are recorded.
+ *
+ * Once the script runs out the last reply repeats, which reads as "every
+ * refuter said the same thing". Without that, every test about proposing or
+ * about qualifiers would have to know how many times a claim is challenged,
+ * and changing that number would break a dozen tests that are not about it.
+ */
 function fake(replies: string[]) {
   const asked: string[] = [];
   return {
@@ -26,7 +33,8 @@ function fake(replies: string[]) {
     llm: {
       chat: async (request: { messages: { role: string; content: string }[] }) => {
         asked.push(request.messages.map((m) => m.content).join('\n'));
-        return { content: replies[asked.length - 1] ?? '', toolCalls: [] } as never;
+        const reply = replies[asked.length - 1] ?? (replies.length > 0 ? replies.at(-1) : '');
+        return { content: reply ?? '', toolCalls: [] } as never;
       },
     },
   };
@@ -70,6 +78,42 @@ describe('interpreting evidence into a claim', () => {
     expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
     // And does not pay for a refutation of a claim nobody made.
     expect(asked).toHaveLength(1);
+  });
+
+  it('drops a claim when the refuters disagree with each other', async () => {
+    /*
+     * One refuter is one sample of a judgement that is not deterministic, and
+     * treating a single sample as a verdict is the same mistake as everything
+     * else this file exists to stop -- one reading, promoted to settled.
+     *
+     * Measured under a hundred and twenty notices, a lone refuter caught the
+     * cover-teacher case about two times in three. The other third shipped a
+     * wrong teacher.
+     *
+     * Disagreement is contention, and contention withholds. That is the rule
+     * settling already uses between rival readings of a slot; this is the same
+     * rule applied to rival readings of one claim.
+     */
+    const { llm } = fake([
+      propose({ answer: 'Lucia Coretti', confidence: 0.9, evidence: ['a-notice'] }),
+      propose({ refuted: false }),
+      propose({ refuted: true, why: 'She is covering the class, not teaching it.' }),
+    ]);
+
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+  });
+
+  it('keeps a claim every refuter clears', async () => {
+    const { llm, asked } = fake([
+      propose({ answer: 'Lucia Coretti', confidence: 0.9, evidence: ['a-notice'] }),
+      propose({ refuted: false }),
+      propose({ refuted: false }),
+    ]);
+
+    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    expect(claim?.object).toBe('Lucia Coretti');
+    // One proposal, and more than one attempt to break it.
+    expect(asked.length).toBeGreaterThan(2);
   });
 
   it('drops a claim the refuter knocks down', async () => {
@@ -197,7 +241,8 @@ describe('interpreting evidence into a claim', () => {
       ]);
       await interpret({ llm }, question, { userId: 'u1' });
 
-      expect(asked).toHaveLength(2);
+      // The proposer and every attempt to break it.
+      expect(asked.length).toBeGreaterThanOrEqual(2);
       for (const prompt of asked) {
         expect(prompt).toContain('Every quote below was taken from a note attached to french-10.');
       }

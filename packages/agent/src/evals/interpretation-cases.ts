@@ -58,16 +58,6 @@ export interface InterpretationCase {
   episodes: FixtureEpisode[];
   /** The correct answer, or null when the honest answer is that nobody knows. */
   expect: string | null;
-  /**
-   * Words the claim must also carry, where a bare name would be arguable.
-   *
-   * Only one case needs this and it is the case that forced the field to
-   * exist. A trainee on placement marks the work, sets the deadlines and takes
-   * the lessons, so "who teaches this" has two defensible answers and a bare
-   * triple can hold neither honestly. Requiring the limit makes the case
-   * harder to pass, not easier: naming her is no longer enough.
-   */
-  expectQualifier?: string;
 }
 
 const STUDENT_DOMAIN = 'wearelcc.ca';
@@ -495,16 +485,19 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     /*
-     * The expectation here was "Erik Lindqvist" and is now "Ada Okonkwo, with
-     * the placement said out loud".
+     * This expectation was changed to "Ada Okonkwo, with the placement said
+     * out loud", and is changed back.
      *
-     * Not because the system kept answering Ada and the number looked bad --
-     * that is how a corpus stops measuring anything. Because the evidence
-     * genuinely supports both readings, and the shape available for the answer
-     * could hold neither: Ada takes the lessons and marks the work, Erik is
-     * the teacher of record, and a claim with one slot must simply pick one
-     * and be half wrong. The system can now say the true thing instead, and
-     * this asks it to. Answering "Ada Okonkwo" flatly still fails.
+     * The argument for Ada was that she takes the lessons and marks the work,
+     * so a qualified claim naming her says more than saying nothing. Then the
+     * refuting rules gained a general one -- evidence pointing at somebody
+     * else in the role defeats a claim by whoever is standing in, named or not
+     * -- and that rule says Erik. A general rule that earns its place across
+     * the corpus outranks a judgement made about one case, so the case gives
+     * way rather than the rule.
+     *
+     * The pass mostly declines here. That is a gap in what it will say, not a
+     * wrong thing said, and it is counted as a miss.
      */
     id: 'student-teacher-on-placement',
     domain: 'teacher',
@@ -534,8 +527,7 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         body: 'Miss Okonkwo. I have marked the listening tests and we will go over them together. In [[music-10]].',
       },
     ],
-    expect: 'Ada Okonkwo',
-    expectQualifier: 'placement',
+    expect: 'Erik Lindqvist',
   },
 
   {
@@ -732,6 +724,16 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
     expect: 'an administrative or information group',
   },
 
+  /*
+   * The temporal cases carry a second course, because every real vault does.
+   *
+   * Whether a course is over is not a fact about that course alone: silence
+   * since November means it ended if the rest of the school ran on until June,
+   * and means a holiday if everything else stopped in November too. A fixture
+   * holding one course cannot express that difference, and asking a reader to
+   * settle it from one course's dates is asking for a guess -- which is what
+   * it declined to give.
+   */
   {
     id: 'running-finished-last-year',
     domain: 'running',
@@ -752,6 +754,12 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         actor: 'Gillian Shadley',
         body: 'Ms Shadley. Last revision session before the exam. In [[history-10]].',
         on: '2025-11-20',
+      },
+      {
+        id: 'elsewhere',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. Last lesson before the summer, have a good break. In [[french-10]].',
+        on: '2026-06-10',
       },
     ],
     expect: 'finished',
@@ -778,6 +786,12 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         body: 'Mr Nakamura. Have a good break, we pick up circular motion in January. In [[physics-10]].',
         on: '2025-12-18',
       },
+      {
+        id: 'elsewhere',
+        actor: 'Ken Nakamura',
+        body: 'Mr Nakamura. Break starts Friday, back on the 6th. In [[french-10]].',
+        on: '2025-12-19',
+      },
     ],
     expect: 'running',
   },
@@ -796,6 +810,12 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         actor: 'Marie Duval',
         body: 'Mme Duval. Induction for next year runs in September 2027. Nothing to do yet. In [[ib-diploma-2027]].',
         on: '2027-09-01',
+      },
+      {
+        id: 'elsewhere',
+        actor: 'Marie Duval',
+        body: 'Mme Duval. Vocabulary quiz Thursday. In [[french-10]].',
+        on: '2026-08-20',
       },
     ],
     expect: 'not yet started',
@@ -821,6 +841,12 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         actor: 'Tolu Adeyemi',
         body: 'Ms Adeyemi. Trigonometry assignment due Thursday. In [[geometry-10]].',
         on: '2026-01-03',
+      },
+      {
+        id: 'elsewhere',
+        actor: 'Tolu Adeyemi',
+        body: 'Ms Adeyemi. Reminder about the essay. In [[french-10]].',
+        on: '2026-01-05',
       },
     ],
     expect: 'running',

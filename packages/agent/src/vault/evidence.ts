@@ -135,9 +135,7 @@ export async function askWhatKindOfThing(
      * actually does. Sampling evenly gives boilerplate a share of the bundle
      * proportional to how much of it there is, which is exactly backwards.
      */
-    ...[...about]
-      .sort((a, b) => tells(b.body) - tells(a.body))
-      .slice(0, EVIDENCE_LIMIT - 4)
+    ...mostTelling(about, (note) => tells(note.body), EVIDENCE_LIMIT - 4)
       // Chosen for what they say, then put back in order so the bundle reads
       // as the life of a course rather than a ranking.
       .sort((a, b) => (a.occurred ?? '').localeCompare(b.occurred ?? ''))
@@ -239,6 +237,20 @@ export async function askWhetherItIsRunning(
     });
   }
 
+  /*
+   * When the rest of the school was last doing anything.
+   *
+   * Silence means nothing on its own. A course that stopped in November is
+   * finished if every other course ran on until June, and merely between terms
+   * if they all stopped in November too. Without the comparison a reader is
+   * right to refuse, and did: shown one quiet course it cannot tell whether
+   * the course ended or the school did.
+   */
+  const elsewhere = episodes
+    .filter((e) => e.occurred && !e.body.includes(`[[${course}]]`))
+    .map((e) => e.occurred as string)
+    .sort();
+
   return {
     subject: course,
     relation: 'is currently',
@@ -247,6 +259,17 @@ export async function askWhetherItIsRunning(
     guarantees: [
       `Today is ${today ?? 'not known'}.`,
       '',
+      ...(elsewhere.length > 0
+        ? [
+            `Everywhere else in these records, the most recent activity is ` +
+              `${(elsewhere.at(-1) as string).slice(0, 10)} and the earliest is ` +
+              `${(elsewhere[0] as string).slice(0, 10)}. Use that to tell a course that`,
+            'stopped from a school that stopped: silence during a period when everything',
+            'else was quiet is a holiday, and silence while everything else carried on is',
+            'a course that ended.',
+            '',
+          ]
+        : []),
       'What the answers mean here:',
       '- running: the student is in it this year, whether or not anything is happening',
       '  this week. A course in the middle of a holiday is still running.',
@@ -320,11 +343,21 @@ export async function askWhoTeaches(
       ? staff.some((p) => mentions(note.actor as string, p.surname))
       : false;
 
+    /*
+     * Dated, because who holds a role changes.
+     *
+     * A course that changed hands is unreadable without them: "this is my last
+     * week, Ms Adeyemi will take over" and "I am taking this class from now
+     * on" say opposite things about who teaches it today, and which is current
+     * depends entirely on when each was written. Shown both undated, a reader
+     * concluded the handover was still ahead and named the departing teacher.
+     */
     const quote = quoteFor(
       note.body,
       named.map((p) => p.surname),
       bySelf,
       note.actor,
+      note.occurred?.slice(0, 10),
     );
 
     /*
@@ -347,18 +380,23 @@ export async function askWhoTeaches(
 
   if (found.length === 0) return null;
 
-  const candidates = [
-    ...new Set(
-      staff
-        .filter((p) => found.some((e) => mentions(e.evidence.quote, p.surname)))
-        .map((p) => p.name),
-    ),
-  ];
-  if (candidates.length === 0) return null;
-
   // Direct accounts first, then newest: where a course changed hands, the
   // recent half is the half that is still true.
   const ordered = byRank(found);
+
+  /*
+   * Only people the reader can actually see evidence about.
+   *
+   * A candidate whose note did not survive the cut is a name with nothing
+   * behind it, and the closed set is meant to be the answers this evidence
+   * could support -- not everybody who has ever been near the course.
+   */
+  const candidates = [
+    ...new Set(
+      staff.filter((p) => ordered.some((e) => mentions(e.quote, p.surname))).map((p) => p.name),
+    ),
+  ];
+  if (candidates.length === 0) return null;
 
   return {
     subject: course,
@@ -381,8 +419,9 @@ export async function askWhoTeaches(
       'records. Students are excluded before this question is asked and cannot appear',
       'below, so no quote here is a pupil writing to their teacher.',
       '',
-      'A quote reads "Name wrote: ..." where Name is who sent the note. Anything after',
-      'that is their own words, including how they sign themselves.',
+      'A quote reads "date, Name wrote: ..." -- when the note was sent and who sent it.',
+      'Anything after that is their own words, including how they sign themselves.',
+      'Where the quotes disagree about who holds a role, the later one is current.',
     ],
     evidence: ordered,
     /** Never trimmed silently: a cut bundle reads downstream as the whole story. */
@@ -518,17 +557,38 @@ interface Ranked {
 }
 
 /**
- * The most telling evidence first, and only as much as will be read.
+ * The most telling evidence, and no more than that.
  *
  * Rank before recency, because a note that answers the question is worth more
  * than a newer note that does not, and the cap has to fall on the notes that
  * were never going to help.
+ *
+ * The cap is a ceiling and not a quota, which is the part that took a hundred
+ * and twenty notes of ordinary school traffic to notice. Two notes where
+ * somebody says what they did with a class answer the question completely;
+ * topping them up to twelve with notes that merely mention people adds
+ * nothing and makes the two harder to read. The cover-teacher case began
+ * failing consistently at that volume with the sentence that refutes it
+ * present in the bundle every single time.
+ *
+ * So everything of the best rank goes in, and lesser evidence only tops it up
+ * to a floor -- enough for a reader to see what else was around, never enough
+ * to bury what matters.
  */
+const ENOUGH = 4;
+
 function byRank(found: readonly Ranked[]): Evidence[] {
-  return [...found]
-    .sort((a, b) => b.rank - a.rank || b.when.localeCompare(a.when))
-    .slice(0, EVIDENCE_LIMIT)
-    .map((f) => f.evidence);
+  const ranked = [...found].sort((a, b) => b.rank - a.rank || b.when.localeCompare(a.when));
+  const best = ranked[0]?.rank ?? 0;
+  const strongest = ranked.filter((f) => f.rank === best);
+  const kept =
+    strongest.length >= ENOUGH
+      ? strongest
+      : [
+          ...strongest,
+          ...ranked.filter((f) => f.rank !== best).slice(0, ENOUGH - strongest.length),
+        ];
+  return kept.slice(0, EVIDENCE_LIMIT).map((f) => f.evidence);
 }
 
 /**
@@ -562,6 +622,27 @@ function howTelling(bodies: readonly string[]): (body: string) => number {
     return score / distinct.length;
   };
 }
+
+/**
+ * The notes that actually say something, and no more than those.
+ *
+ * The same rule as byRank, for a score that is continuous rather than a small
+ * integer: everything close to the best goes in, and the rest only tops it up
+ * to a floor. Filling the remaining space with boilerplate does not add
+ * context, it changes the answer -- a bundle mostly made of bus times reads as
+ * an administrative group whatever else is in it, which is how a house came
+ * back as a noticeboard under a hundred and twenty notices.
+ */
+function mostTelling<T>(notes: readonly T[], score: (note: T) => number, cap: number): T[] {
+  const ranked = [...notes].sort((a, b) => score(b) - score(a));
+  const best = ranked[0] ? score(ranked[0]) : 0;
+  const strong = ranked.filter((n) => score(n) >= best * NEARLY_AS_GOOD);
+  const kept = strong.length >= ENOUGH ? strong : ranked.slice(0, ENOUGH);
+  return kept.slice(0, cap);
+}
+
+/** How close to the best a note must score to count as telling too. */
+const NEARLY_AS_GOOD = 0.7;
 
 const words = (body: string) =>
   plain(body)
@@ -599,6 +680,7 @@ function quoteFor(
   surnames: readonly string[],
   bySelf: boolean,
   actor?: string,
+  on?: string,
 ): string {
   const prose = body.replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\s+/g, ' ');
   const sentences = prose.split(/(?<=[.!?])\s+/);
@@ -606,7 +688,7 @@ function quoteFor(
     (s) => surnames.some((surname) => mentions(s, surname)) || (bySelf && FIRST_PERSON.test(s)),
   );
   const quote = (relevant.length > 0 ? relevant : sentences).join(' ').trim();
-  const prefix = actor ? `${actor} wrote: ` : '';
+  const prefix = `${on ? `${on}, ` : ''}${actor ? `${actor} wrote: ` : ''}`;
   return (prefix + quote).slice(0, QUOTE_LIMIT);
 }
 
