@@ -27,7 +27,7 @@ describe('what the user document is told to write', () => {
   });
 
   it('leaves the subject-or-club judgement to the writer, with a caveat', () => {
-    expect(body).toMatch(/a hint and not an answer/i);
+    expect(body).toMatch(/a hint rather than an answer/i);
   });
 
   it('insists a teacher it was given is actually used', () => {
@@ -36,8 +36,8 @@ describe('what the user document is told to write', () => {
      * programmes rather than subjects. A structure that only asked for them
      * beside subjects found four and printed none of them.
      */
-    expect(body).toMatch(/never leave out a teacher you were given/i);
-    expect(body).toMatch(/supervising a Personal Project|running a business club/i);
+    expect(body).toMatch(/every teacher you were given must appear/i);
+    expect(body).toMatch(/wastes the only hard fact in here/i);
   });
 
   it('allows a teacher it was given and forbids filling the gaps', () => {
@@ -47,8 +47,8 @@ describe('what the user document is told to write', () => {
      * anything -- it offered a list of courses and a list of people, and the
      * model paired them, which is what anyone would do.
      */
-    expect(body).toMatch(/those you should use/i);
     expect(body).toMatch(/do not fill the gap/i);
+    expect(body).toMatch(/do not guess from the subject/i);
     expect(body).toMatch(/wrong teacher sits in front of every conversation/i);
   });
 
