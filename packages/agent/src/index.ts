@@ -36,6 +36,8 @@ export { textFromDriveRead } from './vault/drive-text.js';
 export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
 export { vaultDigest, type VaultDigest } from './vault/digest.js';
+export { understandVault } from './vault/understand.js';
+export type { Claim, Withheld } from './vault/claims.js';
 export { collectDriveFiles } from './vault/collect-drive.js';
 export {
   collectSchoolMail,

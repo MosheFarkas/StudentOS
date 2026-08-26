@@ -1,6 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, domainOf, readUserDoc, writeUserDoc } from '@contexto/agent';
+import {
+  Vault,
+  domainOf,
+  readUserDoc,
+  understandVault,
+  vaultDigest,
+  writeUserDoc,
+} from '@contexto/agent';
 import { createContext } from '../context.js';
 import { loadEnv } from '../env.js';
 
@@ -45,9 +52,38 @@ async function main(): Promise<void> {
   const before = await readUserDoc(vault);
   console.log(`--- before ---\n${before ?? '(nothing was ever written)'}\n`);
 
+  /*
+   * What the vault settled on, before the writer turns it into prose.
+   *
+   * A document that reads badly can be a bad writer or a bad understanding,
+   * and from the outside those look identical. Printing the claims separates
+   * them: a course missing here was never found, and a course present here and
+   * absent from the document was dropped by the writer.
+   */
+  const llm = await ctx.llm.resolve(owner.id);
+  const { settled, withheld } = await understandVault({ llm }, vault, {
+    userId: owner.id,
+    ...(domainOf(owner.email) ? { studentDomain: domainOf(owner.email) as string } : {}),
+    today: new Date().toISOString().slice(0, 10),
+  });
+  const digest = await vaultDigest(vault, settled);
+
+  console.log(`--- what the vault settled (${settled.length} claims) ---`);
+  console.log(`student: ${digest.year ?? 'year unknown'}, ${digest.school ?? 'school unknown'}\n`);
+  for (const c of digest.courses) {
+    console.log(
+      `  ${c.title}\n    kind=${c.kind ?? '?'}  teacher=${c.teacher ?? '?'}  state=${c.state ?? '?'}`,
+    );
+  }
+  console.log(`\n--- withheld (${withheld.length}) ---`);
+  for (const w of withheld.slice(0, 20)) {
+    console.log(`  ${w.claim.subject} ${w.claim.relation} ${w.claim.object} -> ${w.reason}`);
+  }
+  console.log('');
+
   const started = Date.now();
   const after = await writeUserDoc(
-    { llm: await ctx.llm.resolve(owner.id) },
+    { llm },
     {
       vault,
       userId: owner.id,
