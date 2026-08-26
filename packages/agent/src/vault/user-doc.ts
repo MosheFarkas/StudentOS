@@ -81,21 +81,26 @@ export async function writeUserDoc(
             }.`,
             '',
             /*
-             * Courses, and one bit each. Nothing else.
+             * A course, one bit, and its teacher if that course names one.
              *
-             * The first version of this handed over work counts and a list of
+             * The first version handed over work counts and a loose list of
              * everyone who had ever emailed. It spent half the document on
-             * figures that change nothing, and it paired the people with the
-             * courses and named a teacher who does not teach him.
+             * figures that change nothing, and it paired that list with the
+             * courses and named a teacher who does not teach him. A teacher
+             * now travels attached to the course whose announcements name
+             * them, or not at all.
              */
-            'Their courses. "sets work" means it is a subject they are marked',
-            'on; the others are clubs, programmes or activities:',
+            'Their courses. "sets work" is a hint that it is a taught subject',
+            'rather than a club, and only a hint:',
             ...digest.courses.map(
-              (c) => `${c.name} — ${c.setsWork ? 'sets work' : 'sets no work'}`,
+              (c) =>
+                `${c.name} — ${c.setsWork ? 'sets work' : 'sets no work'}` +
+                (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown'),
             ),
             '',
-            'You are not told who teaches any of these, and there is no way to',
-            'work it out from what you have. Do not try.',
+            "Where a teacher is named above it was read from that course's own",
+            'announcements, and you must include it. Where it says unknown,',
+            'nothing knows: do not supply one from anywhere else.',
             '',
             ...(schoolDomains?.length
               ? [
