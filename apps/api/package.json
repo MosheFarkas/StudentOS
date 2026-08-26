@@ -11,7 +11,8 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "import-vault": "tsx src/scripts/import-vault.ts",
-    "write-user-doc": "tsx src/scripts/write-user-doc.ts"
+    "write-user-doc": "tsx src/scripts/write-user-doc.ts",
+    "backfill-classroom-events": "tsx src/scripts/backfill-classroom-events.ts"
   },
   "dependencies": {
     "@contexto/agent": "workspace:*",
