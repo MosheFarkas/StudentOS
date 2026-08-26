@@ -118,7 +118,7 @@ export const readDriveFile: Tool<z.infer<typeof readFileInput>, unknown> = {
     }
 
     const meta = await googleFetch<FileMeta>(
-      `${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink&supportsAllDrives=true`,
+      `${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,size,modifiedTime,createdTime,owners(displayName,emailAddress),lastModifyingUser(displayName,emailAddress),webViewLink,thumbnailLink&supportsAllDrives=true`,
       token,
       { ...(ctx.signal ? { signal: ctx.signal } : {}) },
     );
@@ -527,7 +527,7 @@ export async function listAccessibleFiles(
   const result = await googleFetch<{ files?: FileMeta[] }>(
     `${FILES_URL}?q=${encodeURIComponent(clauses.join(' and '))}` +
       '&pageSize=100&orderBy=modifiedTime desc' +
-      '&fields=files(id,name,mimeType,modifiedTime)' +
+      '&fields=files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress))' +
       '&supportsAllDrives=true&includeItemsFromAllDrives=true',
     token,
     { ...(signal ? { signal } : {}) },
@@ -588,7 +588,7 @@ async function expandFolders(
       const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
       const children = await googleFetch<{ files?: FileMeta[] }>(
         `${FILES_URL}?q=${query}&pageSize=100` +
-          '&fields=files(id,name,mimeType,modifiedTime)&supportsAllDrives=true' +
+          '&fields=files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress))&supportsAllDrives=true' +
           '&includeItemsFromAllDrives=true',
         token,
         { ...(signal ? { signal } : {}) },
@@ -724,4 +724,12 @@ export interface DriveFileMeta {
   ownedByMe?: boolean;
   modifiedTime?: string;
   webViewLink?: string;
+  /**
+   * Who owns it. Drive gives a name and an address, unlike Classroom.
+   *
+   * The field mask never asked for this, so a source of teacher names sat
+   * unread beside a thousand files: a worksheet shared into a course is
+   * usually shared by whoever teaches it.
+   */
+  owners?: { displayName?: string; emailAddress?: string }[];
 }

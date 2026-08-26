@@ -71,14 +71,26 @@ export const listCourses: Tool<{ includeArchived?: boolean }, unknown> = {
       );
     }
 
-    const result = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-      `${COURSES_URL}?${input.includeArchived ? STATES_EVER : STATES_NOW}`,
-      token,
-      { ...(ctx.signal ? { signal: ctx.signal } : {}) },
-    );
+    const result = await googleFetch<{
+      courses?: { id: string; name?: string; ownerId?: string; section?: string }[];
+    }>(`${COURSES_URL}?${input.includeArchived ? STATES_EVER : STATES_NOW}`, token, {
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
     if (isUnavailable(result)) return result;
 
-    const courses = (result.courses ?? []).map((c) => ({ id: c.id, name: c.name ?? 'Untitled' }));
+    const courses = (result.courses ?? []).map((c) => ({
+      id: c.id,
+      name: c.name ?? 'Untitled',
+      /*
+       * Who owns the course, and what the school called the section.
+       *
+       * The owner is usually the person who teaches it -- the single most
+       * direct answer to a question this product spent a great deal of effort
+       * inferring from mail. Both were returned by the API and dropped here.
+       */
+      ...(c.ownerId ? { ownerId: c.ownerId } : {}),
+      ...(c.section ? { section: c.section } : {}),
+    }));
     return { courses, count: courses.length };
   },
 };
@@ -162,7 +174,15 @@ const listCourseworkInput = z.object({
 });
 
 interface CourseList {
-  courses?: { id: string; name?: string; courseState?: string }[];
+  courses?: {
+    id: string;
+    name?: string;
+    courseState?: string;
+    /** Usually the teacher. Returned all along; nothing kept it. */
+    ownerId?: string;
+    /** What the school called the section, often naming the year or set. */
+    section?: string;
+  }[];
 }
 
 interface CourseWorkList {
@@ -175,6 +195,9 @@ interface CourseWorkList {
     alternateLink?: string;
     topicId?: string;
     materials?: ClassroomMaterial[];
+    maxPoints?: number;
+    workType?: string;
+    creatorUserId?: string;
   }[];
 }
 
@@ -193,6 +216,33 @@ export interface Assignment {
   topicId?: string;
   due: string | null;
   link?: string;
+  /**
+   * What the teacher actually asked for.
+   *
+   * Classroom returns it, the type above declared it, and the mapping dropped
+   * it one line before use -- so the vault held four hundred assignments and
+   * could not say what a single one of them wanted. Course materials kept
+   * their description the whole time.
+   */
+  description?: string;
+  /**
+   * What the work is marked out of.
+   *
+   * "Marked 7" is not a fact: seven out of ten and seven out of a hundred are
+   * different report cards. The total lives here and the mark lives on the
+   * submission, and nothing had ever joined them.
+   */
+  maxPoints?: number;
+  /** Assignment, quiz, short answer. Classroom distinguishes; this did not. */
+  workType?: string;
+  /**
+   * Whoever set it, as Classroom's opaque user id.
+   *
+   * Not a name, and worth keeping anyway: it groups work by author and
+   * resolves to a person the day a roster scope exists. Every announcement in
+   * this vault arrived anonymous for want of it.
+   */
+  postedBy?: string;
   /**
    * What the teacher attached. Where the homework actually is.
    *
@@ -263,6 +313,10 @@ export const listCoursework: Tool<z.infer<typeof listCourseworkInput>, unknown> 
           ...(item.topicId ? { topicId: item.topicId } : {}),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
           ...(attachments.length > 0 ? { attachments } : {}),
+          ...(item.description ? { description: item.description } : {}),
+          ...(typeof item.maxPoints === 'number' ? { maxPoints: item.maxPoints } : {}),
+          ...(item.workType ? { workType: item.workType } : {}),
+          ...(item.creatorUserId ? { postedBy: item.creatorUserId } : {}),
         });
       }
     }
@@ -357,11 +411,11 @@ async function forEachCourse<T>(
   extract: (payload: never, courseName: string) => T[],
   archived = false,
 ): Promise<T[] | ReturnType<typeof unavailable>> {
-  const courses = await googleFetch<{ courses?: { id: string; name?: string }[] }>(
-    `${COURSES_URL}?${archived ? STATES_EVER : STATES_NOW}`,
-    token,
-    { ...(signal ? { signal } : {}) },
-  );
+  const courses = await googleFetch<{
+    courses?: { id: string; name?: string; ownerId?: string; section?: string }[];
+  }>(`${COURSES_URL}?${archived ? STATES_EVER : STATES_NOW}`, token, {
+    ...(signal ? { signal } : {}),
+  });
   if (isUnavailable(courses)) return courses;
 
   const out: T[] = [];
@@ -420,6 +474,8 @@ export interface CourseMaterial {
   description?: string;
   attachments: Attachment[];
   link?: string;
+  /** Classroom's opaque id for whoever posted it. See Assignment.postedBy. */
+  postedBy?: string;
 }
 
 export const listCourseMaterials: Tool<
@@ -458,6 +514,7 @@ export const listCourseMaterials: Tool<
           ...(item.description ? { description: item.description } : {}),
           attachments: toAttachments(item.materials),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
+          ...(item.creatorUserId ? { postedBy: item.creatorUserId } : {}),
         })),
       input.includeArchived,
     );
@@ -479,6 +536,7 @@ interface RawMaterial {
   description?: string;
   alternateLink?: string;
   materials?: ClassroomMaterial[];
+  creatorUserId?: string;
 }
 
 export interface Announcement {
@@ -489,6 +547,8 @@ export interface Announcement {
   postedAt?: string;
   attachments: Attachment[];
   link?: string;
+  /** Classroom's opaque id for whoever posted it. See Assignment.postedBy. */
+  postedBy?: string;
 }
 
 export const listAnnouncements: Tool<
@@ -525,6 +585,7 @@ export const listAnnouncements: Tool<
           ...(item.creationTime ? { postedAt: item.creationTime } : {}),
           attachments: toAttachments(item.materials),
           ...(item.alternateLink ? { link: item.alternateLink } : {}),
+          ...(item.creatorUserId ? { postedBy: item.creatorUserId } : {}),
         })),
       input.includeArchived,
     );
@@ -549,6 +610,7 @@ interface RawAnnouncement {
   creationTime?: string;
   alternateLink?: string;
   materials?: ClassroomMaterial[];
+  creatorUserId?: string;
 }
 
 /**

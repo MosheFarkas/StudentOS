@@ -35,6 +35,17 @@ import type { EpisodeEvent, Vault } from './vault.js';
 export interface SchoolMessage {
   messageId: string;
   from: string;
+  /**
+   * Who it was sent to, and who was copied.
+   *
+   * Gmail returns both and the collector dropped them, so a note written
+   * personally to one student and a circular sent to nine hundred people
+   * arrived here identical. That difference is the best relevance signal a
+   * school inbox has: "your essay is late" and "Grade 11 graduation dinner"
+   * are told apart by the recipient list before a word of either is read.
+   */
+  to?: string;
+  cc?: string;
   subject: string;
   date: string;
   body: string;
@@ -299,6 +310,8 @@ export async function importMail(
           '## The message',
           '',
           `From: ${message.from}`,
+          ...(message.to ? [`To: ${message.to}`] : []),
+          ...(message.cc ? [`Cc: ${message.cc}`] : []),
           `Subject: ${message.subject}`,
           '',
           message.body.trim(),
@@ -351,7 +364,10 @@ function chatFor(
       role: 'user',
       content:
         `Names you may link to:\n${shortlist.join('\n') || '(none)'}\n\n` +
-        `From: ${message.from}\nSubject: ${message.subject}\nDate: ${message.date}\n\n` +
+        `From: ${message.from}\n` +
+        (message.to ? `To: ${message.to}\n` : '') +
+        (message.cc ? `Cc: ${message.cc}\n` : '') +
+        `Subject: ${message.subject}\nDate: ${message.date}\n\n` +
         message.body.slice(0, 6000),
     },
   ];

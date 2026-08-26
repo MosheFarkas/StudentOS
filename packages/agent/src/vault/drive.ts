@@ -26,6 +26,15 @@ export interface DriveFile {
   mimeType: string;
   /** Whether the student owns it, rather than it being shared with them. */
   ownedByStudent: boolean;
+  /**
+   * Who owns it, when it is not the student.
+   *
+   * A worksheet shared into a course is owned by whoever shared it, which is
+   * usually the person teaching it -- and unlike Classroom's opaque creator
+   * ids, Drive returns a name and an address. The field mask never asked for
+   * it, so a source of teacher names sat unread beside a thousand files.
+   */
+  owner?: string;
   modifiedAt?: string;
   link?: string;
   /** Folder names from the top down. Usually empty -- see above. */
@@ -99,6 +108,9 @@ export async function importDrive(vault: Vault, files: DriveFile[]): Promise<Dri
      * what gets read first when there are hundreds waiting.
      */
     if (file.ownedByStudent) lines.push('Yours -- you made this.');
+    // Who shared it, when somebody else did. Usually whoever teaches the
+    // course it was shared into, and one of the few places a name appears.
+    else if (file.owner) lines.push(`Shared by ${file.owner}.`);
     if (file.modifiedAt) lines.push(`Last changed ${file.modifiedAt.slice(0, 10)}.`);
 
     await vault.write({

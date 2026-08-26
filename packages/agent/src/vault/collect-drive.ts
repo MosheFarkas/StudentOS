@@ -53,6 +53,20 @@ export async function collectDriveFiles(ctx: ToolContext): Promise<DriveFile[]> 
       name: file.name ?? 'Untitled',
       mimeType: file.mimeType ?? '',
       ownedByStudent: file.ownedByMe ?? false,
+      /*
+       * Who owns it, when somebody else does.
+       *
+       * Drive returns a display name and an address for the owner, which is
+       * more than Classroom will say about who posted an announcement. A file
+       * shared into a course is usually shared by whoever teaches it.
+       */
+      ...(file.ownedByMe
+        ? {}
+        : (() => {
+            const owner = file.owners?.[0];
+            const named = owner?.displayName ?? owner?.emailAddress;
+            return named ? { owner: named } : {};
+          })()),
       ...(file.modifiedTime ? { modifiedAt: file.modifiedTime } : {}),
       ...(file.webViewLink ? { link: file.webViewLink } : {}),
       ...(path.length > 0 ? { path } : {}),

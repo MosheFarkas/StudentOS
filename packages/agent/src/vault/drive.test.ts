@@ -124,4 +124,25 @@ describe("importing the student's Drive", () => {
     expect(again.written).toBe(0);
     expect(await vault.list('entity')).toHaveLength(1);
   });
+
+  it('records who shared a file that is not the student\u2019s own', async () => {
+    /*
+     * Drive returns the owner's name and address, which is more than Classroom
+     * will say about who posted an announcement -- and the field mask never
+     * asked for it, so a source of teacher names sat unread beside a thousand
+     * files. A worksheet shared into a course is usually shared by whoever
+     * teaches it.
+     */
+    await importDrive(vault, [
+      file({
+        fileId: 'f-9',
+        name: 'Titration rubric.pdf',
+        ownedByStudent: false,
+        owner: 'Anna Bell',
+      }),
+    ]);
+
+    const note = await vault.read('entity', 'titration-rubric-pdf');
+    expect(note?.body).toContain('Shared by Anna Bell');
+  });
 });

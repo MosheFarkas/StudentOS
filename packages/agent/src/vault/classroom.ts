@@ -28,7 +28,7 @@ import type { Vault, VaultNote } from './vault.js';
  */
 
 export interface ClassroomSnapshot {
-  courses: { id: string; name: string }[];
+  courses: { id: string; name: string; ownerId?: string; section?: string }[];
   coursework: Assignment[];
   topics: Topic[];
   submissions: SubmissionSummary[];
@@ -222,7 +222,19 @@ export async function importClassroom(
       source: 'classroom',
       description: 'Course',
       externalId: course.id,
-      body: `${course.name}, on Google Classroom.`,
+      /*
+       * The owner and the section, where Classroom gave them.
+       *
+       * The owner is usually the person who teaches the course, which is the
+       * question this product spent the most effort inferring from mail. It is
+       * an opaque id rather than a name until a roster scope exists, and it
+       * still groups and still resolves later.
+       */
+      body: [
+        `${course.name}, on Google Classroom.`,
+        ...(course.section ? [`Section: ${course.section}`] : []),
+        ...(course.ownerId ? [`Owned in Classroom by user ${course.ownerId}.`] : []),
+      ].join('\n'),
     });
   }
 
@@ -255,6 +267,17 @@ export async function importClassroom(
     const previous = byExternalId.get(work.id);
 
     const lines = [`${work.title}.`, '', linkToCourse(work.course)];
+
+    /*
+     * What the assignment actually asks for.
+     *
+     * Written the same way a course material's description has always been
+     * written, four hundred lines further down this file. Classroom returned
+     * it, the type declared it, and the mapping dropped it -- so the vault
+     * held every assignment this student had ever been set and could not say
+     * what a single one of them wanted.
+     */
+    if (work.description) lines.push('', work.description);
 
     // The unit it belongs to, when the teacher filed it under one. Without
     // this every topic note has no inbound link and is dead weight.
@@ -308,10 +331,21 @@ export async function importClassroom(
           : 'No submission recorded'
         : submission.state.charAt(0).toUpperCase() + submission.state.slice(1);
       const late = submission.late ? (unsubmitted ? ', due date passed' : ', late') : '';
+      /*
+       * The mark, and what it was out of.
+       *
+       * Classroom puts the total on the coursework and the mark on the
+       * submission, and the tool that fetches submissions cannot see the
+       * coursework -- so it returned null and every grade in the vault read
+       * "Marked 7" with no denominator. Seven out of ten and seven out of a
+       * hundred are different report cards. Both halves are in this snapshot;
+       * joining them is the whole fix.
+       */
+      const outOf = submission.maxPoints ?? work.maxPoints ?? null;
       const grade =
         submission.grade === null
           ? ''
-          : `. Marked ${submission.grade}${submission.maxPoints === null ? '' : `/${submission.maxPoints}`}`;
+          : `. Marked ${submission.grade}${outOf === null ? '' : `/${outOf}`}`;
       lines.push(`${state}${late}${grade}.`);
 
       /*
@@ -386,6 +420,16 @@ export async function importClassroom(
 
     const lines = [
       linkToCourse(announcement.course).replace('Part of', 'In'),
+      /*
+       * Who posted it, as Classroom's opaque user id.
+       *
+       * Three hundred and thirteen announcements in one real vault, not one of
+       * them recording an author, because this field was returned by the API
+       * and never read. Not a name -- naming it needs a roster scope nobody
+       * has asked Google for -- but it groups every post by the same author
+       * and it resolves to a person the day that scope exists.
+       */
+      ...(announcement.postedBy ? [`Posted in Classroom by user ${announcement.postedBy}.`] : []),
       '',
       announcement.text,
     ];

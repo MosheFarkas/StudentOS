@@ -358,6 +358,24 @@ describe('importing school mail', () => {
     const result = await run(llmReturning(JSON.stringify({ keep: true, what: 42 })), [message()]);
     expect(result.written).toBe(0);
   });
+  it('keeps the recipients, which say whether it was meant for this student', async () => {
+    /*
+     * Gmail returns To and Cc, the read tool passes them through, and the
+     * collector dropped both -- so a note written personally to one student
+     * and a circular sent to nine hundred people arrived in the vault
+     * identical.
+     *
+     * That difference is the best relevance signal a school inbox has, and it
+     * was being thrown away one assignment before it was used.
+     */
+    await run(llmReturning(kept()), [
+      message({ to: 'lyliu@wearelcc.ca', cc: 'parents@wearelcc.ca' }),
+    ]);
+
+    const [note] = await vault.list('episode');
+    expect(note?.body).toContain('lyliu@wearelcc.ca');
+    expect(note?.body).toContain('parents@wearelcc.ca');
+  });
 });
 
 describe('running it again', () => {

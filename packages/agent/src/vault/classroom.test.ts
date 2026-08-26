@@ -526,6 +526,113 @@ describe('importing a snapshot', () => {
   });
 });
 
+describe('what Classroom hands over and the vault was throwing away', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-dropped-'));
+    vault = new Vault(root, 'agent-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('keeps what an assignment actually asks for', async () => {
+    /*
+     * The instructions. Classroom returns them, the type declared them, and
+     * the mapping dropped them one line before use -- so the vault held four
+     * hundred assignments and could not say what a single one of them wanted.
+     * Course materials kept their description the whole time, which is how
+     * long this was one field in one object away from working.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [
+          {
+            id: 'w-1',
+            course: 'Chemistry',
+            title: 'Titration writeup',
+            due: null,
+            description: 'Write up the titration in full, including a labelled diagram.',
+          },
+        ],
+      }),
+    );
+
+    const note = await vault.read('entity', 'titration-writeup');
+    expect(note?.body).toContain('including a labelled diagram');
+  });
+
+  it('says what a mark was out of', async () => {
+    // "Marked 7" is not a fact. Seven out of ten and seven out of a hundred
+    // are different report cards, and the total lives on the coursework while
+    // the mark lives on the submission, so nothing had ever joined them.
+    await importClassroom(
+      vault,
+      snapshot({
+        coursework: [
+          { id: 'w-1', course: 'Chemistry', title: 'Titration writeup', due: null, maxPoints: 10 },
+        ],
+        submissions: [
+          {
+            course: 'Chemistry',
+            assignment: 'w-1',
+            courseWorkId: 'w-1',
+            courseId: 'c-1',
+            submissionId: 's-1',
+            state: 'returned',
+            late: false,
+            grade: 7,
+            maxPoints: null,
+          },
+        ],
+      }),
+    );
+
+    const note = await vault.read('entity', 'titration-writeup');
+    expect(note?.body).toContain('7/10');
+  });
+
+  it('records who posted an announcement, even before it can name them', async () => {
+    /*
+     * Classroom returns creatorUserId on every post and the vault kept none of
+     * them, so three hundred announcements arrived anonymous and who teaches a
+     * course had to be inferred from mail instead.
+     *
+     * An opaque id is not a name and is still worth keeping: it groups posts
+     * by author, and it resolves to a person the day a roster scope exists.
+     */
+    await importClassroom(
+      vault,
+      snapshot({
+        announcements: [
+          {
+            id: 'a-1',
+            course: 'Chemistry',
+            text: 'Bring your lab books on Thursday.',
+            attachments: [],
+            postedBy: '117batman',
+          },
+        ],
+      }),
+    );
+
+    const [note] = await vault.list('episode');
+    expect(note?.body).toContain('117batman');
+  });
+
+  it('records who owns a course, which is usually who teaches it', async () => {
+    await importClassroom(
+      vault,
+      snapshot({ courses: [{ id: 'c-1', name: 'Chemistry', ownerId: '117batman' }] }),
+    );
+
+    const note = await vault.read('entity', 'chemistry');
+    expect(note?.body).toContain('117batman');
+  });
+});
+
 describe('running it again', () => {
   let root: string;
   let vault: Vault;

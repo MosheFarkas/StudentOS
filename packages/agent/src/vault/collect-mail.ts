@@ -168,10 +168,19 @@ export async function collectSchoolMail(
     }
     if (isUnavailable(full)) continue;
 
-    const message = full as { from?: string; subject?: string; date?: string; body?: string };
+    const message = full as {
+      from?: string;
+      to?: string;
+      cc?: string;
+      subject?: string;
+      date?: string;
+      body?: string;
+    };
     messages.push({
       messageId,
       from: message.from ?? '',
+      ...(message.to ? { to: message.to } : {}),
+      ...(message.cc ? { cc: message.cc } : {}),
       subject: message.subject ?? '',
       date: message.date ?? '',
       body: message.body ?? '',
