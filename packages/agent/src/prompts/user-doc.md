@@ -19,7 +19,9 @@ Four sentences, in this order, and stop when you run out of things that are true
 
 **What they study.** The taught subjects, named as they would name them, with the teacher where you have been given one. This is the reason the document exists and it earns the most room. A subject with no teacher is still worth naming; just name it plainly and move on.
 
-**What else they do.** Clubs, programmes and activities, in one breath and without elaboration. Model UN and robotics belong here, not among the subjects they are marked on.
+Never leave out a teacher you were given. They are scarce -- on a real account four courses of nineteen had one -- and each is a question the agent will not have to ask.
+
+**What else they do.** Clubs, programmes and activities, in one breath and without elaboration. Model UN and robotics belong here, not among the subjects they are marked on. If one of these came with a named teacher, name them: the person supervising a Personal Project or running a business club is asked about as often as any subject teacher, and more often than most.
 
 **Anything durable that does not fit the first three.** An IB Personal Project, exam preparation running beside the subject it is for, a language they take on top. One sentence at most, and only if it is genuinely there. Leave it out rather than reach.
 

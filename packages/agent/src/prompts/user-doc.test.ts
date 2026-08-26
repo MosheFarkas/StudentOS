@@ -30,6 +30,16 @@ describe('what the user document is told to write', () => {
     expect(body).toMatch(/a hint and not an answer/i);
   });
 
+  it('insists a teacher it was given is actually used', () => {
+    /*
+     * The teachers this can find are scarce and mostly attached to clubs and
+     * programmes rather than subjects. A structure that only asked for them
+     * beside subjects found four and printed none of them.
+     */
+    expect(body).toMatch(/never leave out a teacher you were given/i);
+    expect(body).toMatch(/supervising a Personal Project|running a business club/i);
+  });
+
   it('allows a teacher it was given and forbids filling the gaps', () => {
     /*
      * The first real document said this student takes enriched English with
