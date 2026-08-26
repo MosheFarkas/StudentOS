@@ -153,3 +153,23 @@ export const VAULT_WRITING = loadPromptDocument('vault-writing');
  * something it is not being asked to do.
  */
 export const VAULT_READING = loadPromptDocument('vault-reading');
+
+/**
+ * How one bundle of evidence becomes at most one claim.
+ *
+ * Read by the proposing half of the interpretation pass. Its most load-bearing
+ * paragraph is the one telling the model that declining scores as well as
+ * answering: every wrong fact this vault has stored came from a pass that was
+ * asked for a name and therefore produced one.
+ */
+export const INTERPRETING = loadPromptDocument('interpreting');
+
+/**
+ * How to try to break a claim before it is stored.
+ *
+ * The counterpart to INTERPRETING and deliberately a separate document read by
+ * a separate call. A model asked to check its own reasoning fails the second
+ * time in the direction it failed the first; one that has committed to nothing
+ * and is asked only to find the hole does not.
+ */
+export const REFUTING = loadPromptDocument('refuting');

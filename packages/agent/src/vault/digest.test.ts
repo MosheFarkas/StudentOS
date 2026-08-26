@@ -61,54 +61,37 @@ describe('digesting a vault for the profile writer', () => {
     expect(digest.courses).not.toHaveProperty('0.assignments');
   });
 
-  it('names a teacher from the staff domain, not a classmate', async () => {
+  it('takes a teacher from a settled claim rather than working one out', () => {
     /*
-     * The failure that this whole path exists to prevent. A classmate emails
-     * about maths homework and about nothing else, which looks exactly like
-     * devotion to one subject; the actual teacher also coaches robotics, so a
-     * rule rewarding exclusivity picked her and threw him out.
+     * The digest used to derive this itself, three different ways, and each
+     * one produced a confident wrong name: a classmate who emailed only about
+     * maths, a head of year who wrote to every class he looked after, a
+     * colleague who led on one email against none. All three were counts over
+     * fragments, and no count over fragments can tell teaching apart from any
+     * other reason to write to a class.
      *
-     * Every Person note carries the address it was created from, and the
-     * school puts students on one domain and staff on another.
+     * The deriving now happens once, is challenged before it is stored, and
+     * arrives here as a claim. Nothing in the digest re-reads the evidence
+     * behind it -- a second opinion from the same fragments is the disease.
      */
-    await vault.write({
-      name: 'lucia-coretti',
-      kind: 'entity',
-      source: 'gmail',
-      description: 'Person',
-      externalId: 'lcoretti@lcc.ca',
-      body: 'Lucia Coretti, at lcoretti@lcc.ca.',
-    });
-    await vault.write({
-      name: 'daniella-malka',
-      kind: 'entity',
-      source: 'gmail',
-      description: 'Person',
-      externalId: 'dmalka@wearelcc.ca',
-      body: 'Daniella Malka, at dmalka@wearelcc.ca.',
-    });
+    return (async () => {
+      const digest = await vaultDigest(vault, [
+        {
+          subject: 'french-10',
+          relation: 'taught by',
+          object: 'Lucia Coretti',
+          basis: 'inferred',
+          evidence: [{ note: 'n1', quote: 'Mme Coretti will collect the essays.' }],
+          confidence: 0.9,
+        },
+      ]);
 
-    const wrote = (n: number, actor: string) =>
-      vault.write({
-        name: `2026-01-0${n}-note`,
-        kind: 'episode',
-        source: 'gmail',
-        description: `${actor} wrote.`,
-        actor,
-        occurred: `2026-01-0${n}T10:00:00Z`,
-        body: 'In [[french-10]].',
-      });
-
-    // The classmate writes more than the teacher, and still loses.
-    await wrote(1, 'Daniella Malka');
-    await wrote(2, 'Daniella Malka');
-    await wrote(3, 'Daniella Malka');
-    await wrote(4, 'Lucia Coretti');
-
-    const digest = await vaultDigest(vault, 'wearelcc.ca');
-    expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Lucia Coretti');
-    expect(digest.courses.find((c) => c.name === 'drama-10a')?.teacher).toBeNull();
-    expect(digest).not.toHaveProperty('people');
+      expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Lucia Coretti');
+      // And a course no claim was settled for stays empty, rather than
+      // borrowing the name from the course next to it.
+      expect(digest.courses.find((c) => c.name === 'drama-10a')?.teacher).toBeNull();
+      expect(digest).not.toHaveProperty('people');
+    })();
   });
 
   it('leaves out a course nothing has ever happened in', async () => {

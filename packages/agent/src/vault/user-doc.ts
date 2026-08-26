@@ -4,6 +4,7 @@ import type { LlmProvider } from '@contexto/llm';
 import { USER_DOC } from '../prompts/documents.js';
 import { capProfile } from '../memory/profile.js';
 import { vaultDigest } from './digest.js';
+import { understandVault } from './understand.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -65,8 +66,22 @@ export async function writeUserDoc(
   { llm }: UserDocDeps,
   { vault, userId, name, schoolDomains }: UserDocOptions,
 ): Promise<string | null> {
-  // The student's own domain tells staff from classmates. See digest.ts.
-  const digest = await vaultDigest(vault, schoolDomains?.[0]);
+  /*
+   * Understand the vault, then write from what it settled on.
+   *
+   * The order matters and used to be absent entirely. This pass previously
+   * received counts and worked out for itself what they meant -- who taught
+   * what, which courses were running -- from a table it could not check
+   * against anything. It now receives claims that have already been proposed
+   * against a bounded bundle of evidence, challenged by a pass whose only job
+   * was to break them, and reconciled against their rivals. What survives is
+   * scarce and correct, which is the trade being made.
+   */
+  const { settled } = await understandVault({ llm }, vault, {
+    userId,
+    studentDomain: schoolDomains?.[0],
+  });
+  const digest = await vaultDigest(vault, settled);
   if (digest.courses.length === 0) return null;
 
   const answer = await llm.chat(
@@ -103,9 +118,11 @@ export async function writeUserDoc(
                 `, last activity ${c.lastSeen ?? 'never'}, last due ${c.lastDue ?? 'never'}`,
             ),
             '',
-            "Where a teacher is named above it was read from that course's own",
-            'announcements, and you must include it. Where it says unknown,',
-            'nothing knows: do not supply one from anywhere else.',
+            'Where a teacher is named above, that claim was read from evidence in',
+            'that course, challenged by a pass trying to break it, and survived.',
+            'Include it. Where it says unknown, either nothing knew or the claim',
+            'did not survive, and both mean the same thing to you: there is no',
+            'answer, and you must not supply one from anywhere else.',
             '',
             ...(schoolDomains?.length
               ? [

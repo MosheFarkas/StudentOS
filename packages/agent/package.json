@@ -13,7 +13,8 @@
     "eval:memory": "tsx src/evals/memory.ts",
     "eval:injection": "tsx src/evals/injection.ts",
     "eval:vault": "tsx src/evals/vault-skills.ts",
-    "eval:tools": "tsx src/evals/tool-choice.ts"
+    "eval:tools": "tsx src/evals/tool-choice.ts",
+    "eval:interpretation": "tsx src/evals/interpretation.ts"
   },
   "dependencies": {
     "@contexto/db": "workspace:*",

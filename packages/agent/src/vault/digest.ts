@@ -1,4 +1,4 @@
-import { findTeacher, namesPostedIn } from './teachers.js';
+import type { Claim } from './claims.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -27,12 +27,14 @@ export interface CourseDigest {
    */
   setsWork: boolean;
   /**
-   * Who teaches it, when the course's own announcements say so clearly.
+   * Who teaches it, when a claim about that survived being challenged.
    *
-   * Null far more often than not: on a real account this names the Personal
-   * Project supervisor and the head of the business club, and knows nothing
-   * about maths, English or science. Silence is the right answer there --
-   * Classroom knows and will not say without a roster scope. See teachers.ts.
+   * Read here, never worked out here. Three earlier versions each tried to
+   * derive this from co-occurrence -- who writes the most mail, who is named
+   * exclusively, who is named at all -- and each produced a confident wrong
+   * name, because a count over fragments cannot tell teaching from any other
+   * reason to write to a class. Null far more often than not, which is the
+   * honest answer: Classroom knows and will not say without a roster scope.
    */
   teacher: string | null;
   /**
@@ -65,43 +67,28 @@ export interface VaultDigest {
   to: string | null;
 }
 
-export async function vaultDigest(vault: Vault, studentDomain?: string): Promise<VaultDigest> {
+export async function vaultDigest(
+  vault: Vault,
+  /**
+   * What the interpretation pass settled on, if it has run.
+   *
+   * Claims come in already challenged and already reconciled. Nothing in this
+   * file re-reads the evidence behind them, which is the point: a second
+   * reader forming its own opinion from the same fragments is how one vault
+   * ended up with three different answers to the same question.
+   */
+  claims: readonly Claim[] = [],
+): Promise<VaultDigest> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
 
   const linked = (name: string) => (note: { body: string }) => note.body.includes(`[[${name}]]`);
 
-  /*
-   * Who is staff and who is a classmate.
-   *
-   * The school puts students on one mail domain and staff on another, and
-   * every Person note carries the address it was created from. Without this
-   * the maths teacher lost to a classmate: she wrote only about maths, he also
-   * coached robotics, and a rule that rewarded devotion to one subject picked
-   * her.
-   */
-  const staffSurnames = new Set(
-    entities
-      .filter((n) => n.description === 'Person' && n.externalId)
-      .filter((n) => !studentDomain || !n.externalId!.endsWith(`@${studentDomain}`))
-      .map((n) => n.name.split('-').at(-1) as string),
-  );
-  const isStaff = (actor: string) => {
-    const surname = actor.trim().split(/\s+/).at(-1)?.toLowerCase() ?? '';
-    return staffSurnames.has(surname);
-  };
-
   const dayOf = (at: string | undefined) => (at ? at.slice(0, 10) : null);
 
-  /** Staff who have written to the class about one course, with how often. */
-  const staffWritersFor = (course: string) => {
-    const letters = new Map<string, number>();
-    for (const episode of episodes) {
-      if (!episode.actor || !episode.body.includes(`[[${course}]]`)) continue;
-      if (!isStaff(episode.actor)) continue;
-      letters.set(episode.actor, (letters.get(episode.actor) ?? 0) + 1);
-    }
-    return [...letters].map(([name, count]) => ({ name, letters: count }));
-  };
+  const teaches = new Map(
+    claims.filter((c) => c.relation === 'taught by').map((c) => [c.subject, c.object]),
+  );
+
   const assignments = entities.filter((n) => n.description === 'Assignment');
   const materials = entities.filter(
     (n) => n.description === 'Material' || n.description === 'File',
@@ -112,23 +99,7 @@ export async function vaultDigest(vault: Vault, studentDomain?: string): Promise
     .map((course) => ({
       name: course.name,
       setsWork: assignments.some(linked(course.name)),
-      /*
-       * Two independent readings, and either will do.
-       *
-       * The announcements name a teacher for four courses of nineteen and
-       * know nothing of maths, English or science; who writes to the class
-       * reaches exactly those. Preferring the announcement is arbitrary but
-       * harmless -- both are evidence about the same course, and neither
-       * fires without a clear lead.
-       */
-      teacher: findTeacher({
-        postedNames: namesPostedIn(
-          episodes
-            .filter((e) => e.source === 'classroom' && e.body.includes(`[[${course.name}]]`))
-            .map((e) => e.body),
-        ),
-        staffMail: staffWritersFor(course.name),
-      }),
+      teacher: teaches.get(course.name) ?? null,
       lastSeen: dayOf(
         episodes
           .filter((e) => e.occurred && linked(course.name)(e))
