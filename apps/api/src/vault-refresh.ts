@@ -188,7 +188,13 @@ async function refreshOne(
    */
   const about = await writeUserDoc(
     { llm: await ctx.llm.resolve(userId) },
-    { vault, userId, ...(owner.name ? { name: owner.name } : {}) },
+    {
+      vault,
+      userId,
+      ...(owner.name ? { name: owner.name } : {}),
+      // The one fact in the vault that identifies the school at all.
+      ...(domainOf(owner.email) ? { schoolDomains: [domainOf(owner.email) as string] } : {}),
+    },
   );
 
   return (

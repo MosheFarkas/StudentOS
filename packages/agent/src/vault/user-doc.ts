@@ -41,6 +41,14 @@ export interface UserDocOptions {
   userId: string;
   /** The student's own name, when something knows it. */
   name?: string;
+  /**
+   * The domains their school sends mail from.
+   *
+   * The only fact in the vault that identifies the school at all. The name of
+   * the place was previously arriving by accident, through a list of everyone
+   * who had ever emailed -- the same list that produced an invented teacher.
+   */
+  schoolDomains?: string[];
 }
 
 /** The document, or null if one has never been written. */
@@ -55,7 +63,7 @@ export async function readUserDoc(vault: Vault): Promise<string | null> {
 
 export async function writeUserDoc(
   { llm }: UserDocDeps,
-  { vault, userId, name }: UserDocOptions,
+  { vault, userId, name, schoolDomains }: UserDocOptions,
 ): Promise<string | null> {
   const digest = await vaultDigest(vault);
   if (digest.courses.length === 0) return null;
@@ -89,6 +97,13 @@ export async function writeUserDoc(
             'You are not told who teaches any of these, and there is no way to',
             'work it out from what you have. Do not try.',
             '',
+            ...(schoolDomains?.length
+              ? [
+                  `Their school sends mail from ${schoolDomains.join(' and ')}. Name the school`,
+                  'only if you actually recognise it from that; otherwise leave it out.',
+                  '',
+                ]
+              : []),
             `The document may be at most ${USER_DOC_LIMIT} characters.`,
           ].join('\n'),
         },
