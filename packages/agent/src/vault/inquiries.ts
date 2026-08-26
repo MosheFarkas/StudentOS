@@ -1,5 +1,6 @@
 import {
   askWhatKindOfThing,
+  askWhatSchoolThisIs,
   askWhatTheyDo,
   askWhatYearTheyAreIn,
   askWhetherItIsRunning,
@@ -32,9 +33,9 @@ import type { Vault } from './vault.js';
  *   - Whether it is RUNNING comes last of the course questions, because it is
  *     the only one that gains nothing from the others and the only one that
  *     needs a clock.
- *   - Which YEAR the student is in stands apart: it is about them rather than
- *     about anything in the vault, and every other question is indifferent to
- *     it.
+ *   - Which YEAR they are in and which SCHOOL they go to stand apart: they are
+ *     about the student rather than about anything the vault holds a note for,
+ *     and every other question is indifferent to both.
  *
  * Nothing here reaches for a fixed vocabulary of relations. "taught by",
  * "works at the school as" and "is" are the questions worth asking today, not
@@ -96,6 +97,12 @@ export const INQUIRIES: Inquiry[] = [
      */
     subjects: async () => [THE_STUDENT],
     ask: askWhatYearTheyAreIn,
+  },
+  {
+    relation: 'goes to',
+    single: true,
+    subjects: async () => [THE_STUDENT],
+    ask: askWhatSchoolThisIs,
   },
 ];
 

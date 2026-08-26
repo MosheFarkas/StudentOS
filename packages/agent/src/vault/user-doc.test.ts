@@ -83,7 +83,8 @@ describe('writing the user document', () => {
     await writeUserDoc({ llm } as never, { vault, userId: 'u1' });
 
     const sent = JSON.stringify(llm.chat.mock.calls.at(-1)?.[0]);
-    expect(sent).toContain('french-10');
+    // Named as the school named it, not as the filesystem holds it.
+    expect(sent).toContain('French 10');
     expect(sent).not.toContain('Culture essay.');
   });
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   askWhatKindOfThing,
   askWhatTheyDo,
+  askWhatSchoolThisIs,
   askWhatYearTheyAreIn,
   askWhetherItIsRunning,
   askWhoTeaches,
@@ -773,5 +774,82 @@ describe('gathering what could say which year the student is in', () => {
     await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday.');
     const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
     expect(question?.guarantees?.join(' ')).toMatch(/other years|somebody else|not about them/i);
+  });
+});
+
+/**
+ * Which school this is.
+ *
+ * The other half of the first sentence, and the half that was being answered
+ * out of the model's own memory: it was shown a mail domain and told to name
+ * the school "only if you actually recognise it". Recognising a domain is not
+ * reading, it is recall, and recall is where a confident wrong answer comes
+ * from -- there is no evidence behind it to check and nothing to refute.
+ *
+ * The name is in the vault, written by people, dozens of times. What marks it
+ * out from every other capitalised phrase is that everybody uses it: a
+ * person's name appears in their own mail, and the school's appears in
+ * everybody's.
+ */
+describe('gathering what could say which school this is', () => {
+  let root: string;
+  let vault: Vault;
+
+  const wrote = (id: string, actor: string, body: string) =>
+    vault.write({
+      name: id,
+      kind: 'episode',
+      source: 'gmail',
+      description: `${actor} wrote.`,
+      actor,
+      occurred: '2026-02-01T10:00:00Z',
+      body,
+    });
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-school-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('offers a name that many different people use', async () => {
+    await wrote('n1', 'Anna Bell', 'Welcome back to Lower Canada College for the new term.');
+    await wrote('n2', 'Chris George', 'Lower Canada College reports go home on Friday.');
+    await wrote('n3', 'Gillian Shadley', 'The Lower Canada College open evening is next week.');
+
+    const question = await askWhatSchoolThisIs(vault, 'the-student', {});
+    expect(question?.candidates).toContain('Lower Canada College');
+  });
+
+  it('does not mistake one person for the institution', async () => {
+    /*
+     * A name that appears in a great many notes written by one person is that
+     * person signing their mail. A name that appears in notes by many
+     * different people is a thing they all belong to.
+     */
+    await wrote('n1', 'Gillian Shadley', 'Gillian Shadley here, essays due Friday.');
+    await wrote('n2', 'Gillian Shadley', 'Gillian Shadley again, bring your books.');
+    await wrote('n3', 'Gillian Shadley', 'Gillian Shadley, the test is Tuesday.');
+    await wrote('n4', 'Anna Bell', 'Welcome back to Lower Canada College.');
+    await wrote('n5', 'Chris George', 'Lower Canada College reports go home Friday.');
+
+    const question = await askWhatSchoolThisIs(vault, 'the-student', {});
+    expect(question?.candidates[0]).toBe('Lower Canada College');
+  });
+
+  it('asks nothing when no name recurs across different writers', async () => {
+    await wrote('n1', 'Anna Bell', 'The test is on Tuesday, bring a calculator.');
+    expect(await askWhatSchoolThisIs(vault, 'the-student', {})).toBeNull();
+  });
+
+  it('tells the reader not to answer from what it already knows', async () => {
+    // The failure this replaces is recall, not misreading. A model that
+    // recognises a domain will name a school with nothing behind it.
+    await wrote('n1', 'Anna Bell', 'Welcome to Lower Canada College.');
+    await wrote('n2', 'Chris George', 'Lower Canada College reports go home Friday.');
+
+    const question = await askWhatSchoolThisIs(vault, 'the-student', {});
+    expect(question?.guarantees?.join(' ')).toMatch(/already know|recognise|memory/i);
   });
 });

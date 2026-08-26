@@ -46,6 +46,22 @@ describe('digesting a vault for the profile writer', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  it('calls a course what the school calls it, not what the filename says', () => {
+    /*
+     * The document listed courses by their slug -- "grade-10-math-2025-2026"
+     * -- and the writer was left to turn that back into something a person
+     * would say. That is inference, and it was being done with no evidence, in
+     * the pass with the least room to do it.
+     *
+     * No inference is needed. The school typed a name into Classroom and the
+     * importer wrote it down. Reading it is free and cannot be wrong.
+     */
+    return (async () => {
+      const digest = await vaultDigest(vault);
+      expect(digest.courses.find((c) => c.name === 'french-10')?.title).toBe('French 10');
+    })();
+  });
+
   it('reports what kind of thing a course is, from a settled claim', () => {
     /*
      * Everything arrives from Google Classroom as a "course", and this was

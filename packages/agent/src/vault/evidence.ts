@@ -389,6 +389,96 @@ const YEAR = /\b(?:Grade|Year|Form)\s+(?:1[0-3]|[1-9])\b/g;
 
 const tidyYear = (span: string) => span.replace(/\s+/g, ' ').trim();
 
+/**
+ * Which school this is.
+ *
+ * The other half of the first sentence, and the half that was answered out of
+ * the model's own memory: it was handed a mail domain and told to name the
+ * school "only if you actually recognise it". Recognising a domain is recall
+ * rather than reading, and recall is exactly where a confident wrong answer
+ * comes from -- nothing behind it to check, and nothing to refute.
+ *
+ * The name is in the vault, written by people, dozens of times. What marks it
+ * out from every other capitalised phrase is that everybody uses it. A
+ * person's name appears in their own mail; the school's appears in
+ * everybody's, which is why candidates are ranked by how many different
+ * writers wrote them rather than by how often they occur.
+ */
+export async function askWhatSchoolThisIs(
+  vault: Vault,
+  subject: string,
+  _context: AskContext,
+): Promise<Question | null> {
+  const episodes = await vault.list('episode');
+
+  /** Every proper-noun phrase, and who has written it. */
+  const writers = new Map<string, Set<string>>();
+  const where = new Map<string, string[]>();
+  for (const note of episodes) {
+    const prose = plain(note.body);
+    for (const span of new Set([...prose.matchAll(PROPER_NOUN)].map((m) => m[0].trim()))) {
+      if (!writers.has(span)) writers.set(span, new Set());
+      writers.get(span)!.add(note.actor ?? note.name);
+      where.set(span, [...(where.get(span) ?? []), note.name]);
+    }
+  }
+
+  /*
+   * Used by more than one person, or it is somebody signing their mail.
+   *
+   * The single strongest signal available and the whole reason this works
+   * without a list of school-sounding words: an institution is the thing
+   * everyone in it refers to.
+   */
+  const ranked = [...writers]
+    .filter(([, who]) => who.size > 1)
+    .sort((a, b) => b[1].size - a[1].size)
+    .slice(0, 6);
+  if (ranked.length === 0) return null;
+
+  const byName = new Map(episodes.map((e) => [e.name, e]));
+  const evidence: Evidence[] = [];
+  for (const [span] of ranked) {
+    for (const note of (where.get(span) ?? []).slice(0, 2)) {
+      const found = byName.get(note);
+      if (found && !evidence.some((e) => e.note === note)) {
+        evidence.push({ note, quote: plain(found.body).slice(0, QUOTE_LIMIT) });
+      }
+    }
+  }
+
+  return {
+    subject,
+    relation: 'goes to',
+    asking: 'Which school does this student go to?',
+    candidates: ranked.map(([span]) => span),
+    guarantees: [
+      'The candidates are every capitalised phrase that more than one person has',
+      "written in this student's records, commonest writers first. Most of them are",
+      'not schools: houses, departments, software, places, competitions and people.',
+      '',
+      'Answer only from these quotes. Do not answer from anything you already know --',
+      'not from a mail domain you recognise, not from a name that sounds like a school',
+      'you have heard of. A school named out of memory has no evidence behind it and',
+      'cannot be checked by anybody, which makes it worse than no answer.',
+      '',
+      'Pick the phrase the writers treat as the place they all belong to. If none of',
+      'them is used that way, answer null.',
+    ],
+    evidence: evidence.slice(0, EVIDENCE_LIMIT),
+  };
+}
+
+/**
+ * A capitalised phrase of two to four words.
+ *
+ * Two at least, because one is a first name as often as anything, and joining
+ * words allowed in the middle so "Lower Canada College" and "College of the
+ * Sacred Heart" both survive.
+ */
+const PROPER_NOUN =
+  /\b[A-ZÀ-Ü][a-zà-ÿ]+(?:\s+(?:of|the|de|la|du|des)\s+)?(?:\s*[A-ZÀ-Ü][a-zà-ÿ]+){1,3}\b/g;
+
 /** Every member of staff the vault knows, with the name a person would use. */
 export async function staffRoster(
   vault: Vault,

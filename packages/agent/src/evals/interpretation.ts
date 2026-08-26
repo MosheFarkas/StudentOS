@@ -86,6 +86,7 @@ const RELATION: Record<Domain, string> = {
   teacher: 'taught by',
   running: 'is currently',
   year: 'is in',
+  school: 'goes to',
 };
 
 /**
@@ -513,7 +514,7 @@ async function main(): Promise<void> {
     ? INTERPRETATION_CASES.filter((c) => only.includes(c.id))
     : INTERPRETATION_CASES;
   const byDomain = (domain: Domain) => cases.filter((c) => c.domain === domain);
-  const domains: Domain[] = ['role', 'kind', 'teacher', 'running', 'year'];
+  const domains: Domain[] = ['role', 'kind', 'teacher', 'running', 'year', 'school'];
 
   console.log(
     `Model ${PLATFORM_MODEL} | ${cases.length} cases across ${domains.length} ` +

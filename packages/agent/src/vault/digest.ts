@@ -18,6 +18,15 @@ import type { Vault } from './vault.js';
 export interface CourseDigest {
   name: string;
   /**
+   * What the school calls it, as somebody typed it into Classroom.
+   *
+   * Not inferred. The document used to list courses by slug and leave the
+   * writer to turn "grade-10-math-2025-2026" back into something a person
+   * would say -- inference with no evidence, done in the pass with the least
+   * room to do it. The name was written down all along.
+   */
+  title: string;
+  /**
    * What kind of thing it is: a subject, a club, a house, a noticeboard.
    *
    * Everything arrives from Google Classroom as a "course", and the digest
@@ -68,6 +77,14 @@ export interface VaultDigest {
    * writer with no evidence and no way to decline.
    */
   year: string | null;
+  /**
+   * The school, when a claim about it survived.
+   *
+   * Read out of what people wrote rather than recognised from a mail domain.
+   * Recognising a domain is recall, not reading, and a school named from
+   * memory has no evidence behind it and cannot be checked by anybody.
+   */
+  school: string | null;
   courses: CourseDigest[];
   /** Everything in the vault, so the writer knows how much it is speaking for. */
   notes: number;
@@ -120,6 +137,7 @@ export async function vaultDigest(
     .filter((n) => n.description === 'Course')
     .map((course) => ({
       name: course.name,
+      title: (course.body.split('\n')[0] ?? '').split(',')[0]?.trim() || course.name,
       kind: kinds.get(course.name) ?? null,
       teacher: teaches.get(course.name) ?? null,
       state: states.get(course.name) ?? null,
@@ -136,7 +154,7 @@ export async function vaultDigest(
      */
     .filter((c) => c.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .map(({ name, kind, teacher, state }) => ({ name, kind, teacher, state }));
+    .map(({ name, title, kind, teacher, state }) => ({ name, title, kind, teacher, state }));
 
   const times = episodes
     .map((e) => e.occurred)
@@ -154,6 +172,7 @@ export async function vaultDigest(
   return {
     today: new Date().toISOString().slice(0, 10),
     year: answers('is in').get(THE_STUDENT) ?? null,
+    school: answers('goes to').get(THE_STUDENT) ?? null,
     courses,
     notes: entities.length + episodes.length,
     from: times[0]?.slice(0, 10) ?? null,

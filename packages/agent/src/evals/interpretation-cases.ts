@@ -41,7 +41,7 @@ export interface FixtureEpisode {
  * today falls in a school year. A pass that is good at one of these is not
  * thereby good at any of the others, and only measuring them apart shows it.
  */
-export type Domain = 'role' | 'kind' | 'teacher' | 'running' | 'year';
+export type Domain = 'role' | 'kind' | 'teacher' | 'running' | 'year' | 'school';
 
 export interface InterpretationCase {
   id: string;
@@ -935,6 +935,77 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         id: 'y1',
         actor: 'Gillian Shadley',
         body: 'Ms Shadley. I have marked your essays and will hand them back Thursday. In [[history-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'school-everybody-names-it',
+    domain: 'school',
+    trap: "The school was named out of the model's memory, from a mail domain it thought it recognised. Recall has no evidence behind it and nothing to refute.",
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Anna Bell'), staff('Chris George'), staff('Gillian Shadley')],
+    episodes: [
+      {
+        id: 's1',
+        actor: 'Anna Bell',
+        body: 'Welcome back to Lower Canada College for the new term. In [[history-10]].',
+      },
+      {
+        id: 's2',
+        actor: 'Chris George',
+        body: 'Lower Canada College reports go home on Friday. In [[history-10]].',
+      },
+      {
+        id: 's3',
+        actor: 'Gillian Shadley',
+        body: 'The Lower Canada College open evening is next Thursday. In [[history-10]].',
+      },
+    ],
+    expect: 'Lower Canada College',
+  },
+
+  {
+    id: 'school-versus-a-department',
+    trap: 'Plenty of capitalised phrases are used by everybody. A department, a house, a piece of software and a competition all recur across writers, and only one of them is the school.',
+    domain: 'school',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Anna Bell'), staff('Chris George')],
+    episodes: [
+      {
+        id: 's1',
+        actor: 'Anna Bell',
+        body: 'The Visual Arts department has moved to the Sacred Heart building. Google Classroom will be down Friday. In [[history-10]].',
+      },
+      {
+        id: 's2',
+        actor: 'Chris George',
+        body: 'Visual Arts portfolios are due. The Sacred Heart building reopens Monday. Google Classroom is back. In [[history-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'school-nobody-writes-it',
+    trap: 'A student whose mail never names the school. Naming one anyway is the failure, and the first sentence of every conversation carries it.',
+    domain: 'school',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Gillian Shadley')],
+    episodes: [
+      {
+        id: 's1',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. Essays are due Friday, bring your notes. In [[history-10]].',
+      },
+      {
+        id: 's2',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. The test has moved to Tuesday. In [[history-10]].',
       },
     ],
     expect: null,

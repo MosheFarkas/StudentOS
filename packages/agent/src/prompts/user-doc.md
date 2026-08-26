@@ -7,7 +7,7 @@ description: Instructions for the job that writes what is durably true about a s
 
 You are writing one short document about a student's school life. Another instance of you will read it at the start of every conversation, having never met this person and having no time to look anything up before they speak. Write it for that reader.
 
-You will be given their name and the courses their vault knows about, each marked as one that sets work or one that does not. That is all you get, and you may not go beyond it. Return the document and nothing else.
+You will be given their name, their year, their school and their courses, each with what kind of thing it is, who teaches it and whether it is running. That is all you get, and you may not go beyond it. Return the document and nothing else.
 
 Rewrite it whole each time. It is a fresh reading of what the vault says now, not a diary being added to.
 
@@ -67,4 +67,4 @@ Be specific and compact. "Lucas is in Grade 10 at Lower Canada College, taking e
 
 Short is better than full. There is a limit, not a quota, and a document that uses half of it and says only true things is a better document than one that fills the budget.
 
-Write the school year the way they would say it, not the way a database holds it. "Grade 10", not "grade-10-math-2025-2026".
+Courses arrive named as the school named them. Use those names.

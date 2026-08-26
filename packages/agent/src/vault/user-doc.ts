@@ -128,7 +128,7 @@ export async function writeUserDoc(
             'Their courses, as the vault has settled them:',
             ...digest.courses.map(
               (c) =>
-                `${c.name} — ${c.kind ?? 'kind unknown'}` +
+                `${c.title} — ${c.kind ?? 'kind unknown'}` +
                 (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown') +
                 (c.state ? `, ${c.state}` : ', running or not unknown'),
             ),
@@ -136,13 +136,18 @@ export async function writeUserDoc(
             'These are answers, not hints. Do not second-guess them from the course',
             'names, and do not fill in a line that says something is unknown.',
             '',
-            ...(schoolDomains?.length
-              ? [
-                  `Their school sends mail from ${schoolDomains.join(' and ')}. Name the school`,
-                  'only if you actually recognise it from that; otherwise leave it out.',
-                  '',
-                ]
-              : []),
+            /*
+             * Read from what people wrote, not recognised from a domain.
+             *
+             * This used to hand over the mail domain and say "name the school
+             * only if you actually recognise it from that", which asks for
+             * recall rather than reading -- and a school named out of memory
+             * has nothing behind it to check.
+             */
+            digest.school
+              ? `They go to ${digest.school}.`
+              : 'Which school they go to is not known: do not name one.',
+            '',
             `The document may be at most ${USER_DOC_LIMIT} characters.`,
           ].join('\n'),
         },
