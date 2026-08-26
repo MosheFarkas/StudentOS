@@ -65,7 +65,8 @@ export async function writeUserDoc(
   { llm }: UserDocDeps,
   { vault, userId, name, schoolDomains }: UserDocOptions,
 ): Promise<string | null> {
-  const digest = await vaultDigest(vault);
+  // The student's own domain tells staff from classmates. See digest.ts.
+  const digest = await vaultDigest(vault, schoolDomains?.[0]);
   if (digest.courses.length === 0) return null;
 
   const answer = await llm.chat(

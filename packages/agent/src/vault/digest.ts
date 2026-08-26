@@ -1,4 +1,4 @@
-import { teacherFor, teacherFromMail } from './teachers.js';
+import { findTeacher, namesPostedIn } from './teachers.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -65,29 +65,43 @@ export interface VaultDigest {
   to: string | null;
 }
 
-export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
+export async function vaultDigest(vault: Vault, studentDomain?: string): Promise<VaultDigest> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
 
   const linked = (name: string) => (note: { body: string }) => note.body.includes(`[[${name}]]`);
-  const courseNames = entities.filter((n) => n.description === 'Course').map((n) => n.name);
 
   /*
-   * Every piece of mail, with who sent it and which courses it names.
+   * Who is staff and who is a classmate.
    *
-   * Built once here rather than per course: it is the raw material for the
-   * better of the two ways to find a teacher. See teachers.ts.
+   * The school puts students on one mail domain and staff on another, and
+   * every Person note carries the address it was created from. Without this
+   * the maths teacher lost to a classmate: she wrote only about maths, he also
+   * coached robotics, and a rule that rewarded devotion to one subject picked
+   * her.
    */
-  const mail = episodes
-    .filter((e) => e.actor)
-    .map((e) => ({
-      actor: e.actor as string,
-      courses: [...e.body.matchAll(/\[\[([^\]]+)\]\]/g)]
-        .map((m) => m[1] as string)
-        .filter((name) => courseNames.includes(name)),
-    }))
-    .filter((item) => item.courses.length > 0);
+  const staffSurnames = new Set(
+    entities
+      .filter((n) => n.description === 'Person' && n.externalId)
+      .filter((n) => !studentDomain || !n.externalId!.endsWith(`@${studentDomain}`))
+      .map((n) => n.name.split('-').at(-1) as string),
+  );
+  const isStaff = (actor: string) => {
+    const surname = actor.trim().split(/\s+/).at(-1)?.toLowerCase() ?? '';
+    return staffSurnames.has(surname);
+  };
 
   const dayOf = (at: string | undefined) => (at ? at.slice(0, 10) : null);
+
+  /** Staff who have written to the class about one course, with how often. */
+  const staffWritersFor = (course: string) => {
+    const letters = new Map<string, number>();
+    for (const episode of episodes) {
+      if (!episode.actor || !episode.body.includes(`[[${course}]]`)) continue;
+      if (!isStaff(episode.actor)) continue;
+      letters.set(episode.actor, (letters.get(episode.actor) ?? 0) + 1);
+    }
+    return [...letters].map(([name, count]) => ({ name, letters: count }));
+  };
   const assignments = entities.filter((n) => n.description === 'Assignment');
   const materials = entities.filter(
     (n) => n.description === 'Material' || n.description === 'File',
@@ -107,12 +121,14 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
        * harmless -- both are evidence about the same course, and neither
        * fires without a clear lead.
        */
-      teacher:
-        teacherFor(
+      teacher: findTeacher({
+        postedNames: namesPostedIn(
           episodes
             .filter((e) => e.source === 'classroom' && e.body.includes(`[[${course.name}]]`))
             .map((e) => e.body),
-        ) ?? teacherFromMail(mail, course.name),
+        ),
+        staffMail: staffWritersFor(course.name),
+      }),
       lastSeen: dayOf(
         episodes
           .filter((e) => e.occurred && linked(course.name)(e))

@@ -61,35 +61,52 @@ describe('digesting a vault for the profile writer', () => {
     expect(digest.courses).not.toHaveProperty('0.assignments');
   });
 
-  it('attaches a teacher to their own course, or to nothing', async () => {
+  it('names a teacher from the staff domain, not a classmate', async () => {
     /*
-     * The first version handed the writer a list of courses beside a list of
-     * everyone who had ever emailed. It paired them, confidently, and named a
-     * teacher who does not teach that subject.
+     * The failure that this whole path exists to prevent. A classmate emails
+     * about maths homework and about nothing else, which looks exactly like
+     * devotion to one subject; the actual teacher also coaches robotics, so a
+     * rule rewarding exclusivity picked her and threw him out.
      *
-     * A teacher now belongs to the course whose announcements name them, or
-     * is absent. There is no loose list of people to pair anything with.
+     * Every Person note carries the address it was created from, and the
+     * school puts students on one domain and staff on another.
      */
     await vault.write({
-      name: '2026-01-01-a-notice',
-      kind: 'episode',
-      source: 'classroom',
-      description: 'Announcement in French 10',
-      occurred: '2026-01-01T10:00:00Z',
-      body: 'In [[french-10]].\n\nMs. Coretti will collect these on Friday.',
+      name: 'lucia-coretti',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: 'lcoretti@lcc.ca',
+      body: 'Lucia Coretti, at lcoretti@lcc.ca.',
     });
     await vault.write({
-      name: '2026-01-02-another',
-      kind: 'episode',
-      source: 'classroom',
-      description: 'Announcement in French 10',
-      occurred: '2026-01-02T10:00:00Z',
-      body: 'In [[french-10]].\n\nSee Ms Coretti about the oral.',
+      name: 'daniella-malka',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: 'dmalka@wearelcc.ca',
+      body: 'Daniella Malka, at dmalka@wearelcc.ca.',
     });
 
-    const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Ms Coretti');
-    // Drama's announcements say nothing, so drama has no teacher.
+    const wrote = (n: number, actor: string) =>
+      vault.write({
+        name: `2026-01-0${n}-note`,
+        kind: 'episode',
+        source: 'gmail',
+        description: `${actor} wrote.`,
+        actor,
+        occurred: `2026-01-0${n}T10:00:00Z`,
+        body: 'In [[french-10]].',
+      });
+
+    // The classmate writes more than the teacher, and still loses.
+    await wrote(1, 'Daniella Malka');
+    await wrote(2, 'Daniella Malka');
+    await wrote(3, 'Daniella Malka');
+    await wrote(4, 'Lucia Coretti');
+
+    const digest = await vaultDigest(vault, 'wearelcc.ca');
+    expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Lucia Coretti');
     expect(digest.courses.find((c) => c.name === 'drama-10a')?.teacher).toBeNull();
     expect(digest).not.toHaveProperty('people');
   });
