@@ -142,10 +142,33 @@ const AUTOMATED =
  */
 const CLASSROOM_NOTIFICATIONS = 'no-reply@classroom.google.com';
 
-/** The teacher's name out of "Stacey Ottley (Classroom)", or null. */
-export function classroomSender(from: string): string | null {
+/**
+ * What a Classroom notification says its sender did.
+ *
+ * Only some of these are things a teacher can do. Posting an assignment, an
+ * announcement, a material or a question, grading work, inviting somebody to a
+ * class: all of those require teaching the class. Leaving a comment does not,
+ * and Classroom notifies on a classmate's comment with a sender line identical
+ * to a teacher's -- "Brady Snyder (Classroom)".
+ *
+ * Reading every one of them as somebody at the school rebuilds the exact
+ * mistake the mail-domain rule exists to prevent: a classmate who appears
+ * beside one subject and is taken to teach it. The subject line is what
+ * separates them, and it is the only thing that does.
+ */
+const TEACHER_ACTIONS =
+  /^(?:re:\s*)?(?:new (?:assignment|announcement|material|question)|graded|class invitation)\b/i;
+
+/**
+ * The teacher's name out of "Stacey Ottley (Classroom)", or null.
+ *
+ * Null for anything a student could have sent, and for the automated
+ * reminders, which are about somebody's assignment rather than by them.
+ */
+export function classroomSender(from: string, subject = ''): string | null {
   const { display, address } = parseSender(from);
   if (address !== CLASSROOM_NOTIFICATIONS) return null;
+  if (!TEACHER_ACTIONS.test(subject.trim())) return null;
   const named = display.replace(/\s*\(Classroom\)\s*$/i, '').trim();
   return named === '' || named === address ? null : named;
 }
@@ -303,7 +326,7 @@ export async function importMail(
        * -- which is the case that matters, because a teacher who posts to
        * Classroom and never emails did not exist in this vault at all.
        */
-      const viaClassroom = classroomSender(message.from);
+      const viaClassroom = classroomSender(message.from, message.subject);
       const named = viaClassroom ?? parsed.actor;
       const key = viaClassroom
         ? `classroom:${slugForNote(viaClassroom)}`

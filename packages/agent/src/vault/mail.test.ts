@@ -308,7 +308,10 @@ describe('importing school mail', () => {
      * which is why the display name is trusted over it.
      */
     await run(llmReturning(kept({ actor: 'Google Classroom' })), [
-      message({ from: '"Mrs. Irwin (Classroom)" <no-reply@classroom.google.com>' }),
+      message({
+        from: '"Mrs. Irwin (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'New announcement: "Bring your books"',
+      }),
     ]);
 
     const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
@@ -411,7 +414,10 @@ describe('importing school mail', () => {
      * one case where identity comes from the name.
      */
     await run(llmReturning(kept({ actor: 'Stacey Ottley' })), [
-      message({ from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>' }),
+      message({
+        from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>',
+        subject: 'New announcement: "Dear Senior School Students"',
+      }),
     ]);
 
     const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
@@ -424,11 +430,49 @@ describe('importing school mail', () => {
     // that separates staff from pupils has nothing to work with. Where we
     // learned of them is recorded instead, and it is not the student domain.
     await run(llmReturning(kept({ actor: 'Stacey Ottley' })), [
-      message({ from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>' }),
+      message({
+        from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>',
+        subject: 'New material: "Reading list"',
+      }),
     ]);
 
     const person = await vault.read('entity', 'stacey-ottley');
     expect(person?.externalId).toBe('classroom:stacey-ottley');
+  });
+
+  it('does not make a teacher of a classmate who commented', async () => {
+    /*
+     * Classroom notifies on what students do as well, and the sender line
+     * looks identical: "Brady Snyder (Classroom)". Treating every one of them
+     * as somebody at the school rebuilds the exact bug the mail-domain rule
+     * exists to prevent -- a classmate who turns up beside one subject and is
+     * read as teaching it.
+     *
+     * What separates them is in the subject line. Posting an assignment, an
+     * announcement, a material or a grade is something only a teacher can do;
+     * leaving a comment is not.
+     */
+    await run(llmReturning(kept({ actor: 'Brady Snyder' })), [
+      message({
+        from: '"Brady Snyder (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'Added a private comment on "Reading"',
+      }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people).toEqual([]);
+  });
+
+  it('makes a person of somebody who posted an assignment', async () => {
+    await run(llmReturning(kept({ actor: 'Keith Chuprun' })), [
+      message({
+        from: '"Keith Chuprun (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'New assignment: "Momentum problems"',
+      }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((p) => p.name)).toEqual(['keith-chuprun']);
   });
 });
 
