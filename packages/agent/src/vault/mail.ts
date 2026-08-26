@@ -165,6 +165,24 @@ const TEACHER_ACTIONS =
  * Null for anything a student could have sent, and for the automated
  * reminders, which are about somebody's assignment rather than by them.
  */
+/**
+ * What Classroom says happened, from the subject line.
+ *
+ * Classroom is stating a fact about what somebody did, and it is a better
+ * source for that than a pass summarising the message afterwards -- which sees
+ * a third-person notification and reasonably calls it a message. The event is
+ * what later tells a reader that this is a record of somebody teaching rather
+ * than somebody being mentioned.
+ */
+export function classroomEvent(subject: string): EpisodeEvent | null {
+  const head = subject.trim().replace(/^re:\s*/i, '');
+  if (/^new assignment\b/i.test(head)) return 'assignment-posted';
+  if (/^new (?:announcement|question)\b/i.test(head)) return 'announcement';
+  if (/^new material\b/i.test(head)) return 'material-posted';
+  if (/^graded\b/i.test(head)) return 'assignment-graded';
+  return null;
+}
+
 export function classroomSender(from: string, subject = ''): string | null {
   const { display, address } = parseSender(from);
   if (address !== CLASSROOM_NOTIFICATIONS) return null;
@@ -221,6 +239,28 @@ export async function importMail(
       .filter((note) => note.description === 'Person')
       .map((note) => [note.name, note.name]),
   );
+
+  /*
+   * The same people again, by surname, for the one case that needs it.
+   *
+   * Mail calls her Jennifer Irwin and Classroom calls her Mrs. Irwin. Slugged
+   * separately those are two people, and the vault held both -- the entity
+   * resolution failure this file warns about a hundred lines up, walked back
+   * in through a display name.
+   *
+   * Only where the surname belongs to exactly one person already. Two Irwins
+   * and nothing is merged, which is the honest outcome: a wrong merge is worse
+   * than a duplicate, because it attributes one person's work to another.
+   */
+  const bySurname = new Map<string, string | null>();
+  for (const slug of peopleBySlug.keys()) {
+    const surname = slug.split('-').at(-1) as string;
+    bySurname.set(surname, bySurname.has(surname) ? null : slug);
+  }
+  const soleBearer = (name: string): string | undefined => {
+    const surname = slugForNote(name).split('-').at(-1) as string;
+    return bySurname.get(surname) ?? undefined;
+  };
 
   const result: MailImportResult = { written: 0, skipped: 0, people: 0 };
 
@@ -343,7 +383,10 @@ export async function importMail(
       ) {
         // Whatever this message called them, a person already seen keeps the
         // note and the name they were given first.
-        personNote = peopleByAddress.get(key) ?? peopleBySlug.get(slugForNote(named));
+        personNote =
+          peopleByAddress.get(key) ??
+          peopleBySlug.get(slugForNote(named)) ??
+          (viaClassroom ? soleBearer(named) : undefined);
 
         if (!personNote) {
           personNote = slugForNote(named);
@@ -359,6 +402,8 @@ export async function importMail(
           });
           peopleByAddress.set(key, personNote);
           peopleBySlug.set(personNote, personNote);
+          const surname = personNote.split('-').at(-1) as string;
+          bySurname.set(surname, bySurname.has(surname) ? null : personNote);
           result.people += 1;
         }
         allowed.add(personNote);
@@ -376,7 +421,9 @@ export async function importMail(
         externalId: message.messageId,
         occurred,
         ...(parsed.actor.trim() ? { actor: parsed.actor.trim() } : {}),
-        event: parsed.event as EpisodeEvent,
+        // Classroom's own word for what happened beats a summary of it.
+        event:
+          (viaClassroom ? classroomEvent(message.subject) : null) ?? (parsed.event as EpisodeEvent),
         sourceUrl: `https://mail.google.com/mail/u/0/#all/${message.messageId}`,
         body: [
           parsed.what.trim(),

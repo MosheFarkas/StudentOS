@@ -260,6 +260,40 @@ describe('gathering what could answer who teaches a course', () => {
     expect(question?.evidence[0]?.quote).toContain('2026-01-05');
   });
 
+  it('puts a recorded teaching act above somebody writing about themselves', async () => {
+    /*
+     * "Amanda Marzilli posted a new assignment in French 10" is Google's own
+     * record of a teaching act. It is third-person by nature, so a ranking
+     * that rewards first-person accounts put it below any member of staff who
+     * happened to write "I" -- and the French teacher, who posted fourteen
+     * assignments and never emailed, fell out of the bundle entirely.
+     *
+     * The strongest evidence that somebody teaches a class is a record of them
+     * teaching it. It does not have to be written in their voice.
+     */
+    for (let day = 10; day < 30; day++) {
+      await wrote(
+        String(day),
+        'Anna Marzilli',
+        `Mme Marzilli. I have marked these and my lesson moves. In [[french-10]].`,
+      );
+    }
+    await vault.write({
+      name: 'posted-1',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'Lucia Coretti posted an assignment.',
+      actor: 'Lucia Coretti',
+      event: 'assignment-posted',
+      occurred: '2026-01-05T10:00:00Z',
+      body: 'Lucia Coretti posted a new assignment. In [[french-10]].',
+    });
+
+    const question = await askWhoTeaches(vault, 'french-10', { studentDomain: 'wearelcc.ca' });
+    expect(question?.candidates).toContain('Lucia Coretti');
+    expect(question?.evidence.some((e) => e.quote.includes('posted a new assignment'))).toBe(true);
+  });
+
   it('says how much it left out rather than trimming quietly', async () => {
     // A bundle that was cut silently reads downstream as the whole story.
     for (let day = 10; day < 40; day++) {

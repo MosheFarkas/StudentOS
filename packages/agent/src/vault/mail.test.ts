@@ -474,6 +474,51 @@ describe('importing school mail', () => {
     const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
     expect(people.map((p) => p.name)).toEqual(['keith-chuprun']);
   });
+
+  it('records what Classroom said happened, not what a model made of it', async () => {
+    /*
+     * "New assignment" in the subject line is Classroom stating a fact about
+     * what somebody did. Leaving the event to the pass that summarises the
+     * message throws that away and replaces it with a guess, and the event is
+     * what tells a later reader that this is a record of teaching rather than
+     * somebody being mentioned.
+     */
+    await run(llmReturning(kept({ actor: 'Amanda Marzilli', event: 'message' })), [
+      message({
+        from: '"Amanda Marzilli (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'New assignment: "Learner Profile"',
+      }),
+    ]);
+
+    const [note] = await vault.list('episode');
+    expect(note?.event).toBe('assignment-posted');
+  });
+
+  it('does not make a second person out of a title and a surname', async () => {
+    /*
+     * Mail calls her Jennifer Irwin; Classroom calls her Mrs. Irwin. Slugged
+     * separately those are two people, and the vault ended up holding both --
+     * which is the entity-resolution failure this file's own comment says the
+     * design exists to avoid, reintroduced by trusting a display name.
+     *
+     * A surname that already belongs to exactly one person is that person.
+     * Where two people share it, nothing is merged and a second note is the
+     * honest outcome.
+     */
+    await run(llmReturning(kept({ actor: 'Jennifer Irwin' })), [
+      message({ messageId: 'm-a', from: '"Irwin, Jennifer" <jirwin@school.example>' }),
+    ]);
+    await run(llmReturning(kept({ actor: 'Mrs. Irwin' })), [
+      message({
+        messageId: 'm-b',
+        from: '"Mrs. Irwin (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'New assignment: "Essay"',
+      }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((p) => p.name)).toEqual(['jennifer-irwin']);
+  });
 });
 
 describe('running it again', () => {

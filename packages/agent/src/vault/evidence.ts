@@ -578,17 +578,28 @@ export async function askWhoTeaches(
     /*
      * How directly this note bears on the question.
      *
-     * Somebody writing "I marked your essays" is telling you what they do with
-     * this class. Somebody being named in a notice is telling you they exist.
-     * Both used to be cut in whatever order the filesystem listed them, under
-     * a comment claiming they were newest first -- which is invisible at four
-     * notes and fatal at thirty, because the one note that answers the
-     * question falls off the end and the pass declines for want of evidence it
-     * was holding.
+     * A record of somebody doing the thing outranks somebody describing
+     * themselves doing it, which outranks somebody being named. Google's
+     * notification that "Amanda Marzilli posted a new assignment" is its own
+     * record of a teaching act, and it is third-person by nature -- so a
+     * ranking that rewarded first-person accounts put it below any member of
+     * staff who happened to write "I", and the French teacher, who posted
+     * fourteen assignments and never emailed, fell out of the bundle
+     * altogether.
+     *
+     * Everything below that was cut in whatever order the filesystem listed
+     * it, under a comment claiming it was newest first: invisible at four
+     * notes and fatal at thirty.
      */
     found.push({
       evidence: { note: note.name, quote },
-      rank: bySelf ? (FIRST_PERSON.test(quote) ? 2 : 1) : 0,
+      rank: bySelf
+        ? TEACHING_ACT.has(note.event ?? '')
+          ? 3
+          : FIRST_PERSON.test(quote)
+            ? 2
+            : 1
+        : 0,
       when: note.occurred ?? '',
     });
   }
@@ -908,6 +919,15 @@ function quoteFor(
   const prefix = `${on ? `${on}, ` : ''}${actor ? `${actor} wrote: ` : ''}`;
   return (prefix + quote).slice(0, QUOTE_LIMIT);
 }
+
+/**
+ * Things only somebody teaching a class does, as the vault records them.
+ *
+ * Taken from Classroom's own word for what happened rather than from a reading
+ * of the message, so this is a fact about the act rather than an impression of
+ * the text.
+ */
+const TEACHING_ACT = new Set(['assignment-posted', 'assignment-graded', 'material-posted']);
 
 /** "I have posted", "my lesson" -- somebody describing their own part in it. */
 const FIRST_PERSON = /\bI\b|\b[Mm]y\b/;
