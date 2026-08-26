@@ -58,6 +58,14 @@ export interface Question {
    * could see. The system knew the note was attached to chemistry and did not
    * pass it on -- an observation held somewhere no reader could reach, which
    * is this whole file's disease in miniature.
+   *
+   * That has now been the cause three separate times: the course a note is
+   * attached to, that students were excluded before anybody was asked, and
+   * that the records are the student's own so a class in them is a class they
+   * are in. Each looked like a reader being obtuse and was a fact the system
+   * held and would not share. When a refutation reads as pedantry, check what
+   * the narrowing knows before rewriting the prompt: three times out of three
+   * the reader was right.
    */
   guarantees?: readonly string[];
   /**

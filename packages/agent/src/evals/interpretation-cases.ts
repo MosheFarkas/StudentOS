@@ -41,7 +41,7 @@ export interface FixtureEpisode {
  * today falls in a school year. A pass that is good at one of these is not
  * thereby good at any of the others, and only measuring them apart shows it.
  */
-export type Domain = 'role' | 'kind' | 'teacher' | 'running';
+export type Domain = 'role' | 'kind' | 'teacher' | 'running' | 'year';
 
 export interface InterpretationCase {
   id: string;
@@ -850,5 +850,93 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
       },
     ],
     expect: 'running',
+  },
+
+  {
+    id: 'year-from-a-head-of-year',
+    domain: 'year',
+    trap: 'The year was being read off a course slug by a writer with no evidence and no way to decline.',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Chris George')],
+    episodes: [
+      {
+        id: 'y1',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. Reports go home Friday for this class. In [[history-10]].',
+      },
+    ],
+    expect: 'Grade 10',
+  },
+
+  {
+    id: 'year-drowned-by-other-years',
+    domain: 'year',
+    trap: 'A school writes to everybody about every year it has. The year mentioned most is the one the school talks about most, which is usually the one sitting exams.',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Chris George'), staff('Fiona Braithwaite')],
+    episodes: [
+      {
+        id: 'y1',
+        actor: 'Fiona Braithwaite',
+        body: 'Grade 11 graduation dinner is on June 20th. Grade 11 reports follow on June 25th. In [[history-10]].',
+      },
+      {
+        id: 'y2',
+        actor: 'Fiona Braithwaite',
+        body: 'Grade 11 study leave begins in May. Grade 11 should collect exam timetables. In [[history-10]].',
+      },
+      {
+        id: 'y3',
+        actor: 'Fiona Braithwaite',
+        body: 'A reminder that Grade 11 mock results go out on Monday. In [[history-10]].',
+      },
+      {
+        id: 'y4',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. I have set your class the source analysis, due Friday. In [[history-10]].',
+      },
+    ],
+    expect: 'Grade 10',
+  },
+
+  {
+    id: 'year-only-other-people',
+    domain: 'year',
+    trap: 'Every sentence naming a year is about somebody else. Picking the only one available is the failure, and there is always one available.',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Fiona Braithwaite')],
+    episodes: [
+      {
+        id: 'y1',
+        actor: 'Fiona Braithwaite',
+        body: 'Grade 12 university applications are due in November. Good luck to all of Grade 12. In [[history-10]].',
+      },
+      {
+        id: 'y2',
+        actor: 'Fiona Braithwaite',
+        body: 'The Grade 12 leavers assembly is on the last Friday of term. In [[history-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'year-never-written-down',
+    domain: 'year',
+    trap: 'Nobody says. The honest answer is nothing, and a first sentence that guesses a year is wrong in front of every conversation.',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Gillian Shadley')],
+    episodes: [
+      {
+        id: 'y1',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. I have marked your essays and will hand them back Thursday. In [[history-10]].',
+      },
+    ],
+    expect: null,
   },
 ];

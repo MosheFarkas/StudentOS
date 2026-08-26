@@ -96,6 +96,14 @@ export async function writeUserDoc(
           role: 'user',
           content: [
             name ? `The student is ${name}.` : "The student's name is not known.",
+            /*
+             * Read, not guessed. The year came off a course slug before this
+             * -- "grade-10-math-2025-2026" -- which is right until a student
+             * takes one class with an older cohort.
+             */
+            digest.year
+              ? `They are in ${digest.year}.`
+              : 'Which year they are in is not known: do not guess it from a course name.',
             `Today is ${digest.today}.`,
             `Their vault covers ${digest.from ?? 'an unknown period'}${
               digest.to ? ` to ${digest.to}` : ''

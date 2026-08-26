@@ -298,6 +298,97 @@ const plain = (body: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+/**
+ * Which year the student is in.
+ *
+ * The first sentence of the document read before every reply is their name,
+ * their year and their school, and the year was being taken off course slugs
+ * -- "grade-10-math-2025-2026" -- by a pass with no evidence behind it and no
+ * way to decline. A student who takes one class with an older cohort, or whose
+ * vault holds a course named for the year they are about to enter, gets a
+ * wrong answer stated exactly as flatly as a right one.
+ *
+ * The difficulty is not scarcity. A school writes years down constantly, and
+ * most of those sentences are about somebody else: a graduation dinner for the
+ * year above, an open evening for the year below. So every year anybody
+ * mentions is offered, and the reader is told plainly that most of them are
+ * about other people.
+ */
+export async function askWhatYearTheyAreIn(
+  vault: Vault,
+  subject: string,
+  _context: AskContext,
+): Promise<Question | null> {
+  const episodes = await vault.list('episode');
+
+  const found: Ranked[] = [];
+  const candidates = new Set<string>();
+  for (const note of episodes) {
+    const prose = plain(note.body);
+    const years = [...new Set([...prose.matchAll(YEAR)].map((m) => tidyYear(m[0])))];
+    if (years.length === 0) continue;
+    for (const year of years) candidates.add(year);
+    found.push({
+      evidence: { note: note.name, quote: prose.slice(0, QUOTE_LIMIT) },
+      /*
+       * A sentence naming one year is about that year. A sentence naming
+       * several is a list of everybody, which says nothing about which one
+       * this student is in.
+       */
+      rank: years.length === 1 ? 1 : 0,
+      when: note.occurred ?? '',
+    });
+  }
+
+  if (candidates.size === 0) return null;
+
+  return {
+    subject,
+    relation: 'is in',
+    asking: 'Which year at school is this student in?',
+    candidates: [...candidates].sort(),
+    guarantees: [
+      'These quotes are every note in the records that names a school year, from',
+      'anywhere: their classes, their mail, and mail sent to the whole school.',
+      '',
+      /*
+       * The guarantee that closes the commonest objection here.
+       *
+       * Shown a head of year writing to a class, two refuters objected that
+       * nothing said this student was in it. They were right on what they
+       * could see: the records are built from the student's own Classroom and
+       * their own mail, and nobody had told them.
+       */
+      "These records are this student's own -- the classes they are enrolled in and",
+      'the mail they received. A note attached to a class is a class they are in, and',
+      'a message written to that class was written to them.',
+      '',
+      'Most of them are not about them. A school writes to everybody about every',
+      'year it has -- a graduation dinner for the year above, an open evening for the',
+      'year below, a reminder that some other year has exams. A year being mentioned',
+      'often means the school talks about it often and nothing more.',
+      '',
+      'What tells you is a sentence that puts this student inside one: work set for',
+      'that year in a class they are in, a head of year writing to their class, a',
+      'timetable or report addressed to them. Say null unless something does that.',
+    ],
+    evidence: byRank(found),
+  };
+}
+
+/**
+ * How the schools this serves write a year down.
+ *
+ * Three spellings rather than a general notion of a cohort, because a general
+ * one does not exist -- every country names these differently and a pattern
+ * that tried to cover all of them would match half the numbers in the vault.
+ * Where a school uses something else, nothing matches, no candidates are
+ * offered and no question is asked, which is the right failure.
+ */
+const YEAR = /\b(?:Grade|Year|Form)\s+(?:1[0-3]|[1-9])\b/g;
+
+const tidyYear = (span: string) => span.replace(/\s+/g, ' ').trim();
+
 /** Every member of staff the vault knows, with the name a person would use. */
 export async function staffRoster(
   vault: Vault,

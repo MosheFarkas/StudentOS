@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   askWhatKindOfThing,
   askWhatTheyDo,
+  askWhatYearTheyAreIn,
   askWhetherItIsRunning,
   askWhoTeaches,
   EVIDENCE_LIMIT,
@@ -680,5 +681,97 @@ describe('gathering what could say whether a course is running', () => {
       body: 'Something. In [[history-10]].',
     });
     expect(await askWhetherItIsRunning(vault, 'history-10', { today: '2026-08-26' })).toBeNull();
+  });
+});
+
+/**
+ * Which year the student is in.
+ *
+ * The first sentence of the document the agent reads before every reply is
+ * their name, their year and their school, and the year was being read off
+ * course slugs -- "grade-10-math-2025-2026" -- by a pass with no evidence and
+ * no way to decline. A student who takes one class with an older cohort, or
+ * whose vault holds a course named for the year they are about to enter, gets
+ * a wrong answer stated as flatly as a right one.
+ *
+ * A school writes the year down constantly, in mail to the whole school about
+ * every year but this one. That is the difficulty: the words are everywhere
+ * and most of them are about somebody else.
+ */
+describe('gathering what could say which year the student is in', () => {
+  let root: string;
+  let vault: Vault;
+
+  const wrote = (id: string, body: string) =>
+    vault.write({
+      name: id,
+      kind: 'episode',
+      source: 'classroom',
+      description: 'Someone wrote.',
+      actor: 'Chris George',
+      occurred: '2026-02-01T10:00:00Z',
+      body,
+    });
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-year-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('offers the year-shaped phrases people actually wrote', async () => {
+    await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday.');
+
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.candidates).toContain('Grade 10');
+  });
+
+  it('offers every year mentioned, including the ones about other people', async () => {
+    /*
+     * The whole difficulty. A school's mail names every year in it, and most
+     * of those sentences are about somebody else -- a graduation dinner for
+     * the year above, an open evening for the year below. Hiding the rivals
+     * would leave a reader with one plausible answer and no way to see it was
+     * a choice.
+     */
+    await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday.');
+    await wrote('n2', 'Grade 11 graduation dinner is on June 20th. All welcome.');
+
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.candidates).toEqual(expect.arrayContaining(['Grade 10', 'Grade 11']));
+  });
+
+  it('reads the other ways a school writes a year', async () => {
+    await wrote('n1', 'Year 9 students should collect their timetables.');
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.candidates).toContain('Year 9');
+  });
+
+  it('asks nothing when nobody ever writes a year down', async () => {
+    await wrote('n1', 'The test is on Tuesday, bring a calculator.');
+    expect(await askWhatYearTheyAreIn(vault, 'the-student', {})).toBeNull();
+  });
+
+  it("says the records are the student's own, because they are", async () => {
+    /*
+     * The third time the same bug: a reader refuses on grounds the system
+     * could have closed and did not.
+     *
+     * Shown "Head of Grade 10, reports go home Friday for this class", two
+     * refuters objected that it never says this student is in that class.
+     * They were right on what they could see. The vault is built from the
+     * student's own Classroom and their own mail -- a note attached to a class
+     * is a class they are enrolled in -- and nothing had told them.
+     */
+    await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday for this class.');
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.guarantees?.join(' ')).toMatch(/their own|enrolled/i);
+  });
+
+  it('warns that most of these sentences are about other people', async () => {
+    await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday.');
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.guarantees?.join(' ')).toMatch(/other years|somebody else|not about them/i);
   });
 });

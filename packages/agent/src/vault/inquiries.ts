@@ -1,6 +1,7 @@
 import {
   askWhatKindOfThing,
   askWhatTheyDo,
+  askWhatYearTheyAreIn,
   askWhetherItIsRunning,
   askWhoTeaches,
   staffRoster,
@@ -28,8 +29,12 @@ import type { Vault } from './vault.js';
  *     about a different class.
  *   - What a course IS comes before who teaches it. Nobody teaches a house,
  *     and a question that cannot be asked cannot be answered wrongly.
- *   - Whether it is RUNNING comes last, because it is the only one that gains
- *     nothing from the others and the only one that needs a clock.
+ *   - Whether it is RUNNING comes last of the course questions, because it is
+ *     the only one that gains nothing from the others and the only one that
+ *     needs a clock.
+ *   - Which YEAR the student is in stands apart: it is about them rather than
+ *     about anything in the vault, and every other question is indifferent to
+ *     it.
  *
  * Nothing here reaches for a fixed vocabulary of relations. "taught by",
  * "works at the school as" and "is" are the questions worth asking today, not
@@ -79,4 +84,20 @@ export const INQUIRIES: Inquiry[] = [
     subjects: coursesIn,
     ask: askWhetherItIsRunning,
   },
+  {
+    relation: 'is in',
+    single: true,
+    /*
+     * One subject, and not a note.
+     *
+     * Everything else here is about something the vault holds a note for. This
+     * is about the person the vault is for, who has no note of their own --
+     * they are the one thing every note is already about.
+     */
+    subjects: async () => [THE_STUDENT],
+    ask: askWhatYearTheyAreIn,
+  },
 ];
+
+/** The student themselves, as a subject a claim can be about. */
+export const THE_STUDENT = 'the-student';

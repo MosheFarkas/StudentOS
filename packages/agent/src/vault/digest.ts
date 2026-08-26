@@ -1,4 +1,5 @@
 import type { Claim } from './claims.js';
+import { THE_STUDENT } from './inquiries.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -59,6 +60,14 @@ export interface VaultDigest {
    * holidays as though term were still running.
    */
   today: string;
+  /**
+   * Which year at school they are in, when a claim about it survived.
+   *
+   * The first sentence of the document written from this is their name, their
+   * year and their school, and the year used to be read off a course slug by a
+   * writer with no evidence and no way to decline.
+   */
+  year: string | null;
   courses: CourseDigest[];
   /** Everything in the vault, so the writer knows how much it is speaking for. */
   notes: number;
@@ -144,6 +153,7 @@ export async function vaultDigest(
    */
   return {
     today: new Date().toISOString().slice(0, 10),
+    year: answers('is in').get(THE_STUDENT) ?? null,
     courses,
     notes: entities.length + episodes.length,
     from: times[0]?.slice(0, 10) ?? null,
