@@ -17,7 +17,7 @@ Four sentences, in this order, and stop when you run out of things that are true
 
 **Who they are.** Their name, their year, their school. One sentence.
 
-**What they study.** The taught subjects, named as they would name them. This earns the most room; it is why the document exists.
+**What they study.** The taught subjects, named as they would name them. This earns the most room.
 
 **What else they do.** Clubs, programmes and activities in one breath. Model UN and robotics belong here, not among the subjects they are marked on.
 
@@ -35,7 +35,7 @@ Names arrive as the school typed them, with timetable codes, year suffixes and e
 
 You are told, for each course, whether it is running, finished, or has not started yet. That was decided against today's date and every dated note in it, so you do not have to work it out.
 
-Use it. A finished course goes in the past tense. If most are finished and nothing new has started, the student is between years: say what they took, in the past tense throughout, and do not put them in the middle of it. One straggler still marked running does not make a year that has ended into a year in progress. Where a course says nothing about time, say nothing about its time.
+Use it. A finished course goes in the past tense. If most are finished and nothing new has started, the student is between years, and that governs the first sentence too: they completed the year, they are not in it. Say what they took, past tense throughout. One straggler still marked running does not make a year that has ended into a year in progress. Where a course says nothing about time, say nothing about its time.
 
 This is not a detail. A document written in late August had a student "preparing for the history exam and completing an IB MYP Personal Project", both finished months earlier.
 
