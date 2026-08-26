@@ -117,6 +117,13 @@ const FILLER = [
   'The canteen menu has changed for next half term.',
 ];
 
+/**
+ * Other members of staff, writing into the same course.
+ *
+ * Enough of them that the candidate list is crowded rather than tidy. A real
+ * school has sixty; what reaches any one question is however many turn up in
+ * the evidence that survived, and that is the number worth stressing.
+ */
 const NOISE_STAFF = [
   'Peter Ashworth',
   'Fiona Braithwaite',
@@ -126,6 +133,22 @@ const NOISE_STAFF = [
   'Yuki Fujimoto',
   'Grace Halloran',
   'Tomas Iversen',
+  'Nadia Jankowski',
+  'Oscar Kowalczyk',
+  'Priya Lakshmi',
+  'Daniel Mbeki',
+  'Sofia Nilsson',
+  'Ahmed Osman',
+  'Clara Petrova',
+  'Rafael Quintero',
+  'Elena Rossi',
+  'Hugo Sandberg',
+  'Ingrid Thorsen',
+  'Victor Ulyanov',
+  'Wendy Vasquez',
+  'Xavier Weiss',
+  'Yara Zaidi',
+  'Bruno Almeida',
 ];
 
 interface Outcome {

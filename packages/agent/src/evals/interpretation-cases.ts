@@ -1010,4 +1010,167 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
     ],
     expect: null,
   },
+
+  /*
+   * Below here: cases written after the corpus went clean.
+   *
+   * Nothing wrong in six domains at four hundred notices is either a system
+   * that works or a corpus that has stopped asking. These are the shapes that
+   * seemed most likely to separate the two -- two people holding one role,
+   * one person holding two, a year that changes underneath the student, a
+   * second school, a subject that leaves no trace in Classroom.
+   */
+
+  {
+    id: 'two-teachers-share-a-class',
+    domain: 'teacher',
+    trap: 'Co-teaching is ordinary and the slot holds one answer. Picking the more talkative of two is inventing a fact; naming neither is the truth.',
+    course: 'science-10',
+    subject: 'science-10',
+    people: [staff('Anna Bell'), staff('Ken Nakamura')],
+    episodes: [
+      {
+        id: 'w1',
+        actor: 'Anna Bell',
+        body: 'Mrs Bell. I have marked the biology half of your folders and will hand them back Monday. In [[science-10]].',
+      },
+      {
+        id: 'w2',
+        actor: 'Anna Bell',
+        body: 'Mrs Bell. My lesson on Thursday moves to the lab. In [[science-10]].',
+      },
+      {
+        id: 'w3',
+        actor: 'Ken Nakamura',
+        body: 'Mr Nakamura. I teach the physics half of this course and I have set the momentum problems, due Friday. In [[science-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'role-changed-mid-year',
+    domain: 'role',
+    trap: 'People are promoted. A role stated in September and a different one stated in March are not a contradiction, and the later one is the answer.',
+    course: 'history-10',
+    subject: 'chris-george',
+    people: [staff('Chris George')],
+    episodes: [
+      {
+        id: 'p1',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. Reports go home Friday. In [[history-10]].',
+        on: '2025-09-10',
+      },
+      {
+        id: 'p2',
+        actor: 'Chris George',
+        body: 'Mr George, Deputy Head. Taking over pastoral care across the school from this term. In [[history-10]].',
+        on: '2026-03-02',
+      },
+    ],
+    expect: 'Deputy Head',
+  },
+
+  {
+    id: 'kind-subject-taught-on-paper',
+    domain: 'kind',
+    trap: 'A subject marked entirely on paper sets no work in Classroom at all. The bit that used to decide this called it a club.',
+    course: 'latin-10',
+    subject: 'latin-10',
+    people: [staff('Luc Tremblay')],
+    episodes: [
+      {
+        id: 'q1',
+        actor: 'Luc Tremblay',
+        body: "M. Tremblay. We finish the third declension in Tuesday's lesson. Translations are handed in on paper as usual. In [[latin-10]].",
+      },
+      {
+        id: 'q2',
+        actor: 'Luc Tremblay',
+        body: 'M. Tremblay. Your marked translations are in the pigeonholes. The end of year exam is on the whole syllabus. In [[latin-10]].',
+      },
+    ],
+    expect: 'a taught subject',
+  },
+
+  {
+    id: 'kind-house-that-sets-work',
+    domain: 'kind',
+    trap: 'Houses set work too. Entries, sign-up forms and deadlines are not what makes something a subject.',
+    course: 'sacred-heart-house',
+    subject: 'sacred-heart-house',
+    people: [staff('Lucia Coretti')],
+    episodes: [
+      {
+        id: 'q1',
+        actor: 'Lucia Coretti',
+        body: 'Mme Coretti. Entries for the house poetry competition are due Friday, one per person. In [[sacred-heart-house]].',
+      },
+      {
+        id: 'q2',
+        actor: 'Lucia Coretti',
+        body: 'Mme Coretti. We are second on points after the swim gala. Well done everyone. In [[sacred-heart-house]].',
+      },
+    ],
+    expect: 'a house or form group',
+  },
+
+  {
+    id: 'year-rolled-over',
+    domain: 'year',
+    trap: 'A vault spans two school years, so the student is in one year at the start of it and the next by the end. The old year is written down more often.',
+    course: 'history-10',
+    subject: 'the-student',
+    people: [staff('Chris George'), staff('Fiona Braithwaite')],
+    episodes: [
+      {
+        id: 'y1',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. I have set your class the source analysis. In [[history-10]].',
+        on: '2025-10-02',
+      },
+      {
+        id: 'y2',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. Your class has reports on Friday. In [[history-10]].',
+        on: '2025-11-14',
+      },
+      {
+        id: 'y3',
+        actor: 'Fiona Braithwaite',
+        body: 'Welcome to Grade 11. Your timetable for this class is attached and lessons start Monday. In [[history-10]].',
+        on: '2026-09-02',
+      },
+    ],
+    today: '2026-09-20',
+    expect: 'Grade 11',
+  },
+
+  {
+    id: 'school-two-of-them',
+    trap: 'An exchange partner is named as often as the school itself, by as many people. Everybody-uses-it stops separating them, and picking either is a coin toss.',
+    domain: 'school',
+    course: 'french-10',
+    subject: 'the-student',
+    people: [staff('Lucia Coretti'), staff('Marie Duval'), staff('Anna Bell')],
+    episodes: [
+      {
+        id: 'x1',
+        actor: 'Lucia Coretti',
+        body: 'The exchange with Lycee Saint Louis runs in March. In [[french-10]].',
+      },
+      {
+        id: 'x2',
+        actor: 'Marie Duval',
+        body: 'Lycee Saint Louis have sent their pairings. In [[french-10]].',
+      },
+      {
+        id: 'x3',
+        actor: 'Anna Bell',
+        body: 'Lycee Saint Louis students arrive on the Tuesday. In [[french-10]].',
+      },
+    ],
+    expect: null,
+  },
 ];

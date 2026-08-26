@@ -28,6 +28,29 @@ import type { Vault, VaultNote } from './vault.js';
  */
 export const EVIDENCE_LIMIT = 12;
 
+/**
+ * What to say wherever the answer can change while the vault is being kept.
+ *
+ * Roles, years, schools and who teaches a class are all facts with a date on
+ * them, and the vault holds the whole history rather than the current state.
+ * That makes the old answer more numerous than the new one almost by
+ * definition: a student is in Grade 10 for a year and Grade 11 for a fortnight
+ * by the time anybody asks, and the head of year who wrote all autumn wrote
+ * more than the deputy head who was promoted in March.
+ *
+ * A reader weighing evidence by how much of it there is gets these backwards
+ * every time, and is not being careless -- more evidence really is usually
+ * better. It is only wrong for facts that change, and nothing was telling it
+ * which those were.
+ */
+const CHANGES_OVER_TIME = [
+  'Every quote is dated. This is the kind of fact that changes: people are',
+  'promoted, students move up a year, classes change hands. Where the quotes',
+  'disagree, the most recent one is what is true now, however much older evidence',
+  'says otherwise -- there is always more of the old answer, because it was true',
+  'for longer.',
+];
+
 /** Quotes are sentences, and a sentence that runs longer than this is a page. */
 const QUOTE_LIMIT = 240;
 
@@ -291,6 +314,10 @@ export async function askWhetherItIsRunning(
   };
 }
 
+/** A quote with the day it was written in front of it. */
+const dated = (occurred: string | undefined, prose: string) =>
+  `${occurred ? `${occurred.slice(0, 10)}: ` : ''}${prose}`.slice(0, QUOTE_LIMIT);
+
 /** Wikilinks and whitespace taken out, so a quote reads as a sentence. */
 const plain = (body: string) =>
   body
@@ -329,7 +356,7 @@ export async function askWhatYearTheyAreIn(
     if (years.length === 0) continue;
     for (const year of years) candidates.add(year);
     found.push({
-      evidence: { note: note.name, quote: prose.slice(0, QUOTE_LIMIT) },
+      evidence: { note: note.name, quote: dated(note.occurred, prose) },
       /*
        * A sentence naming one year is about that year. A sentence naming
        * several is a list of everybody, which says nothing about which one
@@ -371,6 +398,11 @@ export async function askWhatYearTheyAreIn(
       'What tells you is a sentence that puts this student inside one: work set for',
       'that year in a class they are in, a head of year writing to their class, a',
       'timetable or report addressed to them. Say null unless something does that.',
+      '',
+      ...CHANGES_OVER_TIME,
+      'A student is in one year for twelve months and the next one from September, so',
+      'the year they have just left is always written down more often than the year',
+      'they are in.',
     ],
     evidence: byRank(found),
   };
@@ -442,7 +474,7 @@ export async function askWhatSchoolThisIs(
     for (const note of (where.get(span) ?? []).slice(0, 2)) {
       const found = byName.get(note);
       if (found && !evidence.some((e) => e.note === note)) {
-        evidence.push({ note, quote: plain(found.body).slice(0, QUOTE_LIMIT) });
+        evidence.push({ note, quote: dated(found.occurred, plain(found.body)) });
       }
     }
   }
@@ -464,6 +496,8 @@ export async function askWhatSchoolThisIs(
       '',
       'Pick the phrase the writers treat as the place they all belong to. If none of',
       'them is used that way, answer null.',
+      '',
+      ...CHANGES_OVER_TIME,
     ],
     evidence: evidence.slice(0, EVIDENCE_LIMIT),
   };
@@ -657,7 +691,7 @@ export async function askWhatTheyDo(
     // a cap taken off the end of a directory listing throws away the only
     // sentence that answers the question.
     found.push({
-      evidence: { note: note.name, quote: prose.slice(0, QUOTE_LIMIT) },
+      evidence: { note: note.name, quote: dated(note.occurred, prose) },
       rank: spans.length > 0 ? 1 : 0,
       when: note.occurred ?? '',
     });
@@ -680,6 +714,8 @@ export async function askWhatTheyDo(
       `description immediately after ${who.name}'s name. Choose the one that says what`,
       'they do at the school. Choose null if none of them is a description of a person',
       '-- an instruction addressed to them, or a fragment, is not a role.',
+      '',
+      ...CHANGES_OVER_TIME,
     ],
     evidence: byRank(found),
   };

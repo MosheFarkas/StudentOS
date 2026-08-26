@@ -371,6 +371,21 @@ describe('gathering what could say what somebody does', () => {
     expect(question?.evidence.some((e) => e.quote.includes('Head of Grade 10'))).toBe(true);
   });
 
+  it('dates what it quotes, because people are promoted', async () => {
+    /*
+     * A role stated in September and a different one stated in March are not a
+     * contradiction. The later one is the answer, and neither the dates nor
+     * that rule were reaching the reader -- so it weighed two old mentions
+     * against one new one and called the question contested.
+     */
+    await wrote('01', 'Chris George', 'Mr George, Head of Grade 10. Reports Friday.');
+    const question = await askWhatTheyDo(vault, 'chris-george', {
+      studentDomain: 'wearelcc.ca',
+    });
+    expect(question?.evidence[0]?.quote).toContain('2026-02-01');
+    expect(question?.guarantees?.join(' ')).toMatch(/later|most recent/i);
+  });
+
   it('asks nothing at all when nobody ever says what they are', async () => {
     // Most people never say. No candidates, no question, no model call, and
     // no chance of a role being produced out of nothing.
@@ -747,6 +762,15 @@ describe('gathering what could say which year the student is in', () => {
     await wrote('n1', 'Year 9 students should collect their timetables.');
     const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
     expect(question?.candidates).toContain('Year 9');
+  });
+
+  it('dates what it quotes, because students move up a year', async () => {
+    // A vault spanning two school years holds the old year far more often
+    // than the new one, and the old year is written down by more people.
+    await wrote('n1', 'Mr George, Head of Grade 10. Reports go home Friday.');
+    const question = await askWhatYearTheyAreIn(vault, 'the-student', {});
+    expect(question?.evidence[0]?.quote).toContain('2026-02-01');
+    expect(question?.guarantees?.join(' ')).toMatch(/later|most recent|moved up/i);
   });
 
   it('asks nothing when nobody ever writes a year down', async () => {
