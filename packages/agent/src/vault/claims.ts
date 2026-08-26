@@ -49,6 +49,20 @@ export interface Claim {
   confidence?: number;
   /** What else this evidence would support, if anything. */
   alternatives?: string[];
+  /**
+   * The words in the evidence that say how far the relation reaches.
+   *
+   * A trainee on placement marks the work, sets the deadlines and takes the
+   * lessons. Asked who teaches that class, every answer is either wrong or
+   * incomplete, because a bare triple cannot hold "yes, but not permanently"
+   * -- so the pass named the trainee and no reader could tell she was one.
+   * The same shape covers a colleague taking one lesson and a teacher who has
+   * just handed the class over.
+   *
+   * Quoted, never composed. An invented qualifier is the most believable thing
+   * a pass could produce, because a hedge reads as care and nobody checks it.
+   */
+  qualifier?: string;
 }
 
 /** Why a claim did not survive. Reported, never silent. */

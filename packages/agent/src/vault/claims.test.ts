@@ -137,6 +137,23 @@ describe('settling what the vault is willing to say', () => {
     expect(settled).toHaveLength(2);
   });
 
+  it('carries the words that limit a claim, where there are any', () => {
+    /*
+     * A trainee on placement marks the work, sets the deadlines and takes the
+     * lessons. Asked who teaches the class, every reading of that evidence is
+     * either wrong or incomplete, because the shape being asked for -- one
+     * subject, one relation, one object -- cannot hold "yes, but not
+     * permanently". The pass answered the trainee and a reader had no way to
+     * know she was one.
+     *
+     * A qualifier is not a hedge. It is the part of the evidence that says how
+     * far the relation reaches, quoted rather than summarised, and it is the
+     * difference between a claim that is arguable and one that is simply true.
+     */
+    const { settled } = settle([claim({ qualifier: 'on teaching placement' })]);
+    expect(settled[0]?.qualifier).toBe('on teaching placement');
+  });
+
   it('says what it withheld and why, rather than quietly dropping it', () => {
     // A pipeline that silently discards reads as one that found nothing.
     const { withheld } = settle([claim({ confidence: 0.1 })]);

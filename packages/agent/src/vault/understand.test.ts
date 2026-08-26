@@ -169,4 +169,69 @@ describe('turning a vault into claims', () => {
     });
     expect(settled).toEqual([]);
   });
+
+  it('decides what somebody is before asking what they did', async () => {
+    /*
+     * The ordering is the point. A head of year writes to every class he looks
+     * after, and each of those classes on its own shows a member of staff
+     * setting deadlines -- which is what teaching looks like. The sentence
+     * that settles it appears once, in whichever class he was writing to that
+     * morning, so no course-sized view can contain it.
+     *
+     * Deciding roles first, across everything, and handing the answer to the
+     * course questions is what makes that sentence available where it is
+     * needed. It is also the only thing here that gets cheaper by being more
+     * correct: one question per person instead of one per person per course.
+     */
+    await course('history-10');
+    await person('chris-george', 'Chris George', 'cgeorge@lcc.ca');
+    await wrote(
+      'n1',
+      'Chris George',
+      'Mr George, Head of Grade 10. Reports go home Friday. In [[history-10]].',
+    );
+
+    const { llm, prompts } = fake((prompt) =>
+      prompt.includes('Trying to knock a claim down')
+        ? { refuted: false }
+        : prompt.includes('role at the school')
+          ? { answer: 'Head of Grade 10', confidence: 0.95, evidence: ['n1'] }
+          : { answer: null, why: 'He is a head of year, not the teacher.' },
+    );
+
+    const { settled } = await understandVault({ llm }, vault, {
+      userId: 'u1',
+      studentDomain: 'wearelcc.ca',
+    });
+
+    expect(settled).toMatchObject([
+      { subject: 'chris-george', relation: 'works at the school as', object: 'Head of Grade 10' },
+    ]);
+
+    // And the course question was told, rather than left to work it out from
+    // the one class in front of it.
+    const askedWhoTeaches = prompts.find((p) => p.includes('Who teaches history-10'));
+    expect(askedWhoTeaches).toContain('Head of Grade 10');
+  });
+
+  it('asks what somebody is once, however many courses they write to', async () => {
+    await course('history-10');
+    await course('geography-10');
+    await person('chris-george', 'Chris George', 'cgeorge@lcc.ca');
+    await wrote('n1', 'Chris George', 'Mr George, Head of Grade 10. Photo day. In [[history-10]].');
+    await wrote('n2', 'Chris George', 'Mr George. Lockers cleared. In [[geography-10]].');
+
+    const { llm, prompts } = fake((prompt) =>
+      prompt.includes('Trying to knock a claim down')
+        ? { refuted: false }
+        : prompt.includes('role at the school')
+          ? { answer: 'Head of Grade 10', confidence: 0.95, evidence: ['n1'] }
+          : { answer: null },
+    );
+    await understandVault({ llm }, vault, { userId: 'u1', studentDomain: 'wearelcc.ca' });
+
+    // One person and two courses: the role is proposed once, not once per
+    // course. The old arrangement re-derived it inside every course question.
+    expect(prompts.filter((p) => p.includes('role at the school'))).toHaveLength(1);
+  });
 });

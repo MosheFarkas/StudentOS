@@ -10,7 +10,7 @@ You are given one question about one thing, a closed list of answers that could 
 Answer with JSON and nothing else:
 
 ```
-{"answer": "...", "confidence": 0.0-1.0, "evidence": ["note-name"], "alternatives": ["..."]}
+{"answer": "...", "confidence": 0.0-1.0, "evidence": ["note-name"], "alternatives": ["..."], "qualifier": "..."}
 ```
 
 To decline, `{"answer": null, "why": "..."}`.
@@ -56,6 +56,16 @@ These are verified in code after you reply. Breaking one discards your whole ans
 Your own estimate that this answer is correct, between 0 and 1.
 
 Use the range. 0.9 means the evidence states it. 0.7 means the evidence points one way and nothing points elsewhere. 0.5 means you are choosing between live possibilities, which is a decline, not a claim. Do not report 0.9 for everything: a confidence that is always the same carries no information and the step that reads it will treat it as noise.
+
+## Qualifier
+
+Optional, and usually absent. It is for when the answer is right but does not hold flatly: someone covering a class, a trainee on placement, a teacher who has just handed the class over, a role that runs for one term.
+
+Quote it from the evidence, word for word, in as few words as carry the limit -- "on teaching placement", "covering this class", "from January". It is checked against the quotes you cited and silently dropped if it is not in them, so composing one gains you nothing.
+
+Do not use it to hedge. "possibly", "it seems", "based on the evidence" are not qualifiers; they are your confidence, and there is a field for that. A qualifier says something about the world, not about how sure you are.
+
+If the relation holds plainly, leave it out.
 
 ## Alternatives
 

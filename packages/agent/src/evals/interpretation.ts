@@ -6,8 +6,7 @@ import { OpenAiProvider, PLATFORM_MODEL } from '@contexto/llm';
 import type { LlmProvider } from '@contexto/llm';
 import { Vault } from '../vault/vault.js';
 import { askWhoTeaches } from '../vault/evidence.js';
-import { interpret } from '../vault/interpret.js';
-import { settle, type Claim } from '../vault/claims.js';
+import { understandVault } from '../vault/understand.js';
 import {
   INTERPRETATION_CASES,
   STUDENT_DOMAIN,
@@ -81,6 +80,8 @@ type ArmName = 'naive' | 'contract' | 'full';
 
 interface Outcome {
   answered: string | null;
+  /** The words limiting the claim, where it carried any. */
+  qualifier?: string;
   /** Model calls spent, for the cost column. */
   calls: number;
   /**
@@ -145,18 +146,19 @@ async function runArm(
   const root = mkdtempSync(join(tmpdir(), 'contexto-eval-'));
   try {
     const vault = await fixture(root, testCase);
-    const question = await askWhoTeaches(vault, testCase.course, STUDENT_DOMAIN);
-
-    /*
-     * No candidates means no question, in every arm.
-     *
-     * The narrowing is deterministic and runs before any of them, so crediting
-     * it to one arm would be measuring the same code three times. What differs
-     * between arms is only what happens once there is something to ask.
-     */
-    if (!question) return { answered: null, calls: 0 };
 
     if (arm === 'naive') {
+      /*
+       * The narrowing runs for this arm too.
+       *
+       * It is deterministic and shared, so crediting it to the arms that came
+       * after would be measuring the same code twice and calling the
+       * difference progress. What separates the arms is only what happens once
+       * there is something to ask.
+       */
+      const question = await askWhoTeaches(vault, testCase.course, STUDENT_DOMAIN);
+      if (!question) return { answered: null, calls: 0 };
+
       const reply = await llm.chat(
         {
           messages: [
@@ -179,24 +181,51 @@ async function runArm(
     }
 
     /*
-     * The contract arm is the full pipeline with the refuter removed, which
-     * means letting the proposal through unchallenged rather than running a
-     * different code path. Anything else would measure two implementations
-     * instead of one step.
+     * Everything else runs the production pass end to end.
+     *
+     * An earlier version of this file called the narrowing and the
+     * interpretation itself, assembling in the eval what production assembles
+     * in understandVault. It drifted, as that arrangement always does, and
+     * spent an afternoon reporting a step still broken that had already been
+     * fixed. The arms differ by one wrapper around the provider and nothing
+     * else.
      */
     const heard: string[] = [];
-    const watched = watchRefuter(arm === 'full' ? llm : withoutRefuter(llm), heard);
-    const claim = await interpret({ llm: watched }, question, { userId: 'eval' });
+    let calls = 0;
+    const counted = count(
+      watchRefuter(arm === 'full' ? llm : withoutRefuter(llm), heard),
+      () => (calls += 1),
+    );
 
+    const { settled } = await understandVault({ llm: counted }, vault, {
+      userId: 'eval',
+      studentDomain: STUDENT_DOMAIN,
+    });
+
+    const teacher = settled.find(
+      (c) => c.subject === testCase.course && c.relation === 'taught by',
+    );
     const why = heard.at(-1);
-    const calls = arm === 'full' ? 2 : 1;
-    if (!claim) return { answered: null, calls, ...(why ? { refutedWhy: why } : {}) };
-
-    const { settled } = settle([claim], { single: ['taught by'] });
-    return { answered: (settled[0] as Claim | undefined)?.object ?? null, calls };
+    return {
+      answered: teacher?.object ?? null,
+      calls,
+      ...(teacher?.qualifier ? { qualifier: teacher.qualifier } : {}),
+      ...(why && !teacher ? { refutedWhy: why } : {}),
+    };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+/** Count every call the pass actually makes, rather than assuming a number. */
+function count(llm: LlmProvider, tick: () => void): LlmProvider {
+  return {
+    ...llm,
+    chat: async (request, ctx) => {
+      tick();
+      return llm.chat(request, ctx);
+    },
+  } as LlmProvider;
 }
 
 /**
@@ -268,17 +297,29 @@ const MARK: Record<Verdict, string> = {
 };
 
 /** Deterministic, and unkind on purpose. */
-function grade(testCase: InterpretationCase, answered: string | null): Verdict {
+function grade(testCase: InterpretationCase, outcome: Outcome): Verdict {
   const same = (a: string, b: string) =>
     a.trim().toLowerCase().replace(/\s+/g, ' ') === b.trim().toLowerCase().replace(/\s+/g, ' ');
 
+  const { answered, qualifier } = outcome;
   if (answered === null) return testCase.expect === null ? 'abstained' : 'missed';
   if (testCase.expect === null) return 'hallucinated';
-  return same(answered, testCase.expect)
-    ? 'correct'
-    : // A different name is a hallucination, not a near miss. There is no
-      // partial credit for a wrong teacher.
-      'hallucinated';
+
+  // A different name is a hallucination, not a near miss. There is no partial
+  // credit for a wrong teacher.
+  if (!same(answered, testCase.expect)) return 'hallucinated';
+
+  /*
+   * The right name, stated more flatly than the evidence allows, is still a
+   * claim the vault should not be making.
+   */
+  if (
+    testCase.expectQualifier &&
+    !(qualifier ?? '').toLowerCase().includes(testCase.expectQualifier.toLowerCase())
+  ) {
+    return 'hallucinated';
+  }
+  return 'correct';
 }
 
 function bar(value: number, width = 20): string {
@@ -338,7 +379,7 @@ async function main(): Promise<void> {
           outcome = { answered: null, calls: 0 };
         }
         calls += outcome.calls;
-        const verdict = grade(testCase, outcome.answered);
+        const verdict = grade(testCase, outcome);
         verdicts.set(testCase.id, [...(verdicts.get(testCase.id) ?? []), verdict]);
         if (outcome.refutedWhy && verdict !== 'abstained') {
           refusals.set(testCase.id, [...(refusals.get(testCase.id) ?? []), outcome.refutedWhy]);

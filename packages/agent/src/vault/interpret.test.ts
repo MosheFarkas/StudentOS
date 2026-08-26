@@ -37,6 +37,7 @@ const question: Question = {
   relation: 'taught by',
   asking: 'Who teaches this course?',
   candidates: ['Lucia Coretti', 'Anna Marzilli'],
+  guarantees: ['Every quote below was taken from a note attached to french-10.'],
   evidence: [
     { note: 'a-notice', quote: 'Mme Coretti will collect the essays on Friday.' },
     { note: 'b-notice', quote: 'Mme Marzilli is running the exchange trip.' },
@@ -114,6 +115,43 @@ describe('interpreting evidence into a claim', () => {
     expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
   });
 
+  it('keeps a qualifier that appears in the evidence word for word', async () => {
+    const { llm } = fake([
+      propose({
+        answer: 'Lucia Coretti',
+        confidence: 0.9,
+        evidence: ['a-notice'],
+        qualifier: 'collect the essays',
+      }),
+      propose({ refuted: false }),
+    ]);
+
+    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    expect(claim?.qualifier).toBe('collect the essays');
+  });
+
+  it('drops a qualifier nobody wrote, and keeps the claim', async () => {
+    /*
+     * A qualifier is quoted, never composed. An invented one is the most
+     * plausible-sounding thing a pass could produce -- it reads as care -- and
+     * would be believed precisely because hedges are not the kind of sentence
+     * anybody checks.
+     */
+    const { llm } = fake([
+      propose({
+        answer: 'Lucia Coretti',
+        confidence: 0.9,
+        evidence: ['a-notice'],
+        qualifier: 'temporarily, while the department reorganises',
+      }),
+      propose({ refuted: false }),
+    ]);
+
+    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    expect(claim?.object).toBe('Lucia Coretti');
+    expect(claim?.qualifier).toBeUndefined();
+  });
+
   it('abstains when the proposal cannot be read at all', async () => {
     const { llm } = fake(['I think it is probably Mme Coretti, but I am not sure.']);
     expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
@@ -134,30 +172,56 @@ describe('interpreting evidence into a claim', () => {
     expect(claim?.alternatives).toEqual(['Anna Marzilli']);
   });
 
-  it('says the evidence is attached to the subject, because it is', async () => {
+  it('states whatever the narrowing guaranteed, in both prompts', () => {
     /*
-     * The narrowing only ever collects notes linked to this course, so every
-     * quote is about it by construction. Leaving that unsaid cost almost every
-     * true claim in the corpus: the refuter read quotes that did not happen to
-     * name the course and objected, correctly on what it could see, that
+     * The guarantees belong to whoever did the narrowing, not to this file.
+     *
+     * They were hardcoded here, phrased for courses and teachers, which made a
+     * module that is supposed to answer any question able to answer only one
+     * honestly -- ask it about a person and it would assure the model that
+     * every quote was attached to that person "in the school records", which
+     * is a sentence about courses and would have been a lie.
+     *
+     * Saying them at all is what matters. Leaving them unsaid cost almost
+     * every true claim in the corpus: a refuter reading quotes that did not
+     * happen to name the course objected, correctly on what it could see, that
      * "Mrs Bell set a practical assessment" never says the practical was
      * chemistry. It was refuting the shape of the evidence rather than the
-     * claim, and it was right to, because the one fact that would have settled
-     * it was known to the system and withheld from the reader.
+     * claim, because the one fact that would have settled it was known to the
+     * system and withheld from the reader.
      */
-    const { llm, asked } = fake([
-      propose({ answer: 'Lucia Coretti', confidence: 0.9, evidence: ['a-notice'] }),
-      propose({ refuted: false }),
-    ]);
-    await interpret({ llm }, question, { userId: 'u1' });
+    return (async () => {
+      const { llm, asked } = fake([
+        propose({ answer: 'Lucia Coretti', confidence: 0.9, evidence: ['a-notice'] }),
+        propose({ refuted: false }),
+      ]);
+      await interpret({ llm }, question, { userId: 'u1' });
 
-    for (const prompt of asked) {
-      expect(prompt).toMatch(/attached to|taken from notes? (?:attached|linked)/i);
-      expect(prompt).toContain('french-10');
-      // And that the candidates are staff, which is the other thing the
-      // narrowing knows and used to keep to itself.
-      expect(prompt).toMatch(/students are excluded|member of staff/i);
-    }
+      expect(asked).toHaveLength(2);
+      for (const prompt of asked) {
+        expect(prompt).toContain('Every quote below was taken from a note attached to french-10.');
+      }
+    })();
+  });
+
+  it('passes on what has already been settled, rather than asking again', () => {
+    /*
+     * A role decided once, from everything known about that person, beats the
+     * same question re-answered from whatever fragment happens to be in front
+     * of this one. It is also the only way the pass can know that somebody
+     * doing the work of a teacher is on placement, since the sentence saying
+     * so lives in a note about a different course.
+     */
+    return (async () => {
+      const { llm, asked } = fake([propose({ answer: null })]);
+      await interpret(
+        { llm },
+        { ...question, known: ['Anna Marzilli runs the exchange programme.'] },
+        { userId: 'u1' },
+      );
+
+      expect(asked[0]).toContain('Anna Marzilli runs the exchange programme.');
+    })();
   });
 
   it('tells the proposer that not answering is a good answer', async () => {

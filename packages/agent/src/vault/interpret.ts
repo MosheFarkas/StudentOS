@@ -43,6 +43,33 @@ export interface Question {
   candidates: readonly string[];
   /** Bounded, pre-narrowed, and the only thing either pass gets to see. */
   evidence: readonly Evidence[];
+  /**
+   * What the narrowing knows about this bundle that the bundle cannot show.
+   *
+   * These belong to whoever did the narrowing, because only that code knows
+   * what it guaranteed. They were once written here, phrased for courses and
+   * teachers, which made a module meant to answer any question able to answer
+   * only one honestly.
+   *
+   * Saying them is not a nicety. Leaving them unsaid cost nearly every true
+   * claim in the corpus: a reader shown "your practical assessment is due
+   * Friday" objected that it never says chemistry, and was right on what it
+   * could see. The system knew the note was attached to chemistry and did not
+   * pass it on -- an observation held somewhere no reader could reach, which
+   * is this whole file's disease in miniature.
+   */
+  guarantees?: readonly string[];
+  /**
+   * Claims already settled that bear on this question.
+   *
+   * Decided once, from all the evidence about their own subject, and reused
+   * rather than re-derived here from whatever fragment happens to be in this
+   * bundle. A person's role is the case that matters: the sentence saying
+   * somebody is on teaching placement usually sits in a note about a
+   * different course entirely, so a pass looking only at this one cannot
+   * possibly find it and will confidently conclude they teach.
+   */
+  known?: readonly string[];
 }
 
 export interface InterpretDeps {
@@ -58,6 +85,7 @@ interface Proposal {
   confidence?: number;
   evidence?: string[];
   alternatives?: string[];
+  qualifier?: string;
 }
 
 export async function interpret(
@@ -69,44 +97,23 @@ export async function interpret(
 
   const bundle = question.evidence.map((e) => `- ${e.note}: ${e.quote}`).join('\n');
 
-  /*
-   * The one guarantee the narrowing makes, said out loud.
-   *
-   * Every quote here was taken from a note the school's records attach to this
-   * subject; nothing else was collected. Leaving that implicit cost nearly
-   * every true claim in the corpus, because a quote reading "your practical
-   * assessment is due Friday" does not name the course, and a reader with no
-   * reason to believe otherwise is right to say so. The system knew and did
-   * not pass it on, which is the same failure as the rest of this file in
-   * miniature: an observation held somewhere no reader could see it.
-   */
-  const provenance = [
-    `Every quote below was taken from a note attached to ${question.subject} in the`,
-    'school records. That attachment is recorded, not inferred, so a quote that',
-    `does not name ${question.subject} is still about it. Do not treat the absence`,
-    'of the course name in a quote as evidence of anything.',
-    '',
-    /*
-     * The second guarantee the narrowing makes, and the second one that cost a
-     * true claim by going unsaid. A refuter knocked down a correct teacher on
-     * the grounds that the message "could describe a student writing to the
-     * teacher" -- students are excluded from this list before anybody is
-     * asked, by mail domain, and cannot appear in it.
-     */
-    'Every candidate is a member of staff, identified by a staff address in those',
-    'records. Students are excluded before this question is asked and cannot',
-    'appear below, so no quote here is a pupil writing to their teacher.',
-    '',
-    'A quote reads "Name wrote: ..." where Name is who sent the note. Anything',
-    'after that is their own words, including how they sign themselves.',
-  ].join('\n');
+  const guarantees = question.guarantees ?? [];
+  const known = question.known ?? [];
+
+  /** Stated as fact, because each one survived this same process. */
+  const settled =
+    known.length > 0
+      ? ['Already established, and not up for reconsideration here:', ...known.map((k) => `- ${k}`)]
+      : [];
 
   const brief = [
     `Question: ${question.asking}`,
     `It is about: ${question.subject}`,
     '',
-    provenance,
-    '',
+    ...guarantees,
+    ...(guarantees.length > 0 ? [''] : []),
+    ...settled,
+    ...(settled.length > 0 ? [''] : []),
     'The answer must be one of these, or null:',
     ...question.candidates.map((c) => `- ${c}`),
     '',
@@ -146,8 +153,10 @@ export async function interpret(
     `Proposed with confidence ${confidence.toFixed(2)}.`,
     alternatives.length > 0 ? `They ruled out: ${alternatives.join(', ')}.` : '',
     '',
-    provenance,
-    '',
+    ...guarantees,
+    ...(guarantees.length > 0 ? [''] : []),
+    ...settled,
+    ...(settled.length > 0 ? [''] : []),
     'The evidence they were given, in full:',
     bundle,
     '',
@@ -180,6 +189,20 @@ export async function interpret(
   // one step whose job is doubt is not consent.
   if (!verdict || verdict.refuted !== false) return null;
 
+  /*
+   * A qualifier has to be in the evidence, word for word.
+   *
+   * Dropped rather than fatal, because the claim itself may be perfectly good
+   * and a composed hedge is a smaller error than a composed answer. But it is
+   * dropped: a limit nobody wrote is a limit that cannot be checked, and it
+   * would be believed more readily than the claim it qualifies.
+   */
+  const quoted = proposed.qualifier?.trim();
+  const qualifier =
+    quoted && cited.some((e) => e.quote.toLowerCase().includes(quoted.toLowerCase()))
+      ? quoted
+      : undefined;
+
   return {
     subject: question.subject,
     relation: question.relation,
@@ -188,6 +211,7 @@ export async function interpret(
     evidence: cited,
     confidence,
     alternatives,
+    ...(qualifier ? { qualifier } : {}),
   };
 }
 

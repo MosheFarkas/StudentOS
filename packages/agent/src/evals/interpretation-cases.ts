@@ -39,6 +39,16 @@ export interface InterpretationCase {
   episodes: FixtureEpisode[];
   /** The correct answer, or null when the honest answer is that nobody knows. */
   expect: string | null;
+  /**
+   * Words the claim must also carry, where a bare name would be arguable.
+   *
+   * Only one case needs this and it is the case that forced the field to
+   * exist. A trainee on placement marks the work, sets the deadlines and takes
+   * the lessons, so "who teaches this" has two defensible answers and a bare
+   * triple can hold neither honestly. Requiring the limit makes the case
+   * harder to pass, not easier: naming her is no longer enough.
+   */
+  expectQualifier?: string;
 }
 
 const STUDENT_DOMAIN = 'wearelcc.ca';
@@ -435,8 +445,20 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
   },
 
   {
+    /*
+     * The expectation here was "Erik Lindqvist" and is now "Ada Okonkwo, with
+     * the placement said out loud".
+     *
+     * Not because the system kept answering Ada and the number looked bad --
+     * that is how a corpus stops measuring anything. Because the evidence
+     * genuinely supports both readings, and the shape available for the answer
+     * could hold neither: Ada takes the lessons and marks the work, Erik is
+     * the teacher of record, and a claim with one slot must simply pick one
+     * and be half wrong. The system can now say the true thing instead, and
+     * this asks it to. Answering "Ada Okonkwo" flatly still fails.
+     */
     id: 'student-teacher-on-placement',
-    trap: 'A trainee does everything a teacher does and is introduced once, in a sentence nobody rereads.',
+    trap: 'A trainee does everything a teacher does and is introduced once, in a sentence nobody rereads. Naming her without saying she is on placement states something arguable as settled.',
     course: 'music-10',
     people: [staff('Ada Okonkwo'), staff('Erik Lindqvist')],
     episodes: [
@@ -461,7 +483,8 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         body: 'Miss Okonkwo. I have marked the listening tests and we will go over them together. In [[music-10]].',
       },
     ],
-    expect: 'Erik Lindqvist',
+    expect: 'Ada Okonkwo',
+    expectQualifier: 'placement',
   },
 
   {

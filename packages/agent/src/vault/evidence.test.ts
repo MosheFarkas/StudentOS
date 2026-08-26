@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { askWhoTeaches, EVIDENCE_LIMIT } from './evidence.js';
+import { askWhatTheyDo, askWhoTeaches, EVIDENCE_LIMIT } from './evidence.js';
 import { Vault } from './vault.js';
 
 /**
@@ -169,5 +169,114 @@ describe('gathering what could answer who teaches a course', () => {
     const question = await askWhoTeaches(vault, 'french-10', 'wearelcc.ca');
     expect(question?.subject).toBe('french-10');
     expect(question?.relation).toBe('taught by');
+  });
+});
+
+/**
+ * Deciding what somebody is, before asking what they did.
+ *
+ * Every failure left in the corpus was a role failure wearing a different hat.
+ * A head of year writes to every class he looks after; a librarian chases
+ * overdue books; a colleague covers one lesson; a trainee takes some of them.
+ * All four do things that look like teaching, and the sentence that says
+ * otherwise is usually in a note about a different course -- so a pass looking
+ * at one course cannot find it and concludes, reasonably, that they teach.
+ *
+ * The words are already there. People say what they are, once, in an
+ * appositive after their name, and then never again: "Mr George, Head of Grade
+ * 10." That is a convention of institutional mail rather than anything about
+ * this school, and it is the only place a role is ever written down.
+ */
+describe('gathering what could say what somebody does', () => {
+  let root: string;
+  let vault: Vault;
+
+  const person = (name: string, full: string, email: string) =>
+    vault.write({
+      name,
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: email,
+      body: `${full}, at ${email}.`,
+    });
+
+  const wrote = (day: string, actor: string, body: string) =>
+    vault.write({
+      name: `2026-02-${day}-note`,
+      kind: 'episode',
+      source: 'classroom',
+      description: `${actor} wrote.`,
+      actor,
+      occurred: `2026-02-${day}T10:00:00Z`,
+      body,
+    });
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-roles-'));
+    vault = new Vault(root, 'student-1');
+    await person('chris-george', 'Chris George', 'cgeorge@lcc.ca');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('offers the words somebody uses about themselves, and nothing else', async () => {
+    await wrote(
+      '01',
+      'Chris George',
+      'Mr George, Head of Grade 10. Reports go home Friday. In [[history-10]].',
+    );
+
+    const question = await askWhatTheyDo(vault, 'chris-george', 'wearelcc.ca');
+    expect(question?.candidates).toEqual(['Head of Grade 10']);
+  });
+
+  it('reads a description somebody else wrote about them', async () => {
+    // A trainee is introduced once, by the person whose lessons they are
+    // taking, and describes themselves as a teacher ever after.
+    await person('ada-okonkwo', 'Ada Okonkwo', 'aokonkwo@lcc.ca');
+    await wrote(
+      '01',
+      'Erik Lindqvist',
+      'I would like to introduce Miss Okonkwo, who is on teaching placement with us this term. In [[music-10]].',
+    );
+
+    const question = await askWhatTheyDo(vault, 'ada-okonkwo', 'wearelcc.ca');
+    expect(question?.candidates.join(' ')).toContain('teaching placement');
+  });
+
+  it('asks nothing at all when nobody ever says what they are', async () => {
+    // Most people never say. No candidates, no question, no model call, and
+    // no chance of a role being produced out of nothing.
+    await wrote('01', 'Chris George', 'Mr George. The test is Tuesday. In [[maths-10]].');
+    expect(await askWhatTheyDo(vault, 'chris-george', 'wearelcc.ca')).toBeNull();
+  });
+
+  it('does not mistake an instruction addressed to somebody for a role', async () => {
+    // "Mr George, please bring the register" is a comma after a name and is
+    // not a description of anybody.
+    await wrote('01', 'Anna Bell', 'Mr George, please bring the register. In [[maths-10]].');
+    expect(await askWhatTheyDo(vault, 'chris-george', 'wearelcc.ca')).toBeNull();
+  });
+
+  it('looks across every course, because a role is stated in only one', async () => {
+    /*
+     * The whole reason this is asked per person rather than per course. The
+     * sentence naming somebody Head of Grade 10 appears once, in whichever
+     * class they happened to be writing to that day, and is the governing
+     * fact everywhere else.
+     */
+    await wrote('01', 'Chris George', 'Mr George, Head of Grade 10. Photo day. In [[history-10]].');
+    await wrote('02', 'Chris George', 'Mr George. Test Tuesday. In [[maths-10]].');
+
+    const question = await askWhatTheyDo(vault, 'chris-george', 'wearelcc.ca');
+    expect(question?.candidates).toEqual(['Head of Grade 10']);
+    expect(question?.evidence.length).toBeGreaterThan(1);
+  });
+
+  it('tells the reader what the bundle is, since it spans everything', async () => {
+    await wrote('01', 'Chris George', 'Mr George, Head of Grade 10. Photo day. In [[history-10]].');
+    const question = await askWhatTheyDo(vault, 'chris-george', 'wearelcc.ca');
+    expect(question?.guarantees?.join(' ')).toMatch(/Chris George/);
   });
 });

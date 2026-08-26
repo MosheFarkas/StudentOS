@@ -85,8 +85,18 @@ export async function vaultDigest(
 
   const dayOf = (at: string | undefined) => (at ? at.slice(0, 10) : null);
 
+  /*
+   * The name, and whatever limits it.
+   *
+   * A trainee on placement teaches the class this term and not next; a
+   * colleague covering one lesson teaches it on Thursday. Dropping the limit
+   * to keep the shape tidy is how a document ends up stating something
+   * arguable as though it were settled.
+   */
   const teaches = new Map(
-    claims.filter((c) => c.relation === 'taught by').map((c) => [c.subject, c.object]),
+    claims
+      .filter((c) => c.relation === 'taught by')
+      .map((c) => [c.subject, c.qualifier ? `${c.object} (${c.qualifier})` : c.object]),
   );
 
   const assignments = entities.filter((n) => n.description === 'Assignment');

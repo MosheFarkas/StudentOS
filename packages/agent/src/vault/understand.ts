@@ -1,6 +1,6 @@
 import type { LlmProvider } from '@contexto/llm';
 import { settle, type Settlement } from './claims.js';
-import { askWhoTeaches } from './evidence.js';
+import { askWhatTheyDo, askWhoTeaches, staffRoster } from './evidence.js';
 import { interpret } from './interpret.js';
 import type { Vault } from './vault.js';
 
@@ -44,13 +44,43 @@ export interface UnderstandOptions {
  * coach, and would have flattened all three into "teaches", which is the
  * mistake this exists to stop.
  */
-const SINGLE = ['taught by'];
+const SINGLE = ['taught by', 'works at the school as'];
 
 export async function understandVault(
   { llm }: UnderstandDeps,
   vault: Vault,
   { userId, studentDomain }: UnderstandOptions,
 ): Promise<Settlement> {
+  /*
+   * What people are, before what they did.
+   *
+   * Every wrong teacher left in the corpus was a role mistaken for a job: a
+   * head of year setting deadlines, a librarian chasing books, a colleague
+   * covering one lesson, a trainee taking some of them. All four look exactly
+   * like teaching inside a single course, and the sentence that says otherwise
+   * sits in a note about some other class -- so no course-sized view can
+   * reach it, and every course-sized view concludes, reasonably, that they
+   * teach.
+   *
+   * Asking per person across everything puts that sentence where it is needed.
+   * It is also cheaper than the alternative it replaces, which is the same
+   * question re-answered badly once per person per course.
+   */
+  const roster = await staffRoster(vault, studentDomain);
+
+  const roleClaims = [];
+  for (const person of roster) {
+    const question = await askWhatTheyDo(vault, person.note, studentDomain);
+    if (!question) continue;
+    const claim = await interpret({ llm }, question, { userId });
+    if (claim) roleClaims.push(claim);
+  }
+
+  const roles = settle(roleClaims, { single: SINGLE });
+  const roleOf = new Map(
+    roles.settled.map((c) => [c.subject, c.qualifier ? `${c.object}, ${c.qualifier}` : c.object]),
+  );
+
   const courses = (await vault.list('entity')).filter((n) => n.description === 'Course');
 
   const claims = [];
@@ -60,9 +90,19 @@ export async function understandVault(
     // and on a real account it is most of them.
     if (!question) continue;
 
-    const claim = await interpret({ llm }, question, { userId });
+    /** Only the roles of people who could be the answer here. */
+    const known = roster
+      .filter((p) => roleOf.has(p.note) && question.candidates.includes(p.name))
+      .map((p) => `${p.name} works at the school as ${roleOf.get(p.note) as string}.`);
+
+    const claim = await interpret({ llm }, { ...question, known }, { userId });
     if (claim) claims.push(claim);
   }
 
-  return settle(claims, { single: SINGLE });
+  const taught = settle(claims, { single: SINGLE });
+
+  return {
+    settled: [...roles.settled, ...taught.settled],
+    withheld: [...roles.withheld, ...taught.withheld],
+  };
 }
