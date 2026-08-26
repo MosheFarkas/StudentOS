@@ -46,50 +46,37 @@ describe('digesting a vault for the profile writer', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  it('counts the work each course set', async () => {
-    const digest = await vaultDigest(vault);
-    const drama = digest.courses.find((c) => c.name === 'drama-10a');
-    expect(drama?.assignments).toBe(2);
-    expect(digest.courses.find((c) => c.name === 'french-10')?.assignments).toBe(1);
-  });
-
-  it('reports marks only where marks exist', async () => {
-    const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'drama-10a')?.marked).toBe(2);
-    // No mark anywhere in French, so nothing to say about French marks.
-    expect(digest.courses.find((c) => c.name === 'french-10')?.marked).toBe(0);
-  });
-
-  it('counts what has no submission separately from what was marked', async () => {
+  it('says whether a course sets work, not how much', async () => {
     /*
-     * The distinction the whole document rests on. Classroom leaves work in
-     * this state unless a student presses a button, so the count is about the
-     * record and the writer is told to treat it that way.
+     * How many pieces of work a course set turned out to be the least useful
+     * thing in the generated document and the bulk of its length: "science
+     * and technology (61 pieces of work and 167 files/readings), extended
+     * history (43 and 86)". None of that changes what an agent says.
+     *
+     * What is worth one bit: whether it is a subject or a club. A course that
+     * sets work is a lesson; one that never has is Model UN.
      */
     const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'french-10')?.noSubmission).toBe(1);
-    expect(digest.courses.find((c) => c.name === 'drama-10a')?.noSubmission).toBe(0);
+    expect(digest.courses.find((c) => c.name === 'drama-10a')?.setsWork).toBe(true);
+    expect(digest.courses).not.toHaveProperty('0.assignments');
   });
 
-  it('names the people who actually write to this student', async () => {
-    const wrote = (n: number, actor: string) =>
-      vault.write({
-        name: `2026-01-0${n}-a-notice`,
-        kind: 'episode',
-        source: 'gmail',
-        description: `${actor} said something.`,
-        actor,
-        occurred: `2026-01-0${n}T10:00:00Z`,
-        body: 'In [[french-10]].',
-      });
-
-    await wrote(1, 'Gabriela Carrara');
-    await wrote(2, 'Gabriela Carrara');
-    // One message is somebody who mailed once, not somebody in their life.
-    await wrote(3, 'A Passing Stranger');
-
+  it('offers no teachers, because the vault does not know any', async () => {
+    /*
+     * Mail is the only source of a person's name here, and somebody writing
+     * about a course is not its teacher. On a real account the top
+     * correspondent for maths, French and robotics was the same man, and the
+     * top name for English was not the English teacher.
+     *
+     * Handing the writer a list of courses and a separate list of people got
+     * exactly what you would expect: it paired them, confidently, and put a
+     * wrong teacher into every conversation. Naming teachers needs the
+     * Classroom roster scope, which is not granted, so the honest answer is
+     * to offer nothing rather than a guess.
+     */
     const digest = await vaultDigest(vault);
-    expect(digest.people).toEqual([{ name: 'Gabriela Carrara', messages: 2 }]);
+    expect(digest).not.toHaveProperty('people');
+    expect(JSON.stringify(digest)).not.toMatch(/teacher/i);
   });
 
   it('leaves out a course nothing has ever happened in', async () => {

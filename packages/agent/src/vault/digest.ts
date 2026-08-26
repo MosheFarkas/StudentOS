@@ -15,40 +15,26 @@ import type { Vault } from './vault.js';
 
 export interface CourseDigest {
   name: string;
-  /** How much work the course has set. */
-  assignments: number;
-  /** How much of it carries a mark. */
-  marked: number;
   /**
-   * How much has no submission on record.
+   * Whether the course sets work at all.
    *
-   * About the record, not the student: Classroom leaves work in that state
-   * unless somebody presses a button, and many teachers never ask. The writer
-   * is told this in so many words, because the number invites a verdict.
+   * One bit, not a count. How much work a course set was the least useful
+   * thing in the first generated document and most of its length -- "science
+   * and technology (61 pieces of work and 167 files/readings), extended
+   * history (43 and 86)" changes nothing an agent would say. What is worth
+   * knowing is whether this is a lesson or a club.
    */
-  noSubmission: number;
-  /** Files, readings and slide decks filed under it. */
-  materials: number;
-}
-
-export interface PersonDigest {
-  name: string;
-  messages: number;
+  setsWork: boolean;
 }
 
 export interface VaultDigest {
   courses: CourseDigest[];
-  people: PersonDigest[];
   /** Everything in the vault, so the writer knows how much it is speaking for. */
   notes: number;
   /** The span the vault covers, as dates, or null when nothing is dated. */
   from: string | null;
   to: string | null;
 }
-
-/** People worth naming. Below this it is somebody who mailed once. */
-const ENOUGH_MESSAGES = 2;
-const MOST_PEOPLE = 12;
 
 export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
@@ -61,44 +47,45 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
 
   const courses: CourseDigest[] = entities
     .filter((n) => n.description === 'Course')
-    .map((course) => {
-      const work = assignments.filter(linked(course.name));
-      return {
-        name: course.name,
-        assignments: work.length,
-        marked: work.filter((w) => /Marked /.test(w.body)).length,
-        noSubmission: work.filter((w) => /No submission recorded/i.test(w.body)).length,
-        materials: materials.filter(linked(course.name)).length,
-      };
-    })
+    .map((course) => ({
+      name: course.name,
+      setsWork: assignments.some(linked(course.name)),
+      // Used only to tell a real course from an empty shell, then dropped. It
+      // never reaches the writer.
+      weight:
+        assignments.filter(linked(course.name)).length +
+        materials.filter(linked(course.name)).length,
+    }))
     /*
      * A course nothing has ever happened in is a shell -- a club that was
      * created and never used -- and inside a budget this tight it crowds out
      * one the student actually attends.
      */
-    .filter((c) => c.assignments > 0 || c.materials > 0)
-    .sort((a, b) => b.assignments + b.materials - (a.assignments + a.materials));
-
-  const wrote = new Map<string, number>();
-  for (const episode of episodes) {
-    if (!episode.actor) continue;
-    wrote.set(episode.actor, (wrote.get(episode.actor) ?? 0) + 1);
-  }
-
-  const people: PersonDigest[] = [...wrote.entries()]
-    .filter(([, messages]) => messages >= ENOUGH_MESSAGES)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MOST_PEOPLE)
-    .map(([name, messages]) => ({ name, messages }));
+    .filter((c) => c.weight > 0)
+    .sort((a, b) => b.weight - a.weight)
+    .map(({ name, setsWork }) => ({ name, setsWork }));
 
   const times = episodes
     .map((e) => e.occurred)
     .filter((at): at is string => typeof at === 'string')
     .sort();
 
+  /*
+   * No people, and above all no teachers.
+   *
+   * Mail is the only source of a name here, and somebody writing about a
+   * course is not its teacher. On a real account the top correspondent for
+   * maths, French and robotics was the same man, and the top name for English
+   * was not the English teacher. Handing the writer a list of courses beside a
+   * list of people got exactly what anyone would expect: it paired them,
+   * confidently, and put a wrong teacher into every conversation that student
+   * would ever have.
+   *
+   * Naming teachers needs classroom.rosters.readonly, which a school has to
+   * approve. Until then the honest offer is nothing rather than a guess.
+   */
   return {
     courses,
-    people,
     notes: entities.length + episodes.length,
     from: times[0]?.slice(0, 10) ?? null,
     to: times.at(-1)?.slice(0, 10) ?? null,

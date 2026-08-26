@@ -18,24 +18,39 @@ import { USER_DOC } from './documents.js';
 const body = USER_DOC.body;
 
 describe('what the user document is told to write', () => {
-  it('puts who teaches what first, as the thing most often needed', () => {
-    expect(body).toMatch(/who teaches what/i);
+  it('forbids naming a teacher, since the vault cannot know one', () => {
+    /*
+     * The first real document said this student takes enriched English with
+     * Gillian Shadley. He does not. Nothing in the digest said who teaches
+     * anything -- it offered a list of courses and a list of people, and the
+     * model paired them, which is what anyone would do.
+     */
+    expect(body).toMatch(/you must not work it out|say nothing about who teaches/i);
+    expect(body).toMatch(/you have invented them/i);
+  });
+
+  it('keeps counts out, which were half the length and none of the use', () => {
+    expect(body).toMatch(/Numbers\./);
+    expect(body).toMatch(/61 pieces of work/);
+  });
+
+  it('says a shorter document is a better one', () => {
+    // A budget invites filling. It is a limit, not a quota.
+    expect(body).toMatch(/a limit, not a quota/i);
   });
 
   it('rules out turning counts into a verdict on the student', () => {
-    expect(body).toMatch(/never write that a student is behind, weak, disorganised, or failing/i);
-    expect(body).toMatch(/judgement about a person/i);
+    expect(body).toMatch(/never characterise them at all/i);
   });
 
   it('offers the reasons a record can be incomplete, rather than only forbidding', () => {
     // A rule with no explanation is followed until it is inconvenient.
-    expect(body).toMatch(/handed in on paper|may not use Classroom for grading/i);
+    expect(body).toMatch(/marked on paper|does not grade in Classroom/i);
   });
 
-  it('allows the one honest statement about performance', () => {
-    // Marks that exist are a fact and are useful. Silence about them would be
-    // its own distortion.
-    expect(body).toMatch(/where the marks are/i);
+  it('rules out characterising the student at all', () => {
+    expect(body).toMatch(/behind, weak, disorganised, strong or gifted/i);
+    expect(body).toMatch(/not what you think of them/i);
   });
 
   it('keeps out what expires before the document is rewritten', () => {
@@ -49,7 +64,7 @@ describe('what the user document is told to write', () => {
   });
 
   it('names an order to cut in, so a full document degrades predictably', () => {
-    expect(body).toMatch(/courses and who teaches them come first/i);
+    expect(body).toMatch(/their year and school come first/i);
   });
 
   it('bans the markup that costs a character of student per character', () => {

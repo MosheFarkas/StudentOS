@@ -68,19 +68,26 @@ export async function writeUserDoc(
           role: 'user',
           content: [
             name ? `The student is ${name}.` : "The student's name is not known.",
-            `Their vault holds ${digest.notes} notes${
-              digest.from ? `, covering ${digest.from} to ${digest.to}` : ''
+            `Their vault covers ${digest.from ?? 'an unknown period'}${
+              digest.to ? ` to ${digest.to}` : ''
             }.`,
             '',
-            'Their courses, and what each has set:',
+            /*
+             * Courses, and one bit each. Nothing else.
+             *
+             * The first version of this handed over work counts and a list of
+             * everyone who had ever emailed. It spent half the document on
+             * figures that change nothing, and it paired the people with the
+             * courses and named a teacher who does not teach him.
+             */
+            'Their courses. "sets work" means it is a subject they are marked',
+            'on; the others are clubs, programmes or activities:',
             ...digest.courses.map(
-              (c) =>
-                `${c.name}: ${c.assignments} pieces of work, ${c.marked} carrying a mark, ` +
-                `${c.noSubmission} with no submission recorded, ${c.materials} files and readings`,
+              (c) => `${c.name} — ${c.setsWork ? 'sets work' : 'sets no work'}`,
             ),
             '',
-            'People who write to them, and how often:',
-            ...digest.people.map((p) => `${p.name}: ${p.messages}`),
+            'You are not told who teaches any of these, and there is no way to',
+            'work it out from what you have. Do not try.',
             '',
             `The document may be at most ${USER_DOC_LIMIT} characters.`,
           ].join('\n'),
