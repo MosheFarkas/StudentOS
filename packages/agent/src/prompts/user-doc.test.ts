@@ -94,6 +94,17 @@ describe('what the user document is told to write', () => {
     expect(body).toMatch(/no headings, no bullets/i);
   });
 
+  it('makes the writer place today in the school year', () => {
+    /*
+     * The document said this student was preparing for an exam and finishing a
+     * project, in late August, months after both had ended. The dates were all
+     * in the vault; nothing asked the writer to look at them.
+     */
+    expect(body).toMatch(/say when, not just what/i);
+    expect(body).toMatch(/between years/i);
+    expect(body).toMatch(/past tense/i);
+  });
+
   it('is small enough to be worth loading', () => {
     // It is a writer's brief, not a turn prompt, but a brief nobody can hold
     // in mind is a brief that gets half followed.

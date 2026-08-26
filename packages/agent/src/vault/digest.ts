@@ -1,4 +1,4 @@
-import { teacherFor } from './teachers.js';
+import { teacherFor, teacherFromMail } from './teachers.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -35,9 +35,28 @@ export interface CourseDigest {
    * Classroom knows and will not say without a roster scope. See teachers.ts.
    */
   teacher: string | null;
+  /**
+   * The last day anything happened in this course, or null.
+   *
+   * Half of "is this course over". A document written in August said the
+   * student was preparing for an exam whose course last set work the previous
+   * November, because the digest carried no time at all -- for a vault whose
+   * every note is dated.
+   */
+  lastSeen: string | null;
+  /** The last day work was due in it. The other half. */
+  lastDue: string | null;
 }
 
 export interface VaultDigest {
+  /**
+   * Today, as the vault sees it.
+   *
+   * A model has no clock. Told only that a course last ran in June, it cannot
+   * tell whether that was last week or last year, and it wrote the summer
+   * holidays as though term were still running.
+   */
+  today: string;
   courses: CourseDigest[];
   /** Everything in the vault, so the writer knows how much it is speaking for. */
   notes: number;
@@ -50,6 +69,25 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
 
   const linked = (name: string) => (note: { body: string }) => note.body.includes(`[[${name}]]`);
+  const courseNames = entities.filter((n) => n.description === 'Course').map((n) => n.name);
+
+  /*
+   * Every piece of mail, with who sent it and which courses it names.
+   *
+   * Built once here rather than per course: it is the raw material for the
+   * better of the two ways to find a teacher. See teachers.ts.
+   */
+  const mail = episodes
+    .filter((e) => e.actor)
+    .map((e) => ({
+      actor: e.actor as string,
+      courses: [...e.body.matchAll(/\[\[([^\]]+)\]\]/g)]
+        .map((m) => m[1] as string)
+        .filter((name) => courseNames.includes(name)),
+    }))
+    .filter((item) => item.courses.length > 0);
+
+  const dayOf = (at: string | undefined) => (at ? at.slice(0, 10) : null);
   const assignments = entities.filter((n) => n.description === 'Assignment');
   const materials = entities.filter(
     (n) => n.description === 'Material' || n.description === 'File',
@@ -60,10 +98,35 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
     .map((course) => ({
       name: course.name,
       setsWork: assignments.some(linked(course.name)),
-      teacher: teacherFor(
+      /*
+       * Two independent readings, and either will do.
+       *
+       * The announcements name a teacher for four courses of nineteen and
+       * know nothing of maths, English or science; who writes to the class
+       * reaches exactly those. Preferring the announcement is arbitrary but
+       * harmless -- both are evidence about the same course, and neither
+       * fires without a clear lead.
+       */
+      teacher:
+        teacherFor(
+          episodes
+            .filter((e) => e.source === 'classroom' && e.body.includes(`[[${course.name}]]`))
+            .map((e) => e.body),
+        ) ?? teacherFromMail(mail, course.name),
+      lastSeen: dayOf(
         episodes
-          .filter((e) => e.source === 'classroom' && e.body.includes(`[[${course.name}]]`))
-          .map((e) => e.body),
+          .filter((e) => e.occurred && linked(course.name)(e))
+          .map((e) => e.occurred as string)
+          .sort()
+          .at(-1),
+      ),
+      lastDue: dayOf(
+        assignments
+          .filter(linked(course.name))
+          .map((w) => /^Due: (\S+)/m.exec(w.body)?.[1])
+          .filter((at): at is string => Boolean(at))
+          .sort()
+          .at(-1),
       ),
       // Used only to tell a real course from an empty shell, then dropped. It
       // never reaches the writer.
@@ -78,7 +141,13 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
      */
     .filter((c) => c.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .map(({ name, setsWork, teacher }) => ({ name, setsWork, teacher }));
+    .map(({ name, setsWork, teacher, lastSeen, lastDue }) => ({
+      name,
+      setsWork,
+      teacher,
+      lastSeen,
+      lastDue,
+    }));
 
   const times = episodes
     .map((e) => e.occurred)
@@ -94,6 +163,7 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
    * that list with the course list, confidently and wrongly.
    */
   return {
+    today: new Date().toISOString().slice(0, 10),
     courses,
     notes: entities.length + episodes.length,
     from: times[0]?.slice(0, 10) ?? null,

@@ -118,3 +118,73 @@ export function teacherFor(announcements: readonly string[]): string | null {
   const runnerUp = ranked[1]?.[1] ?? 0;
   return leader[1] >= runnerUp * CLEAR_LEAD ? leader[0] : null;
 }
+
+/** One mail episode: who sent it, and which courses it mentions. */
+export interface CourseMail {
+  actor: string;
+  courses: readonly string[];
+}
+
+/** Below this, somebody wrote once and is not the teacher. */
+const ENOUGH_LETTERS = 3;
+
+/** How much of a person's course mail must be about one course to count. */
+const EXCLUSIVE_ENOUGH = 0.7;
+
+/**
+ * The teacher of a course, from who writes to the class about it.
+ *
+ * The better of the two signals, and the one that reaches the subjects. A
+ * teacher writes to their own class and almost nobody else's: on a real
+ * account Daniella Malka's course mail was entirely about Grade 10 Math and
+ * Mrs Irwin's entirely about enriched English -- the two subjects whose
+ * announcements name nobody at all.
+ *
+ * Exclusivity is what makes it safe. The most prolific sender on that account
+ * wrote about maths, French and robotics alike, which is what an
+ * administrator looks like, and taking the loudest voice per course is exactly
+ * what produced a wrong teacher the first time this was attempted.
+ */
+export function teacherFromMail(mail: readonly CourseMail[], course: string): string | null {
+  /*
+   * People are counted by surname, and reported by their fullest name.
+   *
+   * One vault held "Sarah Mahoney" seven times and "Ms. Mahoney" four: one
+   * woman who loses to nobody when counted together and to everybody when
+   * counted apart.
+   */
+  const spread = new Map<string, { here: number; total: number; names: Map<string, number> }>();
+
+  for (const item of mail) {
+    const key = surnameOf(item.actor);
+    if (!key) continue;
+    const person = spread.get(key) ?? { here: 0, total: 0, names: new Map<string, number>() };
+    person.total += item.courses.length;
+    person.here += item.courses.filter((name) => name === course).length;
+    person.names.set(item.actor, (person.names.get(item.actor) ?? 0) + 1);
+    spread.set(key, person);
+  }
+
+  let best: { name: string; here: number } | null = null;
+  for (const person of spread.values()) {
+    if (person.here < ENOUGH_LETTERS) continue;
+    if (person.here / person.total < EXCLUSIVE_ENOUGH) continue;
+    if (best && person.here <= best.here) continue;
+
+    // The fullest rendering, so "Sarah Mahoney" beats "Ms. Mahoney".
+    const [fullest] = [...person.names.keys()].sort((a, b) => b.length - a.length);
+    best = { name: fullest as string, here: person.here };
+  }
+
+  return best?.name ?? null;
+}
+
+/** The surname in a name, however that name was written. */
+function surnameOf(actor: string): string | null {
+  const words = actor
+    .replace(/\b(M|Mme|Mr|Mrs|Ms|Madame|Monsieur|Dr)\.?\s+/gi, '')
+    .trim()
+    .split(/\s+/);
+  const last = words.at(-1);
+  return last && last.length > 1 ? last.toLowerCase() : null;
+}

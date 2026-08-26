@@ -76,6 +76,7 @@ export async function writeUserDoc(
           role: 'user',
           content: [
             name ? `The student is ${name}.` : "The student's name is not known.",
+            `Today is ${digest.today}.`,
             `Their vault covers ${digest.from ?? 'an unknown period'}${
               digest.to ? ` to ${digest.to}` : ''
             }.`,
@@ -91,11 +92,14 @@ export async function writeUserDoc(
              * them, or not at all.
              */
             'Their courses. "sets work" is a hint that it is a taught subject',
-            'rather than a club, and only a hint:',
+            'rather than a club, and only a hint. "last activity" is the most',
+            'recent thing that happened in it and "last due" the final deadline',
+            'it set -- together they say whether a course is running or over:',
             ...digest.courses.map(
               (c) =>
                 `${c.name} — ${c.setsWork ? 'sets work' : 'sets no work'}` +
-                (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown'),
+                (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown') +
+                `, last activity ${c.lastSeen ?? 'never'}, last due ${c.lastDue ?? 'never'}`,
             ),
             '',
             "Where a teacher is named above it was read from that course's own",
