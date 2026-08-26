@@ -46,19 +46,59 @@ describe('digesting a vault for the profile writer', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-  it('says whether a course sets work, not how much', async () => {
+  it('reports what kind of thing a course is, from a settled claim', () => {
     /*
-     * How many pieces of work a course set turned out to be the least useful
-     * thing in the generated document and the bulk of its length: "science
-     * and technology (61 pieces of work and 167 files/readings), extended
-     * history (43 and 86)". None of that changes what an agent says.
-     *
-     * What is worth one bit: whether it is a subject or a club. A course that
-     * sets work is a lesson; one that never has is Model UN.
+     * Everything arrives from Google Classroom as a "course", and this was
+     * guessed from whether any work had ever been set -- a bit that is wrong
+     * in both directions, since a club that once posted a form sets work and a
+     * subject marked on paper does not. Worse, the guess was handed to the
+     * writer as a "hint" for it to make something of, which is the same
+     * fragment-shuffling one level along.
      */
-    const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'drama-10a')?.setsWork).toBe(true);
-    expect(digest.courses).not.toHaveProperty('0.assignments');
+    return (async () => {
+      const digest = await vaultDigest(vault, [
+        {
+          subject: 'french-10',
+          relation: 'is',
+          object: 'a house or form group',
+          basis: 'inferred',
+          evidence: [{ note: 'n1', quote: 'House points assembly Thursday.' }],
+          confidence: 0.9,
+        },
+      ]);
+
+      expect(digest.courses.find((c) => c.name === 'french-10')?.kind).toBe(
+        'a house or form group',
+      );
+      expect(digest.courses.find((c) => c.name === 'drama-10a')?.kind).toBeNull();
+    })();
+  });
+
+  it('reports whether a course is running, rather than dates to reason from', () => {
+    /*
+     * The digest used to hand over the last thing that happened and the last
+     * deadline set, and leave the writer to work out where in a school year
+     * that fell -- a judgement about terms and holidays, made in a pass with
+     * no room for it. A document written in late August had a student
+     * preparing for an exam sat the previous November.
+     */
+    return (async () => {
+      const digest = await vaultDigest(vault, [
+        {
+          subject: 'french-10',
+          relation: 'is currently',
+          object: 'finished',
+          basis: 'inferred',
+          evidence: [{ note: 'n1', quote: '2025-11-20: last thing that happened.' }],
+          confidence: 0.9,
+        },
+      ]);
+
+      expect(digest.courses.find((c) => c.name === 'french-10')?.state).toBe('finished');
+      // And a course nothing was settled about says nothing, rather than
+      // borrowing a state from the course next to it.
+      expect(digest.courses.find((c) => c.name === 'drama-10a')?.state).toBeNull();
+    })();
   });
 
   it('takes a teacher from a settled claim rather than working one out', () => {
@@ -99,47 +139,6 @@ describe('digesting a vault for the profile writer', () => {
     await entity('cas-2026-2027', 'Course', 'CAS, on Google Classroom.');
     const digest = await vaultDigest(vault);
     expect(digest.courses.map((c) => c.name)).not.toContain('cas-2026-2027');
-  });
-
-  it('says when each course was last doing anything', async () => {
-    /*
-     * The document said this student was "preparing for the history exam and
-     * completing an IB MYP Personal Project" on the 26th of August. The exam
-     * prep course last set work in November and the Personal Project in
-     * February. Both had been over for months, and the vault knew: every note
-     * in them is dated and nothing had happened since.
-     *
-     * A digest with no time in it, for a vault whose whole design is
-     * temporal, is how that happened.
-     */
-    await vault.write({
-      name: '2026-06-10-a-notice',
-      kind: 'episode',
-      source: 'classroom',
-      description: 'Announcement in French 10',
-      occurred: '2026-06-10T10:00:00Z',
-      body: 'In [[french-10]].',
-    });
-
-    const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'french-10')?.lastSeen).toBe('2026-06-10');
-    // Drama has assignments but no dated activity, so it has none to report.
-    expect(digest.courses.find((c) => c.name === 'drama-10a')?.lastSeen).toBeNull();
-  });
-
-  it('reports the last date work was due in a course', async () => {
-    // The other half of "is this course over": a course whose last deadline
-    // was nine months ago is not one they are in the middle of.
-    await vault.write({
-      name: 'old-essay',
-      kind: 'entity',
-      source: 'classroom',
-      description: 'Assignment',
-      body: 'Old essay.\n\nPart of [[french-10]].\nDue: 2025-11-24T03:59',
-    });
-
-    const digest = await vaultDigest(vault);
-    expect(digest.courses.find((c) => c.name === 'french-10')?.lastDue).toBe('2025-11-24');
   });
 
   it('says what day it is, because nothing else in the prompt does', async () => {

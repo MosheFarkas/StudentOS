@@ -35,11 +35,18 @@ function fake(reply: (prompt: string) => object) {
   };
 }
 
-/** Clears anything it is shown. Isolates what the rest of the pass does. */
+/**
+ * Clears whatever it is shown, and answers only the teacher question.
+ *
+ * Every other inquiry abstains, so a test about who teaches a course measures
+ * that and not the four questions running around it.
+ */
 const agreeable = (answer: string) => (prompt: string) =>
   prompt.includes('Trying to knock a claim down')
     ? { refuted: false }
-    : { answer, confidence: 0.9, evidence: [findNote(prompt)], alternatives: [] };
+    : prompt.includes('Who teaches')
+      ? { answer, confidence: 0.9, evidence: [findNote(prompt)], alternatives: [] }
+      : { answer: null };
 
 const findNote = (prompt: string) =>
   /^- (\S+):/m.exec(prompt.split('The evidence')[1] ?? '')?.[1] ?? '';
@@ -105,10 +112,15 @@ describe('turning a vault into claims', () => {
     });
   });
 
-  it('spends nothing on a course no member of staff goes near', async () => {
+  it('never asks who teaches a course no member of staff goes near', async () => {
     /*
      * The cheapest abstention there is, and the most common. A course whose
-     * evidence names nobody cannot produce an answer, so nothing is asked.
+     * evidence names nobody cannot produce a teacher, so that question is
+     * never put -- a question not asked cannot be answered wrongly, and it
+     * costs nothing.
+     *
+     * The other questions still run: what kind of thing it is, and whether it
+     * is going on, are answerable here and worth knowing.
      */
     await course('cas-2026');
     await person('daniella-malka', 'Daniella Malka', 'dmalka@wearelcc.ca');
@@ -120,8 +132,8 @@ describe('turning a vault into claims', () => {
       studentDomain: 'wearelcc.ca',
     });
 
-    expect(settled).toEqual([]);
-    expect(prompts).toEqual([]);
+    expect(prompts.filter((p) => p.includes('Who teaches'))).toEqual([]);
+    expect(settled.filter((c) => c.relation === 'taught by')).toEqual([]);
   });
 
   it('asks about each course separately rather than all at once', async () => {

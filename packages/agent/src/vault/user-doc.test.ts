@@ -69,12 +69,20 @@ describe('writing the user document', () => {
   });
 
   it('gives the writer the counts rather than the vault', async () => {
-    // Three and a half thousand notes will not fit in a prompt and would cost
-    // a fortune per rebuild if they did.
+    /*
+     * Three and a half thousand notes will not fit in a prompt and would cost
+     * a fortune per rebuild if they did.
+     *
+     * The writer is the last call, not the first. Understanding the vault
+     * happens before it and does read note text -- that is the whole job of
+     * those passes, each over a bundle of a dozen quotes about one thing. What
+     * must not happen is the writer being handed the raw material a second
+     * time, on top of the answers it was given.
+     */
     const llm = llmSaying('Fine.');
     await writeUserDoc({ llm } as never, { vault, userId: 'u1' });
 
-    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    const sent = JSON.stringify(llm.chat.mock.calls.at(-1)?.[0]);
     expect(sent).toContain('french-10');
     expect(sent).not.toContain('Culture essay.');
   });

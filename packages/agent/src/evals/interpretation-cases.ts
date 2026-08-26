@@ -30,11 +30,30 @@ export interface FixtureEpisode {
   on?: string;
 }
 
+/**
+ * Which kind of reasoning a case is testing.
+ *
+ * Not decoration: each maps to a different question the vault asks itself, and
+ * they fail in different ways. Typing a person is recognising a description
+ * somebody wrote; typing a course is judging what happens inside it against a
+ * name that may be lying; deciding who teaches it is relational inference over
+ * several people; deciding whether it is running is reasoning about where
+ * today falls in a school year. A pass that is good at one of these is not
+ * thereby good at any of the others, and only measuring them apart shows it.
+ */
+export type Domain = 'role' | 'kind' | 'teacher' | 'running';
+
 export interface InterpretationCase {
   id: string;
+  domain: Domain;
   /** What went wrong when this shape reached production. */
   trap: string;
+  /** The course, or for a role case the person's note. */
+  subject: string;
+  /** The course whose notes make up the fixture. */
   course: string;
+  /** Told to the pass, for the cases that turn on it. */
+  today?: string;
   people: FixtureNote[];
   episodes: FixtureEpisode[];
   /** The correct answer, or null when the honest answer is that nobody knows. */
@@ -86,8 +105,10 @@ const initial = (full: string) => {
 export const INTERPRETATION_CASES: InterpretationCase[] = [
   {
     id: 'clear-teacher',
+    domain: 'teacher',
     trap: 'The easy case. If this fails, the pass is too shy to be useful.',
     course: 'chemistry-10',
+    subject: 'chemistry-10',
     people: [staff('Anna Bell')],
     episodes: [
       {
@@ -106,8 +127,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'classmate-only-writes-about-maths',
+    domain: 'teacher',
     trap: 'A Grade 10 student was named the maths teacher. She emailed about maths and nothing else, which looks exactly like devotion to one subject and is in fact what struggling with one subject looks like.',
     course: 'maths-10',
+    subject: 'maths-10',
     people: [pupil('Daniella Malka'), staff('Chris George')],
     episodes: [
       {
@@ -136,8 +159,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'house-shares-a-name-with-a-subject',
+    domain: 'teacher',
     trap: 'The failure that started this. French is a house here as well as a subject, and the head of French house was named the French teacher. Two uses of one word are two things until something joins them.',
     course: 'french-10',
+    subject: 'french-10',
     people: [staff('Lucia Coretti')],
     episodes: [
       {
@@ -156,8 +181,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'head-of-year-writes-to-every-class',
+    domain: 'teacher',
     trap: 'A head of year was named the teacher of a course he wrote to constantly. He wrote to every course he looked after, which is what heads of year do.',
     course: 'history-10',
+    subject: 'history-10',
     people: [staff('Chris George'), staff('Gillian Shadley')],
     episodes: [
       {
@@ -186,8 +213,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'two-staff-named-equally',
+    domain: 'teacher',
     trap: 'The exact French error: a tie between two members of staff was broken on one piece of mail against none, and the answer it produced was wrong. One is not a lead over zero.',
     course: 'spanish-10',
+    subject: 'spanish-10',
     people: [staff('Anna Marzilli'), staff('Marie Duval')],
     episodes: [
       {
@@ -206,8 +235,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'attached-parses-as-a-name',
+    domain: 'teacher',
     trap: '"M. Attached" was named a teacher eight times over, because every note listing a file says "Attached:" and M. is a French title in a bilingual school.',
     course: 'geography-10',
+    subject: 'geography-10',
     people: [staff('Luc Tremblay')],
     episodes: [
       {
@@ -226,8 +257,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'trip-organiser',
+    domain: 'teacher',
     trap: 'Writing to a class often is what teachers do. It is also what trip organisers, librarians and the person running the bus list do.',
     course: 'biology-10',
+    subject: 'biology-10',
     people: [staff('Ngozi Okafor')],
     episodes: [
       {
@@ -251,8 +284,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'club-lead-is-not-a-teacher',
+    domain: 'teacher',
     trap: 'A club that once posted a form has set work. That does not make whoever runs it anybody’s teacher, and the document is not supposed to say it does.',
     course: 'model-un',
+    subject: 'model-un',
     people: [staff('Irina Petrov')],
     episodes: [
       {
@@ -271,8 +306,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'admin-notice-only',
+    domain: 'teacher',
     trap: 'Presence is not a relation. Somebody named in a course is involved in it; nothing about that says what they do there.',
     course: 'english-10',
+    subject: 'english-10',
     people: [staff('Sofia Ramirez')],
     episodes: [
       {
@@ -286,8 +323,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'teacher-who-also-runs-a-club',
+    domain: 'teacher',
     trap: 'The rule that rewarded exclusivity threw out the real teacher for also coaching robotics, and handed the subject to a classmate who only ever wrote about it.',
     course: 'physics-10',
+    subject: 'physics-10',
     people: [staff('Ken Nakamura')],
     episodes: [
       {
@@ -311,8 +350,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'shared-surname',
+    domain: 'teacher',
     trap: 'Surname matching joined two different people at this school. A parent and a member of staff sharing a surname is not exotic, and neither is a sibling.',
     course: 'drama-10',
+    subject: 'drama-10',
     people: [staff('Anna Bell'), pupil('Tom Bell')],
     episodes: [
       {
@@ -331,8 +372,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'former-teacher-left',
+    domain: 'teacher',
     trap: 'A course that changed hands. The recent half of the evidence is the half that is still true, and a count over the whole year prefers whoever was there longest.',
     course: 'geometry-10',
+    subject: 'geometry-10',
     people: [staff('Joao Silva'), staff('Tolu Adeyemi')],
     episodes: [
       {
@@ -381,8 +424,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'teacher-never-writes',
+    domain: 'teacher',
     trap: 'The strongest bait there is. The person who actually teaches this class never emails; a prefect on the staff mail system runs everything visible about it. Every signal points at somebody who is not the answer.',
     course: 'latin-10',
+    subject: 'latin-10',
     people: [staff('Robert Hale')],
     episodes: [
       {
@@ -406,8 +451,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'covering-a-lesson',
+    domain: 'teacher',
     trap: 'A colleague taking one lesson looks exactly like the person who teaches the course, unless you read the sentence that says otherwise.',
     course: 'economics-10',
+    subject: 'economics-10',
     people: [staff('Eszter Varga')],
     episodes: [
       {
@@ -426,8 +473,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'department-head-speaks-for-the-team',
+    domain: 'teacher',
     trap: 'Institutional we. A head of department writing "we have set" sounds like the person who set it, and is not.',
     course: 'art-10',
+    subject: 'art-10',
     people: [staff('Claire Dubois')],
     episodes: [
       {
@@ -458,8 +507,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
      * this asks it to. Answering "Ada Okonkwo" flatly still fails.
      */
     id: 'student-teacher-on-placement',
+    domain: 'teacher',
     trap: 'A trainee does everything a teacher does and is introduced once, in a sentence nobody rereads. Naming her without saying she is on placement states something arguable as settled.',
     course: 'music-10',
+    subject: 'music-10',
     people: [staff('Ada Okonkwo'), staff('Erik Lindqvist')],
     episodes: [
       {
@@ -489,8 +540,10 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
 
   {
     id: 'parent-volunteer-on-staff-mail',
+    domain: 'teacher',
     trap: 'The domain rule does most of the work here, and this is the case that breaks it: a volunteer with a staff address, doing organising that reads as teaching.',
     course: 'design-10',
+    subject: 'design-10',
     people: [staff('James Whitfield')],
     episodes: [
       {
@@ -505,5 +558,271 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
       },
     ],
     expect: null,
+  },
+
+  /*
+   * Below here: the other things the vault has to work out.
+   *
+   * Naming a teacher was never the whole job, and a pass that is good at it is
+   * not thereby good at deciding what a course is or whether it is still
+   * going. These fail differently -- one is recognising a description somebody
+   * wrote, one is judging a thing against a name that may be lying, one is
+   * reasoning about where today falls in a school year -- so they are measured
+   * apart.
+   */
+
+  {
+    id: 'role-head-of-year',
+    domain: 'role',
+    trap: 'A head of year writes to every class he looks after and says so exactly once, in whichever one he happened to be writing to.',
+    course: 'history-10',
+    subject: 'chris-george',
+    people: [staff('Chris George')],
+    episodes: [
+      {
+        id: 'r1',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. Reports go home Friday and the assembly moves to period 3. In [[history-10]].',
+      },
+      {
+        id: 'r2',
+        actor: 'Chris George',
+        body: 'Mr George. Lockers cleared before the break, please. In [[history-10]].',
+      },
+    ],
+    expect: 'Head of Grade 10',
+  },
+
+  {
+    id: 'role-librarian',
+    domain: 'role',
+    trap: 'A one-word appositive is still a role, and chasing overdue books across every class looks like teaching all of them.',
+    course: 'english-10',
+    subject: 'sofia-ramirez',
+    people: [staff('Sofia Ramirez')],
+    episodes: [
+      {
+        id: 'r1',
+        actor: 'Sofia Ramirez',
+        body: 'Ms Ramirez, Library. Overdue books must come back before the end of term. In [[english-10]].',
+      },
+    ],
+    expect: 'Library',
+  },
+
+  {
+    id: 'role-never-stated',
+    domain: 'role',
+    trap: 'Most people never say what they are. Inventing something plausible is the failure, and there is always something plausible.',
+    course: 'maths-10',
+    subject: 'anna-bell',
+    people: [staff('Anna Bell')],
+    episodes: [
+      {
+        id: 'r1',
+        actor: 'Anna Bell',
+        body: 'Mrs Bell. The test is Tuesday and I will go over the review in class. In [[maths-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'role-instruction-not-a-description',
+    domain: 'role',
+    trap: 'A comma after a name is usually somebody being asked to do something, not somebody being described.',
+    course: 'maths-10',
+    subject: 'chris-george',
+    people: [staff('Chris George'), staff('Anna Bell')],
+    episodes: [
+      {
+        id: 'r1',
+        actor: 'Anna Bell',
+        body: 'Mr George, please bring the register to the meeting. In [[maths-10]].',
+      },
+    ],
+    expect: null,
+  },
+
+  {
+    id: 'kind-house-not-subject',
+    domain: 'kind',
+    trap: 'The failure that started all of this. A house called French and a subject called French are two things, and only what happens inside tells them apart.',
+    course: 'french-10',
+    subject: 'french-10',
+    people: [staff('Lucia Coretti')],
+    episodes: [
+      {
+        id: 'k1',
+        actor: 'Lucia Coretti',
+        body: 'Mme Coretti, Head of French House. House points assembly Thursday in the gym. French House is second. In [[french-10]].',
+      },
+      {
+        id: 'k2',
+        actor: 'Lucia Coretti',
+        body: 'Mme Coretti. Sign-ups for the swim gala close Friday. All four houses compete. In [[french-10]].',
+      },
+    ],
+    expect: 'a house or form group',
+  },
+
+  {
+    id: 'kind-real-subject',
+    domain: 'kind',
+    trap: 'The easy direction. A pass too cautious to call a subject a subject is no use to anybody.',
+    course: 'chemistry-10',
+    subject: 'chemistry-10',
+    people: [staff('Anna Bell')],
+    episodes: [
+      {
+        id: 'k1',
+        actor: 'Anna Bell',
+        body: 'Mrs Bell. Titration write-ups are marked. We start Unit 4 in Tuesday lesson. In [[chemistry-10]].',
+      },
+      {
+        id: 'k2',
+        actor: 'Anna Bell',
+        body: 'Mrs Bell. The practical assessment is due Friday, bring lab books. In [[chemistry-10]].',
+      },
+    ],
+    expect: 'a taught subject',
+  },
+
+  {
+    id: 'kind-club-that-sets-work',
+    domain: 'kind',
+    trap: 'A club that sets work was called a subject by the bit that used to decide this: position papers and deadlines look exactly like homework.',
+    course: 'model-un',
+    subject: 'model-un',
+    people: [staff('Irina Petrov')],
+    episodes: [
+      {
+        id: 'k1',
+        actor: 'Irina Petrov',
+        body: 'Ms Petrov. Position papers are due before we travel to the conference. Delegations assigned at the Wednesday lunch meeting. In [[model-un]].',
+      },
+      {
+        id: 'k2',
+        actor: 'Irina Petrov',
+        body: 'Ms Petrov. Model UN meets Wednesday lunchtime in room 12. New members welcome. In [[model-un]].',
+      },
+    ],
+    expect: 'a club or activity',
+  },
+
+  {
+    id: 'kind-noticeboard',
+    domain: 'kind',
+    trap: 'A group somebody made to send out bus times and photo days is not a subject, however much traffic it carries.',
+    course: 'grade-10-notices',
+    subject: 'grade-10-notices',
+    people: [staff('Chris George')],
+    episodes: [
+      {
+        id: 'k1',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. Photo day Wednesday, full uniform for every Grade 10 class. In [[grade-10-notices]].',
+      },
+      {
+        id: 'k2',
+        actor: 'Chris George',
+        body: 'Mr George, Head of Grade 10. The bus for the away fixture leaves at 3.15 from the front gate. In [[grade-10-notices]].',
+      },
+    ],
+    expect: 'an administrative or information group',
+  },
+
+  {
+    id: 'running-finished-last-year',
+    domain: 'running',
+    trap: 'A document written in late August had a student preparing for an exam sat the previous November. Every note was dated and nothing had a clock.',
+    course: 'history-10',
+    subject: 'history-10',
+    today: '2026-08-26',
+    people: [staff('Gillian Shadley')],
+    episodes: [
+      {
+        id: 't1',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. Welcome to the course. In [[history-10]].',
+        on: '2025-09-05',
+      },
+      {
+        id: 't2',
+        actor: 'Gillian Shadley',
+        body: 'Ms Shadley. Last revision session before the exam. In [[history-10]].',
+        on: '2025-11-20',
+      },
+    ],
+    expect: 'finished',
+  },
+
+  {
+    id: 'running-over-the-christmas-break',
+    domain: 'running',
+    trap: 'The case a threshold in days cannot get right. Three silent weeks in January is a holiday; three silent weeks in August is a year that ended.',
+    course: 'physics-10',
+    subject: 'physics-10',
+    today: '2026-01-06',
+    people: [staff('Ken Nakamura')],
+    episodes: [
+      {
+        id: 't1',
+        actor: 'Ken Nakamura',
+        body: 'Mr Nakamura. Welcome, first lesson Monday. In [[physics-10]].',
+        on: '2025-09-04',
+      },
+      {
+        id: 't2',
+        actor: 'Ken Nakamura',
+        body: 'Mr Nakamura. Have a good break, we pick up circular motion in January. In [[physics-10]].',
+        on: '2025-12-18',
+      },
+    ],
+    expect: 'running',
+  },
+
+  {
+    id: 'running-not-started',
+    domain: 'running',
+    trap: 'A course dated a year ahead of the rest has not started, and belongs in neither what they take nor what they took.',
+    course: 'ib-diploma-2027',
+    subject: 'ib-diploma-2027',
+    today: '2026-08-26',
+    people: [staff('Marie Duval')],
+    episodes: [
+      {
+        id: 't1',
+        actor: 'Marie Duval',
+        body: 'Mme Duval. Induction for next year runs in September 2027. Nothing to do yet. In [[ib-diploma-2027]].',
+        on: '2027-09-01',
+      },
+    ],
+    expect: 'not yet started',
+  },
+
+  {
+    id: 'running-active-this-week',
+    domain: 'running',
+    trap: 'The easy direction again. Something that happened three days ago is going on.',
+    course: 'geometry-10',
+    subject: 'geometry-10',
+    today: '2026-01-06',
+    people: [staff('Tolu Adeyemi')],
+    episodes: [
+      {
+        id: 't1',
+        actor: 'Tolu Adeyemi',
+        body: 'Ms Adeyemi. Term starts, first lesson Tuesday. In [[geometry-10]].',
+        on: '2025-09-03',
+      },
+      {
+        id: 't2',
+        actor: 'Tolu Adeyemi',
+        body: 'Ms Adeyemi. Trigonometry assignment due Thursday. In [[geometry-10]].',
+        on: '2026-01-03',
+      },
+    ],
+    expect: 'running',
   },
 ];

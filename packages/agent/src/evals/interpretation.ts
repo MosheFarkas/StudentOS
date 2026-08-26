@@ -10,6 +10,7 @@ import { understandVault } from '../vault/understand.js';
 import {
   INTERPRETATION_CASES,
   STUDENT_DOMAIN,
+  type Domain,
   type InterpretationCase,
 } from './interpretation-cases.js';
 
@@ -78,6 +79,53 @@ const NAIVE = [
 
 type ArmName = 'naive' | 'contract' | 'full';
 
+/** Which settled claim answers each kind of case. */
+const RELATION: Record<Domain, string> = {
+  role: 'works at the school as',
+  kind: 'is',
+  teacher: 'taught by',
+  running: 'is currently',
+};
+
+/**
+ * How much ordinary school traffic to bury each case in.
+ *
+ * The fixtures are four notes and two people, and a real vault is three and a
+ * half thousand notes about sixty people and nineteen courses. A pass that
+ * only works on the tidy version has not been shown to work: the failure mode
+ * the whole design is built against -- a fact going missing among material
+ * that looks exactly as relevant -- cannot appear at four notes.
+ *
+ * The noise is deliberately the damaging kind. Not lorem: more staff, writing
+ * more admin, into the same course. Anything less similar would be a lighter
+ * test than reality.
+ */
+const NOISE = Math.max(0, Number(process.env.NOISE ?? 0));
+
+const FILLER = [
+  'Reminder that the bus for the away fixture leaves at 3.15 from the front gate.',
+  'Photo day is Wednesday. Full uniform, and bring your tie.',
+  'The library will be closed on Friday afternoon for stocktaking.',
+  'Please make sure lockers are cleared before the end of term.',
+  'Lost property is overflowing again. Anything unclaimed goes to charity.',
+  'The fire drill this morning went well. Thank you for filing out quietly.',
+  'Sign-ups for the winter concert close at the end of the week.',
+  'A reminder that phones stay in bags during lessons.',
+  'Parents evening bookings open on Monday at 6pm.',
+  'The canteen menu has changed for next half term.',
+];
+
+const NOISE_STAFF = [
+  'Peter Ashworth',
+  'Fiona Braithwaite',
+  'Ravi Chandran',
+  'Helena Dvorak',
+  'Marcus Eze',
+  'Yuki Fujimoto',
+  'Grace Halloran',
+  'Tomas Iversen',
+];
+
 interface Outcome {
   answered: string | null;
   /** The words limiting the claim, where it carried any. */
@@ -112,6 +160,17 @@ async function fixture(root: string, testCase: InterpretationCase): Promise<Vaul
     });
   }
 
+  for (const who of NOISE > 0 ? NOISE_STAFF : []) {
+    await vault.write({
+      name: who.toLowerCase().replace(/\s+/g, '-'),
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: `${who[0]?.toLowerCase() ?? 'x'}${(who.split(' ')[1] ?? '').toLowerCase()}@lcc.ca`,
+      body: `${who}, at ${who[0]?.toLowerCase() ?? 'x'}${(who.split(' ')[1] ?? '').toLowerCase()}@lcc.ca.`,
+    });
+  }
+
   for (const person of testCase.people) {
     await vault.write({
       name: person.name,
@@ -120,6 +179,37 @@ async function fixture(root: string, testCase: InterpretationCase): Promise<Vaul
       description: 'Person',
       ...(person.email ? { externalId: person.email } : {}),
       body: `${person.full ?? person.name}, at ${person.email ?? 'unknown'}.`,
+    });
+  }
+
+  /*
+   * Ordinary traffic, from people who are not the answer, into the same
+   * course.
+   *
+   * Dated inside the case's own window on purpose. Noise is meant to test
+   * whether the right evidence can still be found among material that looks
+   * exactly as relevant -- not to change what is true. An earlier version
+   * dated it all to one October and thereby made a course that had not started
+   * look like one that had, so the pass was marked wrong for reading the
+   * fixture correctly.
+   */
+  const when = testCase.episodes
+    .map((e, index) => e.on ?? `2026-01-${String(index + 1).padStart(2, '0')}`)
+    .sort();
+  const from = Date.parse(`${when[0] ?? '2026-01-01'}T09:00:00Z`);
+  const to = Date.parse(`${when.at(-1) ?? '2026-01-02'}T09:00:00Z`);
+
+  for (let i = 0; i < NOISE; i++) {
+    const who = NOISE_STAFF[i % NOISE_STAFF.length] as string;
+    const at = new Date(from + ((to - from) * i) / Math.max(1, NOISE)).toISOString();
+    await vault.write({
+      name: `noise-${i}`,
+      kind: 'episode',
+      source: 'classroom',
+      description: `${who} wrote.`,
+      actor: who,
+      occurred: at,
+      body: `${who.split(' ')[1] ?? who}. ${FILLER[i % FILLER.length] as string} In [[${testCase.course}]].`,
     });
   }
 
@@ -149,6 +239,17 @@ async function runArm(
 
     if (arm === 'naive') {
       /*
+       * The naive arm only ever knew how to ask one question.
+       *
+       * That is the honest baseline for the domains added since: there was no
+       * pass deciding what a course was or whether it was still going, so
+       * there is nothing to compare against and the arm abstains. Inventing a
+       * naive version of a question the product never asked would be scoring
+       * against a strawman.
+       */
+      if (testCase.domain !== 'teacher') return { answered: null, calls: 0 };
+
+      /*
        * The narrowing runs for this arm too.
        *
        * It is deterministic and shared, so crediting it to the arms that came
@@ -156,7 +257,9 @@ async function runArm(
        * difference progress. What separates the arms is only what happens once
        * there is something to ask.
        */
-      const question = await askWhoTeaches(vault, testCase.course, STUDENT_DOMAIN);
+      const question = await askWhoTeaches(vault, testCase.course, {
+        studentDomain: STUDENT_DOMAIN,
+      });
       if (!question) return { answered: null, calls: 0 };
 
       const reply = await llm.chat(
@@ -200,17 +303,18 @@ async function runArm(
     const { settled } = await understandVault({ llm: counted }, vault, {
       userId: 'eval',
       studentDomain: STUDENT_DOMAIN,
+      ...(testCase.today ? { today: testCase.today } : {}),
     });
 
-    const teacher = settled.find(
-      (c) => c.subject === testCase.course && c.relation === 'taught by',
+    const found = settled.find(
+      (c) => c.subject === testCase.subject && c.relation === RELATION[testCase.domain],
     );
     const why = heard.at(-1);
     return {
-      answered: teacher?.object ?? null,
+      answered: found?.object ?? null,
       calls,
-      ...(teacher?.qualifier ? { qualifier: teacher.qualifier } : {}),
-      ...(why && !teacher ? { refutedWhy: why } : {}),
+      ...(found?.qualifier ? { qualifier: found.qualifier } : {}),
+      ...(why && !found ? { refutedWhy: why } : {}),
     };
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -327,6 +431,20 @@ function bar(value: number, width = 20): string {
   return '█'.repeat(filled) + '·'.repeat(width - filled);
 }
 
+/** Run with a bounded number in flight, keeping results in order. */
+async function pool<T, R>(items: readonly T[], width: number, run: (item: T) => Promise<R>) {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(width, items.length) }, async () => {
+      for (let i = next++; i < items.length; i = next++) {
+        out[i] = await run(items[i] as T);
+      }
+    }),
+  );
+  return out;
+}
+
 async function main(): Promise<void> {
   loadDotEnv();
 
@@ -340,25 +458,40 @@ async function main(): Promise<void> {
   }
 
   /*
-   * Repeats, because one run of twelve cases is one sample.
+   * Repeats, because one run of a corpus this size is one sample.
    *
-   * The first run of this eval showed the refutation step costing a correct
+   * An early run of this eval showed the refutation step costing a correct
    * answer and preventing nothing, which is a finding worth acting on and
    * exactly the kind of thing a single sample invents. A case that lands
    * differently across trials is unstable, and that is reported rather than
    * averaged away.
    */
   const trials = Math.max(1, Number(process.env.TRIALS ?? 3));
+  const width = Math.max(1, Number(process.env.CONCURRENCY ?? 6));
 
   const llm = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
-  const arms: ArmName[] = ['naive', 'contract', 'full'];
-  const knowable = INTERPRETATION_CASES.filter((c) => c.expect !== null).length;
+  const arms: ArmName[] = (process.env.ARMS?.split(',') as ArmName[]) ?? [
+    'naive',
+    'contract',
+    'full',
+  ];
+
+  const byDomain = (domain: Domain) => INTERPRETATION_CASES.filter((c) => c.domain === domain);
+  const domains: Domain[] = ['role', 'kind', 'teacher', 'running'];
 
   console.log(
-    `Model ${PLATFORM_MODEL} | ${INTERPRETATION_CASES.length} cases ` +
-      `(${knowable} answerable, ${INTERPRETATION_CASES.length - knowable} not) ` +
-      `x ${arms.length} arms x ${trials} trials\n`,
+    `Model ${PLATFORM_MODEL} | ${INTERPRETATION_CASES.length} cases across ${domains.length} ` +
+      `kinds of reasoning | ${arms.length} arms x ${trials} trials | noise ${NOISE}\n`,
   );
+  for (const domain of domains) {
+    const cases = byDomain(domain);
+    const answerable = cases.filter((c) => c.expect !== null).length;
+    console.log(
+      `  ${domain.padEnd(8)} ${String(cases.length).padStart(2)} cases ` +
+        `(${answerable} answerable, ${cases.length - answerable} not)`,
+    );
+  }
+  console.log('');
 
   const seen = new Map<ArmName, Map<string, Verdict[]>>();
   const spent = new Map<ArmName, number>();
@@ -370,14 +503,17 @@ async function main(): Promise<void> {
 
     for (let trial = 0; trial < trials; trial++) {
       process.stdout.write(`${arm.padEnd(9)} ${trial + 1}/${trials}  `);
-      for (const testCase of INTERPRETATION_CASES) {
-        let outcome: Outcome;
+      const outcomes = await pool(INTERPRETATION_CASES, width, async (testCase) => {
         try {
-          outcome = await runArm(arm, llm, testCase);
+          return await runArm(arm, llm, testCase);
         } catch (error) {
           console.error(`\n  ${testCase.id} failed:`, error);
-          outcome = { answered: null, calls: 0 };
+          return { answered: null, calls: 0 } as Outcome;
         }
+      });
+
+      for (const [index, outcome] of outcomes.entries()) {
+        const testCase = INTERPRETATION_CASES[index] as InterpretationCase;
         calls += outcome.calls;
         const verdict = grade(testCase, outcome);
         verdicts.set(testCase.id, [...(verdicts.get(testCase.id) ?? []), verdict]);
@@ -395,42 +531,65 @@ async function main(): Promise<void> {
 
   console.log('\n  ✓ right   · rightly said nothing   ? missed a knowable answer   ✗ WRONG\n');
 
-  const total = INTERPRETATION_CASES.length * trials;
-  const tally = (arm: ArmName, verdict: Verdict) =>
-    [...(seen.get(arm)?.values() ?? [])].flat().filter((v) => v === verdict).length;
+  const marks = (arm: ArmName, cases: readonly InterpretationCase[]) =>
+    cases.flatMap((c) => seen.get(arm)?.get(c.id) ?? []);
+  const rate = (list: Verdict[], of: Verdict) =>
+    list.length === 0 ? 0 : list.filter((v) => v === of).length / list.length;
 
   console.log('arm        hallucination rate    right   silent   missed   calls');
   for (const arm of arms) {
-    const wrong = tally(arm, 'hallucinated');
-    const rate = wrong / total;
+    const all = marks(arm, INTERPRETATION_CASES);
+    const answerable = INTERPRETATION_CASES.filter((c) => c.expect !== null).length * trials;
     console.log(
-      `${arm.padEnd(10)} ${bar(rate)} ${(rate * 100).toFixed(0).padStart(3)}%` +
-        `${`${tally(arm, 'correct')}/${knowable * trials}`.padStart(9)}` +
-        `${String(tally(arm, 'abstained')).padStart(9)}` +
-        `${String(tally(arm, 'missed')).padStart(9)}` +
+      `${arm.padEnd(10)} ${bar(rate(all, 'hallucinated'))} ` +
+        `${(rate(all, 'hallucinated') * 100).toFixed(0).padStart(3)}%` +
+        `${`${all.filter((v) => v === 'correct').length}/${answerable}`.padStart(9)}` +
+        `${String(all.filter((v) => v === 'abstained').length).padStart(9)}` +
+        `${String(all.filter((v) => v === 'missed').length).padStart(9)}` +
         `${String(spent.get(arm) ?? 0).padStart(8)}`,
     );
   }
 
-  console.log('\nper case (one mark per trial):\n');
-  const width = Math.max(...INTERPRETATION_CASES.map((c) => c.id.length));
-  console.log(
-    `${'case'.padEnd(width)}  naive${' '.repeat(trials)}contract${' '.repeat(trials)}full`,
-  );
-  for (const testCase of INTERPRETATION_CASES) {
-    const marks = (arm: ArmName) =>
-      (seen.get(arm)?.get(testCase.id) ?? []).map((v) => MARK[v]).join('');
+  /*
+   * Per kind of reasoning, because one number hides the answer.
+   *
+   * A pass that names teachers well and cannot tell a house from a subject
+   * averages out to something respectable, and the average is what would get
+   * shipped.
+   */
+  const best = arms.at(-1) as ArmName;
+  console.log(`\nwhere ${best} stands, by kind of reasoning:\n`);
+  console.log('reasoning   hallucination        right   silent   missed');
+  for (const domain of domains) {
+    const cases = byDomain(domain);
+    const list = marks(best, cases);
+    const answerable = cases.filter((c) => c.expect !== null).length * trials;
     console.log(
-      `${testCase.id.padEnd(width)}  ${marks('naive').padEnd(trials + 4)} ` +
-        `${marks('contract').padEnd(trials + 7)} ${marks('full')}`,
+      `${domain.padEnd(11)} ${bar(rate(list, 'hallucinated'))} ` +
+        `${(rate(list, 'hallucinated') * 100).toFixed(0).padStart(3)}%` +
+        `${`${list.filter((v) => v === 'correct').length}/${answerable}`.padStart(9)}` +
+        `${String(list.filter((v) => v === 'abstained').length).padStart(9)}` +
+        `${String(list.filter((v) => v === 'missed').length).padStart(9)}`,
     );
   }
 
-  /*
-   * A case that lands differently across its own trials is telling us the
-   * measurement is noisy there, not that an arm is better. Reporting the mean
-   * without this would turn a coin flip into a conclusion.
-   */
+  console.log('\nper case (one mark per trial):\n');
+  const width2 = Math.max(...INTERPRETATION_CASES.map((c) => c.id.length));
+  console.log(`${'case'.padEnd(width2)}  ${arms.map((a) => a.padEnd(trials + 3)).join('')}`);
+  for (const domain of domains) {
+    for (const testCase of byDomain(domain)) {
+      const row = arms
+        .map((arm) =>
+          (seen.get(arm)?.get(testCase.id) ?? [])
+            .map((v) => MARK[v])
+            .join('')
+            .padEnd(trials + 3),
+        )
+        .join('');
+      console.log(`${testCase.id.padEnd(width2)}  ${row}`);
+    }
+  }
+
   const unstable = INTERPRETATION_CASES.filter((c) =>
     arms.some((arm) => new Set(seen.get(arm)?.get(c.id) ?? []).size > 1),
   );
@@ -438,25 +597,22 @@ async function main(): Promise<void> {
     console.log(`\nunstable across trials: ${unstable.map((c) => c.id).join(', ')}`);
   }
 
-  const moved = INTERPRETATION_CASES.filter((c) => {
-    const worst = (arm: ArmName) =>
-      (seen.get(arm)?.get(c.id) ?? []).filter((v) => v === 'hallucinated').length;
-    const right = (arm: ArmName) =>
-      (seen.get(arm)?.get(c.id) ?? []).filter((v) => v === 'correct' || v === 'abstained').length;
-    return worst('naive') !== worst('full') || right('contract') !== right('full');
-  });
-
-  if (moved.length > 0) {
-    console.log('\nwhere the arms disagree:\n');
-    for (const testCase of moved) {
-      const line = (arm: ArmName) =>
-        `${arm.padEnd(9)} ${(seen.get(arm)?.get(testCase.id) ?? []).map((v) => MARK[v]).join('')}`;
-      console.log(`  ${testCase.id}  (expected ${testCase.expect ?? 'nobody'})`);
-      for (const arm of arms) console.log(`    ${line(arm)}`);
+  /*
+   * Everything the best arm still gets wrong, with the reason where there was
+   * one. This is the list the next round of work comes from.
+   */
+  const wrong = INTERPRETATION_CASES.filter((c) =>
+    (seen.get(best)?.get(c.id) ?? []).some((v) => v === 'hallucinated' || v === 'missed'),
+  );
+  if (wrong.length > 0) {
+    console.log(`\nstill wrong in ${best}:\n`);
+    for (const testCase of wrong) {
+      const got = (seen.get(best)?.get(testCase.id) ?? []).map((v) => MARK[v]).join('');
+      console.log(
+        `  ${testCase.id} [${testCase.domain}] ${got}  expected ${testCase.expect ?? 'nobody'}`,
+      );
       console.log(`    ${testCase.trap}`);
-      for (const why of refusals.get(testCase.id) ?? []) {
-        console.log(`    refuter said: ${why}`);
-      }
+      for (const why of refusals.get(testCase.id) ?? []) console.log(`    refuter said: ${why}`);
       console.log('');
     }
   }

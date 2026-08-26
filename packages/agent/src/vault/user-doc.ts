@@ -77,9 +77,13 @@ export async function writeUserDoc(
    * was to break them, and reconciled against their rivals. What survives is
    * scarce and correct, which is the trade being made.
    */
+  const today = new Date().toISOString().slice(0, 10);
   const { settled } = await understandVault({ llm }, vault, {
     userId,
     studentDomain: schoolDomains?.[0],
+    // A model has no clock, and the pass that decides whether a course is
+    // still going is useless without one.
+    today,
   });
   const digest = await vaultDigest(vault, settled);
   if (digest.courses.length === 0) return null;
@@ -98,31 +102,31 @@ export async function writeUserDoc(
             }.`,
             '',
             /*
-             * A course, one bit, and its teacher if that course names one.
+             * Four settled answers per course, and no raw signal to re-read.
              *
              * The first version handed over work counts and a loose list of
-             * everyone who had ever emailed. It spent half the document on
-             * figures that change nothing, and it paired that list with the
-             * courses and named a teacher who does not teach him. A teacher
-             * now travels attached to the course whose announcements name
-             * them, or not at all.
+             * everyone who had ever emailed; it spent half the document on
+             * figures that change nothing and paired that list with the
+             * courses to name a teacher who does not teach him. Later versions
+             * handed over dates and a "sets work" bit and asked this pass to
+             * work out what they meant -- which is the same mistake with
+             * better manners, since a writer with a budget of four sentences
+             * is the worst placed reader in the system to be doing inference.
+             *
+             * Everything here was decided against the evidence, challenged by
+             * a pass built to break it, and reconciled. Where a line says
+             * nothing, nothing is known.
              */
-            'Their courses. "sets work" is a hint that it is a taught subject',
-            'rather than a club, and only a hint. "last activity" is the most',
-            'recent thing that happened in it and "last due" the final deadline',
-            'it set -- together they say whether a course is running or over:',
+            'Their courses, as the vault has settled them:',
             ...digest.courses.map(
               (c) =>
-                `${c.name} — ${c.setsWork ? 'sets work' : 'sets no work'}` +
+                `${c.name} — ${c.kind ?? 'kind unknown'}` +
                 (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown') +
-                `, last activity ${c.lastSeen ?? 'never'}, last due ${c.lastDue ?? 'never'}`,
+                (c.state ? `, ${c.state}` : ', running or not unknown'),
             ),
             '',
-            'Where a teacher is named above, that claim was read from evidence in',
-            'that course, challenged by a pass trying to break it, and survived.',
-            'Include it. Where it says unknown, either nothing knew or the claim',
-            'did not survive, and both mean the same thing to you: there is no',
-            'answer, and you must not supply one from anywhere else.',
+            'These are answers, not hints. Do not second-guess them from the course',
+            'names, and do not fill in a line that says something is unknown.',
             '',
             ...(schoolDomains?.length
               ? [

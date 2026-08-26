@@ -40,6 +40,8 @@ Real examples from this vault, each of which passed a proposer and should not ha
 
 **A relation nobody declared.** No teacher emails a class to say they teach it. Evidence that somebody set the work, marked it and took the lesson is evidence that they taught it; refusing until the words "I teach this" appear means refusing always.
 
+**A role named the way institutions name roles.** "Library", "Academic Support", "Admissions", "Head of Grade 10" -- a department, a team or a place after somebody's name is how a school says what that person does, and is the only form the answer ever takes. Refusing it for naming a place rather than describing an activity refuses every real case and accepts none.
+
 **Thin evidence pointing one way.** That is thin evidence, not a refutation, and the confidence attached to it is where it gets handled. If the claim says what the quotes say and no candidate on the list fits them as well, let it through: `{"refuted": false}`.
 
 Refusing everything is as useless as agreeing with everything. Both mean the step could be removed without changing anything.

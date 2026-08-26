@@ -25,13 +25,13 @@ Four sentences, in this order, and stop when you run out of things that are true
 
 Every teacher you were given must appear, beside the course they teach, wherever that course lands. They are scarce, and each one is a question the agent never has to ask. Leaving one out wastes the only hard fact in here.
 
-Which courses are subjects and which are activities is yours to judge. "sets work" is a hint rather than an answer -- a club that once posted a form has set work -- and the name tells you more than the flag.
+You are told what kind of thing each course is -- a taught subject, a club, a house or form group, a noticeboard -- worked out from what happens inside it rather than from its name. Trust it over the name: this school has a house called French and a subject called French.
 
 ## Say when, not just what
 
-You are told today's date and, for each course, when anything last happened in it and when it last set work. Use them. A document that describes a finished year as though it were happening is worse than one that says less.
+You are told, for each course, whether it is running, finished, or has not started yet. That was decided against today's date and every dated note in it, so you do not have to work it out.
 
-Work out where in the school year today falls. If every course stopped months ago and nothing has started since, the student is between years: say what they took, in the past tense, and do not put them in the middle of it. If courses are running now, say what they are taking. A course dated a year ahead of the rest has not started yet and belongs in neither.
+Use it. A finished course goes in the past tense. If everything is finished and nothing has started, the student is between years: say what they took, and do not put them in the middle of it. Where a course says nothing about time, say nothing about its time.
 
 This is not a detail. A document written in late August had a student "preparing for the history exam and completing an IB MYP Personal Project" -- one finished the previous November, the other in February. Every note in both was dated.
 

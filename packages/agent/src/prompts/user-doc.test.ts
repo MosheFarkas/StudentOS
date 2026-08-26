@@ -26,8 +26,21 @@ describe('what the user document is told to write', () => {
     expect(body).toMatch(/four sentences/i);
   });
 
-  it('leaves the subject-or-club judgement to the writer, with a caveat', () => {
-    expect(body).toMatch(/a hint rather than an answer/i);
+  it('tells the writer what kind of thing each course is, rather than hinting', () => {
+    /*
+     * This used to be the writer's judgement, made from one bit saying whether
+     * any work had ever been set -- a bit wrong in both directions, since a
+     * club that once posted a form sets work and a subject marked on paper
+     * does not. The writer has four sentences and no evidence, and was the
+     * worst placed reader in the system to be deciding it.
+     *
+     * It is now decided against what happens inside the course, challenged,
+     * and handed over settled. What the document has to say is that the name
+     * does not get to overrule it.
+     */
+    expect(body).toMatch(/you are told what kind of thing each course is/i);
+    expect(body).toMatch(/trust it over the name/i);
+    expect(body).toMatch(/house called French and a subject called French/i);
   });
 
   it('insists a teacher it was given is actually used', () => {

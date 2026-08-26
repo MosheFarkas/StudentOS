@@ -1,7 +1,8 @@
 import type { LlmProvider } from '@contexto/llm';
-import { settle, type Settlement } from './claims.js';
-import { askWhatTheyDo, askWhoTeaches, staffRoster } from './evidence.js';
+import { settle, type Claim, type Settlement, type Withheld } from './claims.js';
+import { INQUIRIES } from './inquiries.js';
 import { interpret } from './interpret.js';
+import { staffRoster } from './evidence.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -16,6 +17,12 @@ import type { Vault } from './vault.js';
  *
  * So meaning is decided here, and downstream reads settled claims rather than
  * re-deriving from co-occurrence.
+ *
+ * Questions run in a declared order and each sees what the ones before it
+ * settled. That ordering carries most of the accuracy: deciding what somebody
+ * IS before asking what they DID is the difference between a head of year and
+ * a history teacher, and no amount of care inside the second question can
+ * recover a fact that only the first one had the evidence to reach.
  *
  * One question at a time. The tempting design was a single pass that saw
  * everything at once, on the theory that the full picture produces the best
@@ -33,76 +40,82 @@ export interface UnderstandOptions {
   userId: string;
   /** The students' own mail domain, which is what tells them from staff. */
   studentDomain?: string;
+  /** Told rather than looked up, because a model has no clock. */
+  today?: string;
 }
-
-/**
- * Relations admitting exactly one answer per subject.
- *
- * A cardinality, not a vocabulary. Anything not named here passes through
- * holding as many objects as the evidence supports, so the relation names stay
- * open -- a closed list would have had no slot for a house, a form tutor or a
- * coach, and would have flattened all three into "teaches", which is the
- * mistake this exists to stop.
- */
-const SINGLE = ['taught by', 'works at the school as'];
 
 export async function understandVault(
   { llm }: UnderstandDeps,
   vault: Vault,
-  { userId, studentDomain }: UnderstandOptions,
+  { userId, studentDomain, today }: UnderstandOptions,
 ): Promise<Settlement> {
-  /*
-   * What people are, before what they did.
-   *
-   * Every wrong teacher left in the corpus was a role mistaken for a job: a
-   * head of year setting deadlines, a librarian chasing books, a colleague
-   * covering one lesson, a trainee taking some of them. All four look exactly
-   * like teaching inside a single course, and the sentence that says otherwise
-   * sits in a note about some other class -- so no course-sized view can
-   * reach it, and every course-sized view concludes, reasonably, that they
-   * teach.
-   *
-   * Asking per person across everything puts that sentence where it is needed.
-   * It is also cheaper than the alternative it replaces, which is the same
-   * question re-answered badly once per person per course.
-   */
   const roster = await staffRoster(vault, studentDomain);
 
-  const roleClaims = [];
-  for (const person of roster) {
-    const question = await askWhatTheyDo(vault, person.note, studentDomain);
-    if (!question) continue;
-    const claim = await interpret({ llm }, question, { userId });
-    if (claim) roleClaims.push(claim);
+  /*
+   * How a person is named when a claim about them is quoted to another pass.
+   *
+   * Claims are keyed by note, because that is what provenance needs; the
+   * candidates a question offers are the names a person would use. Without
+   * this map the two never meet and every established fact is silently
+   * dropped on the floor.
+   */
+  const named = new Map(roster.map((p) => [p.note, p.name]));
+  const noteOf = new Map(roster.map((p) => [p.name, p.note]));
+
+  const settled: Claim[] = [];
+  const withheld: Withheld[] = [];
+
+  for (const inquiry of INQUIRIES) {
+    const found: Claim[] = [];
+
+    for (const subject of await inquiry.subjects(vault, { studentDomain })) {
+      const question = await inquiry.ask(vault, subject, { studentDomain, today });
+      // No candidates, no question, no call. The cheapest abstention there is,
+      // and on a real account it is most of them.
+      if (!question) continue;
+
+      /*
+       * What earlier questions settled that bears on this one.
+       *
+       * Anything about this same subject, and anything about somebody who
+       * could be the answer. That rule is general enough to cover every pair
+       * of questions here without any of them naming another: the teacher
+       * question wants the roles of its candidates, and the question about
+       * whether a course is running wants to know what kind of thing it is.
+       */
+      const known = settled
+        .filter((c) => c.subject === subject || carriesCandidate(c, question.candidates, noteOf))
+        .map((c) => `${named.get(c.subject) ?? c.subject} ${c.relation} ${phrase(c)}.`);
+
+      const claim = await interpret({ llm }, { ...question, known }, { userId });
+      if (claim) found.push(claim);
+    }
+
+    /*
+     * Settled per inquiry, not once at the end.
+     *
+     * Contention is between readings of the same slot, and a slot belongs to
+     * one question. Pooling every relation before settling would let claims
+     * that were never rivals be compared, and the answers have to be available
+     * to the questions that come after anyway.
+     */
+    const done = settle(found, { single: inquiry.single ? [inquiry.relation] : [] });
+    settled.push(...done.settled);
+    withheld.push(...done.withheld);
   }
 
-  const roles = settle(roleClaims, { single: SINGLE });
-  const roleOf = new Map(
-    roles.settled.map((c) => [c.subject, c.qualifier ? `${c.object}, ${c.qualifier}` : c.object]),
-  );
-
-  const courses = (await vault.list('entity')).filter((n) => n.description === 'Course');
-
-  const claims = [];
-  for (const course of courses) {
-    const question = await askWhoTeaches(vault, course.name, studentDomain);
-    // No candidates, no question, no call. The cheapest abstention there is,
-    // and on a real account it is most of them.
-    if (!question) continue;
-
-    /** Only the roles of people who could be the answer here. */
-    const known = roster
-      .filter((p) => roleOf.has(p.note) && question.candidates.includes(p.name))
-      .map((p) => `${p.name} works at the school as ${roleOf.get(p.note) as string}.`);
-
-    const claim = await interpret({ llm }, { ...question, known }, { userId });
-    if (claim) claims.push(claim);
-  }
-
-  const taught = settle(claims, { single: SINGLE });
-
-  return {
-    settled: [...roles.settled, ...taught.settled],
-    withheld: [...roles.withheld, ...taught.withheld],
-  };
+  return { settled, withheld };
 }
+
+/** Whether a claim is about somebody who could answer this question. */
+function carriesCandidate(
+  claim: Claim,
+  candidates: readonly string[],
+  noteOf: ReadonlyMap<string, string>,
+): boolean {
+  return candidates.some((c) => noteOf.get(c) === claim.subject);
+}
+
+/** The object with whatever limits it, as one phrase. */
+const phrase = (claim: Claim) =>
+  claim.qualifier ? `${claim.object}, ${claim.qualifier}` : claim.object;

@@ -17,15 +17,15 @@ import type { Vault } from './vault.js';
 export interface CourseDigest {
   name: string;
   /**
-   * Whether the course sets work at all.
+   * What kind of thing it is: a subject, a club, a house, a noticeboard.
    *
-   * One bit, not a count. How much work a course set was the least useful
-   * thing in the first generated document and most of its length -- "science
-   * and technology (61 pieces of work and 167 files/readings), extended
-   * history (43 and 86)" changes nothing an agent would say. What is worth
-   * knowing is whether this is a lesson or a club.
+   * Everything arrives from Google Classroom as a "course", and the digest
+   * used to guess between them from whether any work had ever been set. That
+   * bit was wrong in both directions -- a club that once posted a form sets
+   * work, and a subject marked entirely on paper does not -- and it was the
+   * writer, not the digest, that had to make something of it.
    */
-  setsWork: boolean;
+  kind: string | null;
   /**
    * Who teaches it, when a claim about that survived being challenged.
    *
@@ -38,16 +38,16 @@ export interface CourseDigest {
    */
   teacher: string | null;
   /**
-   * The last day anything happened in this course, or null.
+   * Whether it is running, finished, or has not started.
    *
-   * Half of "is this course over". A document written in August said the
-   * student was preparing for an exam whose course last set work the previous
-   * November, because the digest carried no time at all -- for a vault whose
-   * every note is dated.
+   * Also read rather than derived. The digest used to hand over the last date
+   * anything happened and the last deadline it set, and leave the writer to
+   * work out where in a school year that put it -- which is a judgement about
+   * term dates and holidays, made in a pass that had no room for it. A
+   * document written in late August had a student preparing for an exam sat
+   * the previous November.
    */
-  lastSeen: string | null;
-  /** The last day work was due in it. The other half. */
-  lastDue: string | null;
+  state: string | null;
 }
 
 export interface VaultDigest {
@@ -83,21 +83,24 @@ export async function vaultDigest(
 
   const linked = (name: string) => (note: { body: string }) => note.body.includes(`[[${name}]]`);
 
-  const dayOf = (at: string | undefined) => (at ? at.slice(0, 10) : null);
-
-  /*
-   * The name, and whatever limits it.
+  /**
+   * A settled claim's object, with whatever limits it.
    *
    * A trainee on placement teaches the class this term and not next; a
    * colleague covering one lesson teaches it on Thursday. Dropping the limit
    * to keep the shape tidy is how a document ends up stating something
    * arguable as though it were settled.
    */
-  const teaches = new Map(
-    claims
-      .filter((c) => c.relation === 'taught by')
-      .map((c) => [c.subject, c.qualifier ? `${c.object} (${c.qualifier})` : c.object]),
-  );
+  const answers = (relation: string) =>
+    new Map(
+      claims
+        .filter((c) => c.relation === relation)
+        .map((c) => [c.subject, c.qualifier ? `${c.object} (${c.qualifier})` : c.object]),
+    );
+
+  const teaches = answers('taught by');
+  const kinds = answers('is');
+  const states = answers('is currently');
 
   const assignments = entities.filter((n) => n.description === 'Assignment');
   const materials = entities.filter(
@@ -108,23 +111,9 @@ export async function vaultDigest(
     .filter((n) => n.description === 'Course')
     .map((course) => ({
       name: course.name,
-      setsWork: assignments.some(linked(course.name)),
+      kind: kinds.get(course.name) ?? null,
       teacher: teaches.get(course.name) ?? null,
-      lastSeen: dayOf(
-        episodes
-          .filter((e) => e.occurred && linked(course.name)(e))
-          .map((e) => e.occurred as string)
-          .sort()
-          .at(-1),
-      ),
-      lastDue: dayOf(
-        assignments
-          .filter(linked(course.name))
-          .map((w) => /^Due: (\S+)/m.exec(w.body)?.[1])
-          .filter((at): at is string => Boolean(at))
-          .sort()
-          .at(-1),
-      ),
+      state: states.get(course.name) ?? null,
       // Used only to tell a real course from an empty shell, then dropped. It
       // never reaches the writer.
       weight:
@@ -138,13 +127,7 @@ export async function vaultDigest(
      */
     .filter((c) => c.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .map(({ name, setsWork, teacher, lastSeen, lastDue }) => ({
-      name,
-      setsWork,
-      teacher,
-      lastSeen,
-      lastDue,
-    }));
+    .map(({ name, kind, teacher, state }) => ({ name, kind, teacher, state }));
 
   const times = episodes
     .map((e) => e.occurred)

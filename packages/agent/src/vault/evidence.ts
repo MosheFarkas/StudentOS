@@ -66,6 +66,215 @@ function staffIn(entities: readonly VaultNote[], studentDomain?: string): Staff[
     .filter((p) => p.surname !== '');
 }
 
+/** What the caller knows that the vault does not. */
+export interface AskContext {
+  studentDomain?: string;
+  /** Today, told rather than looked up, because a model has no clock. */
+  today?: string;
+}
+
+/**
+ * What a thing on Google Classroom actually is.
+ *
+ * Everything arrives as a "course", which is Google's word rather than the
+ * school's. Underneath sit taught subjects, clubs, houses, form groups, exam
+ * cohorts and the group somebody made to send out bus times, and the
+ * difference decides whether asking who teaches it makes any sense and whether
+ * it belongs among a student's subjects or among the things they do.
+ *
+ * The answers are offered as a closed set, which is not the fixed vocabulary
+ * this file argues against elsewhere. That argument is about relation types,
+ * where the space is open and any list omits the case that matters. This is
+ * one question whose answers really are few, and where none of them fits, the
+ * answer is nothing at all.
+ */
+export async function askWhatKindOfThing(
+  vault: Vault,
+  course: string,
+  _context: AskContext,
+): Promise<Question | null> {
+  const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
+
+  const note = entities.find((n) => n.name === course);
+  if (!note) return null;
+
+  const about = episodes.filter((e) => e.body.includes(`[[${course}]]`));
+  const work = entities.filter(
+    (n) => n.description === 'Assignment' && n.body.includes(`[[${course}]]`),
+  );
+  if (about.length === 0 && work.length === 0) return null;
+
+  const tells = howTelling(episodes.map((e) => e.body));
+
+  /*
+   * The name first, because the name is usually the best evidence there is,
+   * and then enough of what happens inside to catch it when it lies.
+   */
+  const evidence: Evidence[] = [
+    {
+      note: note.name,
+      quote: `The group is called "${note.name}". ${note.body}`.slice(0, QUOTE_LIMIT),
+    },
+    ...work.slice(0, 3).map((w) => ({
+      note: w.name,
+      quote: `Work set in it: ${w.body.split('\n')[0] ?? w.name}`.slice(0, QUOTE_LIMIT),
+    })),
+    /*
+     * Spread across the life of the course rather than taken off the end.
+     *
+     * What kind of thing something is is a question about the whole of it, and
+     * in June every course in the school is doing exams and notices. A bundle
+     * drawn from the most recent fortnight describes the term, not the thing.
+     */
+    /*
+     * What is peculiar to this course, spread across its life.
+     *
+     * Bus times, photo days and locker reminders go to every class in the
+     * school and say nothing whatever about which class they went to -- and
+     * there are far more of them than there are notes about what the class
+     * actually does. Sampling evenly gives boilerplate a share of the bundle
+     * proportional to how much of it there is, which is exactly backwards.
+     */
+    ...[...about]
+      .sort((a, b) => tells(b.body) - tells(a.body))
+      .slice(0, EVIDENCE_LIMIT - 4)
+      // Chosen for what they say, then put back in order so the bundle reads
+      // as the life of a course rather than a ranking.
+      .sort((a, b) => (a.occurred ?? '').localeCompare(b.occurred ?? ''))
+      .map((e) => ({ note: e.name, quote: plain(e.body).slice(0, QUOTE_LIMIT) })),
+  ];
+
+  return {
+    subject: course,
+    relation: 'is',
+    asking: `What kind of thing is ${course} at this school?`,
+    candidates: [
+      'a taught subject',
+      'a club or activity',
+      'a house or form group',
+      'an administrative or information group',
+    ],
+    guarantees: [
+      'Everything at this school arrives as a "course" on Google Classroom, which is',
+      "the software's word and not the school's. Subjects, clubs, houses, form groups",
+      'and noticeboards all look identical from the outside.',
+      '',
+      /*
+       * What the offered answers mean.
+       *
+       * A closed list with no definitions makes a reader invent the boundaries
+       * and then object that the one it wants is missing. Left undefined, this
+       * list drew exactly that: a refusal to choose between two options on the
+       * grounds that either could have received the same notices.
+       */
+      'What the answers mean here:',
+      '- a taught subject: lessons happen, work is set and marked, it appears on a',
+      '  timetable and a report.',
+      '- a club or activity: people choose to be in it, it meets outside lessons, and',
+      '  what it sets is preparation for doing the thing rather than assessed work.',
+      '- a house or form group: people belong to it rather than attend it, and it is',
+      '  about competitions, points, assemblies, pastoral care and belonging.',
+      '- an administrative or information group: it exists to send notices to people',
+      '  who share a year or a bus or a building. Nothing is taught or organised in it.',
+      '',
+      'The name is evidence and is not proof. This school has a house called French',
+      'and a subject called French, and they have nothing to do with each other, so a',
+      'name that matches a subject settles nothing on its own.',
+      '',
+      'Answer null if it is none of these, or if what happens inside would fit two of',
+      'them equally.',
+    ],
+    evidence,
+  };
+}
+
+/**
+ * Whether a course is happening now, finished, or still to come.
+ *
+ * A document written in late August had a student "preparing for the history
+ * exam and completing an IB MYP Personal Project" -- one finished the previous
+ * November, the other in February. Every note in both was dated. Nothing in
+ * the pass that wrote it had any idea what day it was.
+ *
+ * Deliberately a judgement rather than arithmetic. A course silent since June
+ * is over if today is October and merely on holiday if today is July, and no
+ * threshold in days is right on both sides of a summer. What is arithmetic --
+ * the first date, the last date, the last deadline -- is worked out here and
+ * handed over as fact.
+ */
+export async function askWhetherItIsRunning(
+  vault: Vault,
+  course: string,
+  { today }: AskContext,
+): Promise<Question | null> {
+  const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
+
+  const dated = episodes
+    .filter((e) => e.occurred && e.body.includes(`[[${course}]]`))
+    .sort((a, b) => (a.occurred as string).localeCompare(b.occurred as string));
+
+  // Nothing dated is nothing to reason from, and any answer would be a guess.
+  if (dated.length === 0) return null;
+
+  const first = dated[0] as VaultNote;
+  const last = dated.at(-1) as VaultNote;
+
+  const deadlines = entities
+    .filter((n) => n.description === 'Assignment' && n.body.includes(`[[${course}]]`))
+    .map((n) => /^Due: (\S+)/m.exec(n.body)?.[1])
+    .filter((at): at is string => Boolean(at))
+    .sort();
+
+  const day = (note: VaultNote) => (note.occurred as string).slice(0, 10);
+  const evidence: Evidence[] = [
+    { note: first.name, quote: `${day(first)}: ${plain(first.body)}`.slice(0, QUOTE_LIMIT) },
+    { note: last.name, quote: `${day(last)}: ${plain(last.body)}`.slice(0, QUOTE_LIMIT) },
+  ];
+  if (deadlines.length > 0) {
+    evidence.push({
+      note: course,
+      quote:
+        `Work was set in this course with deadlines from ${(deadlines[0] as string).slice(0, 10)} ` +
+        `to ${(deadlines.at(-1) as string).slice(0, 10)}.`,
+    });
+  }
+
+  return {
+    subject: course,
+    relation: 'is currently',
+    asking: `Is ${course} running at the moment?`,
+    candidates: ['running', 'finished', 'not yet started'],
+    guarantees: [
+      `Today is ${today ?? 'not known'}.`,
+      '',
+      'What the answers mean here:',
+      '- running: the student is in it this year, whether or not anything is happening',
+      '  this week. A course in the middle of a holiday is still running.',
+      '- finished: it is over. The year it belonged to has ended and it will not',
+      '  resume. A course that stopped and whose school year has since ended is',
+      '  finished, not on holiday.',
+      '- not yet started: it exists but belongs to a year that has not begun.',
+      '',
+      `There are ${dated.length} dated notes in this course. The earliest and the latest`,
+      'are quoted below; nothing happened in it before the first or after the last.',
+      '',
+      'Think about where today falls in a school year rather than counting days. A',
+      'course silent since June is finished if today is October and on holiday if today',
+      'is July. A course whose only dates are months ahead has not started.',
+      '',
+      'Answer null if the dates genuinely do not say.',
+    ],
+    evidence,
+  };
+}
+
+/** Wikilinks and whitespace taken out, so a quote reads as a sentence. */
+const plain = (body: string) =>
+  body
+    .replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
 /** Every member of staff the vault knows, with the name a person would use. */
 export async function staffRoster(
   vault: Vault,
@@ -80,7 +289,7 @@ export async function staffRoster(
 export async function askWhoTeaches(
   vault: Vault,
   course: string,
-  studentDomain?: string,
+  { studentDomain }: AskContext,
 ): Promise<(Question & { omitted: number }) | null> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
 
@@ -94,7 +303,7 @@ export async function askWhoTeaches(
    * note about the course naming nobody is not evidence about who teaches it,
    * and including it makes the ones that are harder to see.
    */
-  const found: Evidence[] = [];
+  const found: Ranked[] = [];
   for (const note of about) {
     const named = staff.filter(
       (p) =>
@@ -111,14 +320,28 @@ export async function askWhoTeaches(
       ? staff.some((p) => mentions(note.actor as string, p.surname))
       : false;
 
+    const quote = quoteFor(
+      note.body,
+      named.map((p) => p.surname),
+      bySelf,
+      note.actor,
+    );
+
+    /*
+     * How directly this note bears on the question.
+     *
+     * Somebody writing "I marked your essays" is telling you what they do with
+     * this class. Somebody being named in a notice is telling you they exist.
+     * Both used to be cut in whatever order the filesystem listed them, under
+     * a comment claiming they were newest first -- which is invisible at four
+     * notes and fatal at thirty, because the one note that answers the
+     * question falls off the end and the pass declines for want of evidence it
+     * was holding.
+     */
     found.push({
-      note: note.name,
-      quote: quoteFor(
-        note.body,
-        named.map((p) => p.surname),
-        bySelf,
-        note.actor,
-      ),
+      evidence: { note: note.name, quote },
+      rank: bySelf ? (FIRST_PERSON.test(quote) ? 2 : 1) : 0,
+      when: note.occurred ?? '',
     });
   }
 
@@ -126,14 +349,16 @@ export async function askWhoTeaches(
 
   const candidates = [
     ...new Set(
-      staff.filter((p) => found.some((e) => mentions(e.quote, p.surname))).map((p) => p.name),
+      staff
+        .filter((p) => found.some((e) => mentions(e.evidence.quote, p.surname)))
+        .map((p) => p.name),
     ),
   ];
   if (candidates.length === 0) return null;
 
-  // Newest first: where a course changed hands, the recent half is the half
-  // that is still true.
-  const ordered = [...found].reverse();
+  // Direct accounts first, then newest: where a course changed hands, the
+  // recent half is the half that is still true.
+  const ordered = byRank(found);
 
   return {
     subject: course,
@@ -159,9 +384,9 @@ export async function askWhoTeaches(
       'A quote reads "Name wrote: ..." where Name is who sent the note. Anything after',
       'that is their own words, including how they sign themselves.',
     ],
-    evidence: ordered.slice(0, EVIDENCE_LIMIT),
+    evidence: ordered,
     /** Never trimmed silently: a cut bundle reads downstream as the whole story. */
-    omitted: Math.max(0, ordered.length - EVIDENCE_LIMIT),
+    omitted: Math.max(0, found.length - ordered.length),
   };
 }
 
@@ -190,7 +415,7 @@ export async function askWhoTeaches(
 export async function askWhatTheyDo(
   vault: Vault,
   person: string,
-  studentDomain?: string,
+  { studentDomain }: AskContext,
 ): Promise<Question | null> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
 
@@ -203,11 +428,19 @@ export async function askWhatTheyDo(
   if (about.length === 0) return null;
 
   const candidates = new Set<string>();
-  const found: Evidence[] = [];
+  const found: Ranked[] = [];
   for (const note of about) {
-    const prose = note.body.replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\s+/g, ' ');
-    for (const span of describedAs(prose, who.surname)) candidates.add(span);
-    found.push({ note: note.name, quote: prose.slice(0, QUOTE_LIMIT) });
+    const prose = plain(note.body);
+    const spans = describedAs(prose, who.surname);
+    for (const span of spans) candidates.add(span);
+    // The appositive appears once in a term. Everything else is traffic, and
+    // a cap taken off the end of a directory listing throws away the only
+    // sentence that answers the question.
+    found.push({
+      evidence: { note: note.name, quote: prose.slice(0, QUOTE_LIMIT) },
+      rank: spans.length > 0 ? 1 : 0,
+      when: note.occurred ?? '',
+    });
   }
 
   // Nobody ever said, which is the ordinary case. No candidates, no question.
@@ -228,7 +461,7 @@ export async function askWhatTheyDo(
       'they do at the school. Choose null if none of them is a description of a person',
       '-- an instruction addressed to them, or a fragment, is not a role.',
     ],
-    evidence: found.slice(-EVIDENCE_LIMIT),
+    evidence: byRank(found),
   };
 }
 
@@ -276,6 +509,66 @@ function shorten(span: string): string {
 
 const IMPERATIVE =
   /^(?:please\b|can\b|could\b|would\b|will\b|do\b|don't\b|let\b|see\b|bring\b|send\b|check\b|note\b|remember\b|thanks\b|thank\b|I\b|we\b|you\b|your\b|the\b|this\b|that\b|it\b|there\b|here\b|and\b|but\b|or\b|as\b|if\b|when\b|for\b)/i;
+
+/** A piece of evidence with what it is worth and when it happened. */
+interface Ranked {
+  evidence: Evidence;
+  rank: number;
+  when: string;
+}
+
+/**
+ * The most telling evidence first, and only as much as will be read.
+ *
+ * Rank before recency, because a note that answers the question is worth more
+ * than a newer note that does not, and the cap has to fall on the notes that
+ * were never going to help.
+ */
+function byRank(found: readonly Ranked[]): Evidence[] {
+  return [...found]
+    .sort((a, b) => b.rank - a.rank || b.when.localeCompare(a.when))
+    .slice(0, EVIDENCE_LIMIT)
+    .map((f) => f.evidence);
+}
+
+/**
+ * How much a note says about the thing it belongs to.
+ *
+ * Words that turn up everywhere carry no information about where they turned
+ * up. A notice about the bus is sent to every class in the school, so the
+ * words in it are common across the vault and the note scores low; a note
+ * about house points and galas uses words almost nothing else does and scores
+ * high.
+ *
+ * Rarity across the vault rather than a list of boring words, because the
+ * boring words differ by school and any list would be written for this one.
+ * Averaged over the distinct words in a note so that length is not mistaken
+ * for substance.
+ */
+function howTelling(bodies: readonly string[]): (body: string) => number {
+  const seen = new Map<string, number>();
+  for (const body of bodies) {
+    for (const word of new Set(words(body))) seen.set(word, (seen.get(word) ?? 0) + 1);
+  }
+  const total = Math.max(1, bodies.length);
+
+  return (body: string) => {
+    const distinct = [...new Set(words(body))];
+    if (distinct.length === 0) return 0;
+    const score = distinct.reduce(
+      (sum, word) => sum + Math.log(total / (1 + (seen.get(word) ?? 0))),
+      0,
+    );
+    return score / distinct.length;
+  };
+}
+
+const words = (body: string) =>
+  plain(body)
+    .toLowerCase()
+    .replace(/[^a-zà-ÿ\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
 
 /** Whether a surname appears as a word, rather than inside another one. */
 function mentions(text: string, surname: string): boolean {
