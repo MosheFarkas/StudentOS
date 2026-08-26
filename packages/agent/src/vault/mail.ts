@@ -132,6 +132,24 @@ const AUTOMATED =
   /(^|[.@])(no-?reply|noreply|do-?not-?reply|notifications?|mailer|bounce)([.@]|$)/i;
 
 /** `"Mrs. Bell" <bell.j@school.example>` into its two halves. */
+/**
+ * Classroom's own notification address.
+ *
+ * Every teacher in the school writes from it, which makes the address useless
+ * for identity and the display name -- "Stacey Ottley (Classroom)" -- the only
+ * thing that matters. That is the reverse of every other message in an inbox,
+ * where the name varies and the address is the constant.
+ */
+const CLASSROOM_NOTIFICATIONS = 'no-reply@classroom.google.com';
+
+/** The teacher's name out of "Stacey Ottley (Classroom)", or null. */
+export function classroomSender(from: string): string | null {
+  const { display, address } = parseSender(from);
+  if (address !== CLASSROOM_NOTIFICATIONS) return null;
+  const named = display.replace(/\s*\(Classroom\)\s*$/i, '').trim();
+  return named === '' || named === address ? null : named;
+}
+
 function parseSender(from: string): { display: string; address: string } {
   const angled = /<([^>]+)>/.exec(from);
   const address = (angled?.[1] ?? from).trim().toLowerCase();
@@ -166,6 +184,19 @@ export async function importMail(
     (await vault.list('entity'))
       .filter((note) => note.description === 'Person' && note.externalId)
       .map((note) => [note.externalId as string, note.name]),
+  );
+
+  /*
+   * The same people, keyed by slug.
+   *
+   * A teacher can arrive twice: once from their own address and once from a
+   * Classroom notification that knows their name and not their address. The
+   * name is the only thing those two share.
+   */
+  const peopleBySlug = new Map(
+    (await vault.list('entity'))
+      .filter((note) => note.description === 'Person')
+      .map((note) => [note.name, note.name]),
   );
 
   const result: MailImportResult = { written: 0, skipped: 0, people: 0 };
@@ -262,25 +293,49 @@ export async function importMail(
        * people come from, and they are the most-linked nodes the vault lacked.
        */
       let personNote: string | undefined;
-      const atSchool = (domains ?? []).some((domain) =>
-        sender.address.toLowerCase().endsWith(`@${domain}`),
-      );
-      if (atSchool && !AUTOMATED.test(sender.address) && parsed.actor.trim() !== '') {
-        // The address decides identity. Whatever this message called them, a
-        // person already seen keeps the note and the name they were given first.
-        personNote = peopleByAddress.get(sender.address);
+      /*
+       * A Classroom notification names a teacher and hides them behind an
+       * address every teacher shares.
+       *
+       * So identity comes from the name here and from the address everywhere
+       * else. Keyed by the slug, which merges them with the same person's own
+       * mail when they have written any, and stands alone when they have not
+       * -- which is the case that matters, because a teacher who posts to
+       * Classroom and never emails did not exist in this vault at all.
+       */
+      const viaClassroom = classroomSender(message.from);
+      const named = viaClassroom ?? parsed.actor;
+      const key = viaClassroom
+        ? `classroom:${slugForNote(viaClassroom)}`
+        : sender.address.toLowerCase();
+
+      const atSchool =
+        viaClassroom !== null ||
+        (domains ?? []).some((domain) => sender.address.toLowerCase().endsWith(`@${domain}`));
+
+      if (
+        atSchool &&
+        (viaClassroom !== null || !AUTOMATED.test(sender.address)) &&
+        named.trim() !== ''
+      ) {
+        // Whatever this message called them, a person already seen keeps the
+        // note and the name they were given first.
+        personNote = peopleByAddress.get(key) ?? peopleBySlug.get(slugForNote(named));
 
         if (!personNote) {
-          personNote = slugForNote(parsed.actor);
+          personNote = slugForNote(named);
           await vault.write({
             name: personNote,
             kind: 'entity',
             source: 'gmail',
             description: 'Person',
-            externalId: sender.address,
-            body: `${parsed.actor.trim()}, at ${sender.address}.`,
+            externalId: key,
+            body: viaClassroom
+              ? `${named.trim()}, who posts to Google Classroom.`
+              : `${named.trim()}, at ${sender.address}.`,
           });
-          peopleByAddress.set(sender.address, personNote);
+          peopleByAddress.set(key, personNote);
+          peopleBySlug.set(personNote, personNote);
           result.people += 1;
         }
         allowed.add(personNote);

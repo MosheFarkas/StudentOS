@@ -13,13 +13,27 @@
  * school correspondence. Everything sent *to* them by the outside world falls
  * away, which is the entire point.
  *
- * What this deliberately loses: Classroom's own notification mail, which comes
- * from no-reply@classroom.google.com. That is not a loss. Those messages say an
- * assignment was posted or a grade came back, and the Classroom API already
- * supplies both directly -- the writing rules call that one event seen twice.
+ * Classroom's own notification mail is asked for by name, and used to be
+ * excluded on the grounds that it only repeats what the Classroom API already
+ * supplies -- an assignment posted, a grade returned, one event seen twice.
+ *
+ * That reasoning was wrong in one specific and expensive way. The API supplies
+ * the event and will not supply who caused it: the creator comes back as an
+ * opaque user id that cannot become a name without a roster scope nobody has
+ * asked Google for. The notification's sender line reads "Chris George
+ * (Classroom)", which is the one place in this entire system where a teacher's
+ * name sits next to the course they posted in -- and it was the single thing
+ * this filter removed. Three hundred and thirteen announcements arrived
+ * anonymous in one real vault while the mail naming their authors was being
+ * dropped at the query.
  */
+const CLASSROOM_NOTIFICATIONS = 'no-reply@classroom.google.com';
+
 export function schoolMailQuery(domains: string[], months: number): string {
-  const from = domains.map((domain) => `from:${domain}`).join(' OR ');
+  const from = [
+    ...domains.map((domain) => `from:${domain}`),
+    `from:${CLASSROOM_NOTIFICATIONS}`,
+  ].join(' OR ');
   // Parenthesised because Gmail binds OR tighter than the implicit AND, and
   // without them `newer_than` would apply to the last domain alone.
   return `(${from}) newer_than:${months}m -in:spam -in:trash`;

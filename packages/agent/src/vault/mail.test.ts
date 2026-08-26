@@ -294,11 +294,33 @@ describe('importing school mail', () => {
     expect(people[0]?.externalId).toBe('lyliu@school.example');
   });
 
-  it('does not invent a person for an automated sender', async () => {
-    // no-reply@classroom.google.com is not a teacher, and a note for it would
-    // become one of the most-linked nodes in the vault.
+  it('takes the teacher out of an automated sender rather than dropping it', async () => {
+    /*
+     * This asserted that no person was made at all, on the grounds that
+     * no-reply@classroom.google.com is not a teacher and a note for it would
+     * become one of the most-linked nodes in the vault.
+     *
+     * The danger was real and the remedy was wrong. The address is not a
+     * person; the name in front of it is, and it is the only place in this
+     * system where a teacher's name sits beside the course they posted in.
+     * Discarding the message to avoid the address threw the teacher away with
+     * it -- and the model's own idea of the actor here is "Google Classroom",
+     * which is why the display name is trusted over it.
+     */
     await run(llmReturning(kept({ actor: 'Google Classroom' })), [
       message({ from: '"Mrs. Irwin (Classroom)" <no-reply@classroom.google.com>' }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((p) => p.name)).toEqual(['mrs-irwin']);
+    expect(people.some((p) => (p.externalId ?? '').includes('no-reply'))).toBe(false);
+  });
+
+  it('still invents nobody for an ordinary automated sender', async () => {
+    // Everything else that mails from a do-not-reply address really is a
+    // machine, and a note for it would be linked from half the vault.
+    await run(llmReturning(kept({ actor: 'LCC Notices' })), [
+      message({ from: '"LCC Notices" <no-reply@lcc.ca>' }),
     ]);
 
     const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
@@ -375,6 +397,38 @@ describe('importing school mail', () => {
     const [note] = await vault.list('episode');
     expect(note?.body).toContain('lyliu@wearelcc.ca');
     expect(note?.body).toContain('parents@wearelcc.ca');
+  });
+
+  it('credits a Classroom notification to the teacher, not to no-reply', async () => {
+    /*
+     * "Stacey Ottley (Classroom) <no-reply@classroom.google.com>" is the one
+     * place a teacher's name sits beside the course they posted in. Read
+     * naively it makes one person called no-reply who teaches everything, and
+     * every real teacher stays invisible.
+     *
+     * The address is worthless here and the display name is the whole point,
+     * which is the reverse of every other message in the inbox -- so it is the
+     * one case where identity comes from the name.
+     */
+    await run(llmReturning(kept({ actor: 'Stacey Ottley' })), [
+      message({ from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>' }),
+    ]);
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((p) => p.name)).toContain('stacey-ottley');
+    expect(people.some((p) => (p.externalId ?? '').includes('no-reply'))).toBe(false);
+  });
+
+  it('treats a teacher known only from Classroom as staff', async () => {
+    // They have no school address anywhere in the mailbox, so the domain rule
+    // that separates staff from pupils has nothing to work with. Where we
+    // learned of them is recorded instead, and it is not the student domain.
+    await run(llmReturning(kept({ actor: 'Stacey Ottley' })), [
+      message({ from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>' }),
+    ]);
+
+    const person = await vault.read('entity', 'stacey-ottley');
+    expect(person?.externalId).toBe('classroom:stacey-ottley');
   });
 });
 

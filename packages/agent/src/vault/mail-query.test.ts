@@ -32,6 +32,23 @@ describe('which mail is school mail', () => {
     expect(schoolMailQuery(['wearelcc.ca'], 12)).toContain('newer_than:12m');
     expect(schoolMailQuery(['wearelcc.ca'], 3)).toContain('newer_than:3m');
   });
+
+  it('asks for Classroom\u2019s own notification mail', () => {
+    /*
+     * This was excluded on purpose, and the reasoning was wrong.
+     *
+     * The note said those messages only repeat what the Classroom API already
+     * supplies -- an assignment posted, a grade returned -- and called it one
+     * event seen twice. The API supplies the event. It does not supply who
+     * posted it: the creator comes back as an opaque user id that cannot be
+     * turned into a name without a roster scope nobody has requested.
+     *
+     * The notification's sender line is "Chris George (Classroom)". It is the
+     * one place in the whole system where a teacher's name sits next to the
+     * course they posted in, and it was the single thing being filtered out.
+     */
+    expect(schoolMailQuery(['lcc.ca'], 12)).toContain('classroom.google.com');
+  });
 });
 
 describe('working out which domains are the school', () => {
