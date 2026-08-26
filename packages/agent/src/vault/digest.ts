@@ -1,3 +1,4 @@
+import { teacherFor } from './teachers.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -25,6 +26,15 @@ export interface CourseDigest {
    * knowing is whether this is a lesson or a club.
    */
   setsWork: boolean;
+  /**
+   * Who teaches it, when the course's own announcements say so clearly.
+   *
+   * Null far more often than not: on a real account this names the Personal
+   * Project supervisor and the head of the business club, and knows nothing
+   * about maths, English or science. Silence is the right answer there --
+   * Classroom knows and will not say without a roster scope. See teachers.ts.
+   */
+  teacher: string | null;
 }
 
 export interface VaultDigest {
@@ -50,6 +60,11 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
     .map((course) => ({
       name: course.name,
       setsWork: assignments.some(linked(course.name)),
+      teacher: teacherFor(
+        episodes
+          .filter((e) => e.source === 'classroom' && e.body.includes(`[[${course.name}]]`))
+          .map((e) => e.body),
+      ),
       // Used only to tell a real course from an empty shell, then dropped. It
       // never reaches the writer.
       weight:
@@ -63,7 +78,7 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
      */
     .filter((c) => c.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .map(({ name, setsWork }) => ({ name, setsWork }));
+    .map(({ name, setsWork, teacher }) => ({ name, setsWork, teacher }));
 
   const times = episodes
     .map((e) => e.occurred)
@@ -71,18 +86,12 @@ export async function vaultDigest(vault: Vault): Promise<VaultDigest> {
     .sort();
 
   /*
-   * No people, and above all no teachers.
+   * No list of people, still.
    *
-   * Mail is the only source of a name here, and somebody writing about a
-   * course is not its teacher. On a real account the top correspondent for
-   * maths, French and robotics was the same man, and the top name for English
-   * was not the English teacher. Handing the writer a list of courses beside a
-   * list of people got exactly what anyone would expect: it paired them,
-   * confidently, and put a wrong teacher into every conversation that student
-   * would ever have.
-   *
-   * Naming teachers needs classroom.rosters.readonly, which a school has to
-   * approve. Until then the honest offer is nothing rather than a guess.
+   * A teacher is attached to the course they teach or to nothing at all --
+   * see teachers.ts. Handing the writer a loose list of everyone who has ever
+   * emailed is what produced an invented teacher the first time: it paired
+   * that list with the course list, confidently and wrongly.
    */
   return {
     courses,

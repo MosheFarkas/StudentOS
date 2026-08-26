@@ -18,15 +18,28 @@ import { USER_DOC } from './documents.js';
 const body = USER_DOC.body;
 
 describe('what the user document is told to write', () => {
-  it('forbids naming a teacher, since the vault cannot know one', () => {
+  it('lays out the four things the document holds, in order', () => {
+    // A brief with no shape produces a different document every rebuild.
+    for (const part of [/Who they are/i, /What they study/i, /What else they do/i]) {
+      expect(body).toMatch(part);
+    }
+    expect(body).toMatch(/four sentences/i);
+  });
+
+  it('leaves the subject-or-club judgement to the writer, with a caveat', () => {
+    expect(body).toMatch(/a hint and not an answer/i);
+  });
+
+  it('allows a teacher it was given and forbids filling the gaps', () => {
     /*
      * The first real document said this student takes enriched English with
      * Gillian Shadley. He does not. Nothing in the digest said who teaches
      * anything -- it offered a list of courses and a list of people, and the
      * model paired them, which is what anyone would do.
      */
-    expect(body).toMatch(/you must not work it out|say nothing about who teaches/i);
-    expect(body).toMatch(/you have invented them/i);
+    expect(body).toMatch(/those you should use/i);
+    expect(body).toMatch(/do not fill the gap/i);
+    expect(body).toMatch(/wrong teacher sits in front of every conversation/i);
   });
 
   it('keeps counts out, which were half the length and none of the use', () => {

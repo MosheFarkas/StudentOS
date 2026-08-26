@@ -11,21 +11,25 @@ You will be given their name and the courses their vault knows about, each marke
 
 Rewrite it whole each time. This is not a diary being added to — it is a fresh reading of what the vault currently says, and the vault is the ground truth. If a course has ended, it goes.
 
-## What belongs in it
+## The shape of it
 
-Who they are and where. Their year, their school, the courses they are actually taking now.
+Four sentences, in this order, and stop when you run out of things that are true.
 
-Their subjects, named the way they would name them. This is the bulk of it and the reason the document exists: an agent that knows they take drama and extended history does not have to go and look before it can hold a conversation.
+**Who they are.** Their name, their year, their school. One sentence.
 
-What they do besides lessons. A course that never sets work is a club or a programme -- Model UN, robotics, a mentoring scheme -- and belongs in a separate breath from the subjects they are marked on.
+**What they study.** The taught subjects, named as they would name them, with the teacher where you have been given one. This is the reason the document exists and it earns the most room. A subject with no teacher is still worth naming; just name it plainly and move on.
 
-Anything unusual and durable that the courses themselves tell you: an IB Personal Project, an extra language, exam preparation running alongside the subject it is for.
+**What else they do.** Clubs, programmes and activities, in one breath and without elaboration. Model UN and robotics belong here, not among the subjects they are marked on.
+
+**Anything durable that does not fit the first three.** An IB Personal Project, exam preparation running beside the subject it is for, a language they take on top. One sentence at most, and only if it is genuinely there. Leave it out rather than reach.
+
+Deciding which courses are subjects and which are activities is yours to do. You are told whether work has been set in each, which is a hint and not an answer -- a club that once posted a form has set work, and a subject taught entirely on paper has not. The name of the course tells you more than the flag does.
 
 ## What does not
 
 Numbers. Not how many pieces of work a course set, not how many files are filed under it, not how many carry a mark. An earlier version of this document spent half its length on "science and technology (61 pieces of work and 167 files/readings), extended history (43 and 86)", and not one of those figures changes what an agent would say to this student. If a course matters more than another, that shows in the order you name them, not in a count.
 
-Teachers. You are not told who teaches anything, and you must not work it out. The vault knows who has emailed about a course, which is a different thing: on a real account the same man was the top correspondent for maths, French and robotics. If you name a teacher, you have invented them, and that invention will sit in front of every conversation this student ever has. Say nothing about who teaches what.
+Teachers you were not given. Some courses come with a teacher, taken from that course's own announcements, and those you should use. The rest say "teacher unknown", and that is the whole of what is known: do not fill the gap from a name you saw elsewhere in the list, and do not guess from a subject. An earlier version of this document said a student took enriched English with a teacher who does not teach it, because it was handed a list of names and paired them with courses. A wrong teacher sits in front of every conversation that student ever has.
 
 Anything that expires within the term. Individual assignments, this week's deadlines, a mark that just came back. All of that is one tool call away and putting it here spends a permanent budget on something with a fortnight to live.
 

@@ -61,22 +61,37 @@ describe('digesting a vault for the profile writer', () => {
     expect(digest.courses).not.toHaveProperty('0.assignments');
   });
 
-  it('offers no teachers, because the vault does not know any', async () => {
+  it('attaches a teacher to their own course, or to nothing', async () => {
     /*
-     * Mail is the only source of a person's name here, and somebody writing
-     * about a course is not its teacher. On a real account the top
-     * correspondent for maths, French and robotics was the same man, and the
-     * top name for English was not the English teacher.
+     * The first version handed the writer a list of courses beside a list of
+     * everyone who had ever emailed. It paired them, confidently, and named a
+     * teacher who does not teach that subject.
      *
-     * Handing the writer a list of courses and a separate list of people got
-     * exactly what you would expect: it paired them, confidently, and put a
-     * wrong teacher into every conversation. Naming teachers needs the
-     * Classroom roster scope, which is not granted, so the honest answer is
-     * to offer nothing rather than a guess.
+     * A teacher now belongs to the course whose announcements name them, or
+     * is absent. There is no loose list of people to pair anything with.
      */
+    await vault.write({
+      name: '2026-01-01-a-notice',
+      kind: 'episode',
+      source: 'classroom',
+      description: 'Announcement in French 10',
+      occurred: '2026-01-01T10:00:00Z',
+      body: 'In [[french-10]].\n\nMs. Coretti will collect these on Friday.',
+    });
+    await vault.write({
+      name: '2026-01-02-another',
+      kind: 'episode',
+      source: 'classroom',
+      description: 'Announcement in French 10',
+      occurred: '2026-01-02T10:00:00Z',
+      body: 'In [[french-10]].\n\nSee Ms Coretti about the oral.',
+    });
+
     const digest = await vaultDigest(vault);
+    expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Ms Coretti');
+    // Drama's announcements say nothing, so drama has no teacher.
+    expect(digest.courses.find((c) => c.name === 'drama-10a')?.teacher).toBeNull();
     expect(digest).not.toHaveProperty('people');
-    expect(JSON.stringify(digest)).not.toMatch(/teacher/i);
   });
 
   it('leaves out a course nothing has ever happened in', async () => {
