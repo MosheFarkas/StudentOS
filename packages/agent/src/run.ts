@@ -1,7 +1,6 @@
 import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import { RESPONDING, VAULT_READING } from './prompts/documents.js';
-import { profileSection } from './memory/profile.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
@@ -30,13 +29,7 @@ export interface AgentRunInput {
   agentId: string;
   /** The agent's student-authored purpose. Anchors the system prompt. */
   purpose: string;
-  /**
-   * What the agent durably knows about this student, written by the
-   * summarisation job between conversations. Absent for an agent that has not
-   * learned anything yet.
-   */
-  profile?: string;
-  /** What the vault says about their school life, from vault/user-doc.ts. */
+  /** The page the vault writes about them, from vault/user-doc.ts. */
   about?: string;
   message: string;
   /**
@@ -121,13 +114,7 @@ export async function runAgentTurn(
     // between turns goes in the user message instead -- see buildTurnContext.
     {
       role: 'system',
-      content: buildSystemPrompt(
-        input.purpose,
-        availableSkills,
-        input.profile,
-        input.about,
-        Boolean(input.vault),
-      ),
+      content: buildSystemPrompt(input.purpose, availableSkills, input.about, Boolean(input.vault)),
     },
     {
       role: 'user',
@@ -288,8 +275,7 @@ export const SIGN_IN_SECTION =
 export function buildSystemPrompt(
   purpose: string,
   skills: Awaited<ReturnType<SkillRegistry['list']>>,
-  profile?: string,
-  /** What the vault says about their school life. See vault/user-doc.ts. */
+  /** The page the vault writes about them. See vault/user-doc.ts. */
   about?: string,
   hasVault = false,
 ): string {
@@ -334,31 +320,26 @@ export function buildSystemPrompt(
   const perAgent = [`Your purpose, in their words: ${purpose}`];
 
   /*
-   * What it has learned about them.
+   * Who this student is, and what else there is to open.
    *
-   * Per-agent rather than volatile: the summarisation job rewrites it between
-   * conversations, never during one, so it stays byte-identical for the whole
-   * of a conversation and keeps its place in the cached prefix.
-   */
-  const knownAboutStudent = profileSection(profile ?? '');
-  if (knownAboutStudent) {
-    perAgent.push(knownAboutStudent);
-  }
-
-  /*
-   * Their school, in a paragraph.
+   * The only page carried on a turn. It is short, it names the rest in
+   * [[double brackets]], and everything it names -- a class, their school, what
+   * they have told us before -- is opened by name when a question turns out to
+   * be about one of them. That is what keeps a vault of any size to a fixed
+   * cost per turn.
    *
-   * Kept apart from the profile above rather than merged into it. The two have
-   * different sources and different lifetimes -- this is rewritten wholesale
-   * from the vault when a term changes, that accumulates as somebody talks --
-   * and one writer holding both would discard whichever half it could not see.
+   * It replaced a second document here, the per-agent conversation profile. One
+   * page rather than two because the split was wrong rather than merely
+   * wasteful: the profile belonged to an agent, so a student with three of them
+   * told each separately that they read on a phone. What they say is now kept
+   * once, on a page of its own, and named from this one.
    *
-   * Placed after it for the same reason the profile sits where it does: it is
-   * rewritten only between conversations, so it stays byte-identical for a
-   * whole conversation and keeps its place in the cached prefix.
+   * Per-agent tier rather than volatile: it is rewritten only between
+   * conversations, so it stays byte-identical for a whole conversation and
+   * keeps its place in the cached prefix.
    */
   if (about && about.trim() !== '') {
-    perAgent.push(`Their school, as their vault has it:\n${about.trim()}`);
+    perAgent.push(`What their vault says about them:\n${about.trim()}`);
   }
 
   if (skills.length > 0) {

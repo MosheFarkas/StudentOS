@@ -80,7 +80,6 @@ export async function runTurnForAgent(
         agentId: agent.id,
         purpose: agent.purpose,
         // What the summarisation job has learned about them, if anything yet.
-        profile: agent.profile,
         /*
          * Their school, in a paragraph, written when the vault was last built.
          *

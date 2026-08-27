@@ -1,23 +1,28 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
 import { USER_DOC_LIMIT, writeUserDoc, readUserDoc } from './user-doc.js';
+import { USER_DOC_NAME, writeDocument } from './documents.js';
 
 /**
- * The document read before every reply.
+ * The page read before every reply.
  *
  * A wrong sentence here is worse than a wrong answer: an answer is visible and
  * forgotten, this is invisible and permanent, and it shapes how the agent
  * treats a person on every turn until somebody notices.
+ *
+ * It is also the index. It is the only thing that says the other pages exist,
+ * so a class it fails to name is a class the agent never learns it can open.
  */
 
 const llmSaying = (text: string) => ({
   chat: vi.fn(async (_request: { messages: unknown[]; tools?: unknown }, _ctx?: unknown) => ({
     content: text,
     toolCalls: [],
-    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
     finishReason: 'stop' as const,
   })),
 });
@@ -29,94 +34,218 @@ describe('writing the user document', () => {
   beforeEach(async () => {
     root = mkdtempSync(join(tmpdir(), 'contexto-userdoc-'));
     vault = new Vault(root, 'student-1');
-    await vault.write({
-      name: 'french-10',
-      kind: 'entity',
-      source: 'classroom',
-      description: 'Course',
-      body: 'French 10, on Google Classroom.',
+
+    await writeDocument(vault, {
+      name: 'class-french',
+      description: 'french, as the vault has it',
+      body: '# French\n\nTaught by [[mme-rivard]].',
     });
-    await vault.write({
-      name: 'culture-essay',
-      kind: 'entity',
-      source: 'classroom',
-      description: 'Assignment',
-      body: 'Culture essay.\n\nPart of [[french-10]].',
+    await writeDocument(vault, {
+      name: 'class-chemistry',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry\n\nTaught by [[mr-ali]].',
     });
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  const run = (llm: unknown) =>
+    writeUserDoc({ llm } as never, { vault, userId: 'u-1', name: 'Lucas' });
+
   it('writes what the model returned, and reads it back', async () => {
-    const llm = llmSaying('Lucas is in Grade 10 at Lower Canada College and takes French 10.');
-    await writeUserDoc({ llm } as never, { vault, userId: 'u1' });
-
-    expect(await readUserDoc(vault)).toContain('Grade 10 at Lower Canada College');
+    const page = '# Lucas\n\n## What they study\n\n- [[class-french]] — taught by Mme Rivard';
+    expect(await run(llmSaying(page))).toBe(page);
+    expect(await readUserDoc(vault)).toBe(page);
   });
 
-  it('holds it to the budget, cutting at a sentence', async () => {
+  it('keeps the headings and the links the old version stripped', async () => {
     /*
-     * Read on every turn, so every character is paid for on every turn. A
-     * document cut mid-word leaves the agent reading half a fact and believing
-     * it, which is why the cut lands on a sentence.
-     */
-    const long = 'Lucas takes a subject and it is interesting. '.repeat(80);
-    await writeUserDoc({ llm: llmSaying(long) } as never, { vault, userId: 'u1' });
-
-    const written = (await readUserDoc(vault)) ?? '';
-    expect(written.length).toBeLessThanOrEqual(USER_DOC_LIMIT);
-    expect(written.endsWith('.')).toBe(true);
-  });
-
-  it('gives the writer the counts rather than the vault', async () => {
-    /*
-     * Three and a half thousand notes will not fit in a prompt and would cost
-     * a fortune per rebuild if they did.
+     * The whole point of the change.
      *
-     * The writer is the last call, not the first. Understanding the vault
-     * happens before it and does read note text -- that is the whole job of
-     * those passes, each over a bundle of a dozen quotes about one thing. What
-     * must not happen is the writer being handed the raw material a second
-     * time, on top of the answers it was given.
+     * The paragraph this replaces had every heading, bullet and link taken out
+     * on the way to disk -- correct for prose, fatal for a page whose job is to
+     * say what else there is to open.
      */
-    const llm = llmSaying('Fine.');
-    await writeUserDoc({ llm } as never, { vault, userId: 'u1' });
+    const page = '# Lucas\n\n## What they study\n\n- [[class-french]]\n- [[class-chemistry]]';
+    const written = (await run(llmSaying(page))) as string;
 
-    const sent = JSON.stringify(llm.chat.mock.calls.at(-1)?.[0]);
-    // Named as the school named it, not as the filesystem holds it.
-    expect(sent).toContain('French 10');
-    expect(sent).not.toContain('Culture essay.');
+    expect(written).toContain('## What they study');
+    expect(written).toContain('[[class-french]]');
   });
 
-  it('leaves the old document alone when the model returns nothing usable', async () => {
-    /*
-     * A blank answer must not blank the document. The agent would carry on
-     * with no idea who this student is and nothing would say why.
-     */
-    await writeUserDoc({ llm: llmSaying('Lucas is in Grade 10.') } as never, {
-      vault,
-      userId: 'u1',
+  it('shows the writer the pages, not the notes underneath them', async () => {
+    await vault.write({
+      name: 'oral-presentation',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Oral presentation.\nPart of [[french-a]].',
     });
-    await writeUserDoc({ llm: llmSaying('   ') } as never, { vault, userId: 'u1' });
+    const llm = llmSaying('# Lucas');
+    await run(llm);
 
-    expect(await readUserDoc(vault)).toContain('Grade 10');
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('class-french');
+    expect(sent).not.toContain('Oral presentation');
   });
 
-  it('returns nothing for a vault that has never had one written', async () => {
-    const empty = new Vault(root, 'nobody');
-    expect(await readUserDoc(empty)).toBeNull();
+  it('hands over the year rather than leaving it to be read off March’s mail', async () => {
+    /*
+     * The bug that survived every previous version.
+     *
+     * Every message on the account says Grade 10, because that is what it said
+     * in March. Counting the years since is arithmetic, and is done before the
+     * writer ever sees it.
+     */
+    await vault.write({
+      name: 'mail-parents-evening',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'A message',
+      occurred: '2026-03-14T09:00:00.000Z',
+      event: 'message',
+      body: 'Grade 10 parents evening is on Thursday.',
+    });
+
+    const llm = llmSaying('# Lucas');
+    await run(llm);
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toMatch(/They are in Grade 1[12]/);
+    expect(sent).toContain('academic year(s) have ended since');
   });
 
-  it('strips markup the writer was told not to use', async () => {
-    // Belt and braces: the instruction is clear, and a stray heading would
-    // otherwise sit in the system prompt of every conversation for a term.
-    await writeUserDoc(
-      { llm: llmSaying('# About Lucas\n\n- Takes French 10.\n- **Grade 10**.') } as never,
-      { vault, userId: 'u1' },
+  it('tells the writer not to guess a year when nothing says', async () => {
+    const llm = llmSaying('# Lucas');
+    await run(llm);
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain(
+      'do not guess it from a course name',
     );
+  });
 
-    const written = (await readUserDoc(vault)) ?? '';
-    expect(written).not.toMatch(/^#|^-\s|\*\*/m);
-    expect(written).toContain('French 10');
+  it('tells the writer not to name a school nothing has researched', async () => {
+    const llm = llmSaying('# Lucas');
+    await run(llm);
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain('do not name a school');
+  });
+
+  it('offers the school and chats pages when they exist', async () => {
+    await writeDocument(vault, { name: 'school', description: 'Their school', body: '# LCC' });
+    await writeDocument(vault, {
+      name: 'chats',
+      description: 'What they said',
+      body: 'Short answers.',
+    });
+
+    const llm = llmSaying('# Lucas');
+    await run(llm);
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('[[school]]');
+    expect(sent).toContain('[[chats]]');
+  });
+
+  it('holds it to the budget, cutting whole sections', async () => {
+    const long = [
+      '# Lucas',
+      '',
+      'A'.repeat(USER_DOC_LIMIT),
+      '',
+      '## Later',
+      '',
+      'B'.repeat(500),
+    ].join('\n');
+    const written = (await run(llmSaying(long))) as string;
+
+    expect(written.length).toBeLessThanOrEqual(USER_DOC_LIMIT);
+    expect(written).not.toContain('## Later');
+  });
+
+  it('writes nothing at all for a vault with no classes in it', async () => {
+    const empty = new Vault(root, 'student-2');
+    const llm = llmSaying('# Nobody');
+
+    expect(await writeUserDoc({ llm } as never, { vault: empty, userId: 'u-2' })).toBeNull();
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
+  it('leaves the old page alone when the model returns nothing usable', async () => {
+    await run(llmSaying('# Lucas\n\nReal content.'));
+    const after = await run(llmSaying('   '));
+
+    expect(after).toContain('Real content');
+    expect(await readUserDoc(vault)).toContain('Real content');
+  });
+});
+
+describe('finding the user document wherever it currently lives', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-userdoc-move-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('reads the document once one has been written', async () => {
+    await writeDocument(vault, {
+      name: USER_DOC_NAME,
+      description: 'Who this student is',
+      body: '# Lucas\n\nIn Grade 11.',
+    });
+
+    expect(await readUserDoc(vault)).toContain('Grade 11');
+  });
+
+  it('still finds the paragraph a previous version left beside the vault', async () => {
+    /*
+     * No migration, deliberately.
+     *
+     * Every vault on disk has user.md at the root. Reading the old place when
+     * the new one is empty means an agent keeps its context through the deploy
+     * and gains the new page on the next build, rather than losing both.
+     */
+    await mkdir(vault.directory, { recursive: true });
+    await writeFile(join(vault.directory, 'user.md'), 'Lucas is in Grade 10.\n', 'utf8');
+
+    expect(await readUserDoc(vault)).toBe('Lucas is in Grade 10.');
+  });
+
+  it('prefers the document to the paragraph when both are there', async () => {
+    await mkdir(vault.directory, { recursive: true });
+    await writeFile(join(vault.directory, 'user.md'), 'Lucas is in Grade 10.\n', 'utf8');
+    await writeDocument(vault, {
+      name: USER_DOC_NAME,
+      description: 'Who this student is',
+      body: 'Lucas is in Grade 11.',
+    });
+
+    expect(await readUserDoc(vault)).toBe('Lucas is in Grade 11.');
+  });
+
+  it('takes the old paragraph away once it has written the page', async () => {
+    await mkdir(vault.directory, { recursive: true });
+    await writeFile(join(vault.directory, 'user.md'), 'Lucas is in Grade 10.\n', 'utf8');
+    await writeDocument(vault, {
+      name: 'class-french',
+      description: 'french, as the vault has it',
+      body: '# French',
+    });
+
+    await writeUserDoc({ llm: llmSaying('# Lucas\n\nIn Grade 11.') } as never, {
+      vault,
+      userId: 'u-1',
+    });
+
+    await rmSync(join(vault.directory, 'docs'), { recursive: true, force: true });
+    expect(await readUserDoc(vault)).toBeNull();
+  });
+
+  it('is null when neither exists', async () => {
+    expect(await readUserDoc(vault)).toBeNull();
   });
 });

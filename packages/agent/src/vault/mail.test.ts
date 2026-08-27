@@ -70,6 +70,40 @@ describe('importing school mail', () => {
       domains: ['school.example'],
     });
 
+  /** A Classroom notification, which names its course above the link to it. */
+  const notification = (course: string) =>
+    message({
+      from: '"Stacey Ottley (Classroom)" <no-reply@classroom.google.com>',
+      subject: 'New assignment: Debating motion',
+      body: `${course}\nhttps://classroom.google.com/c/abc123`,
+    });
+
+  it('brings back a course that only its mail remembers', async () => {
+    await run(llmReturning(kept()), [notification('Debating')]);
+    expect(await vault.read('entity', 'debating')).not.toBeNull();
+  });
+
+  it('does not bring back a course the vault has decided to drop', async () => {
+    /*
+     * Otherwise the vault ping-pongs.
+     *
+     * The filter takes last year's history out, and the very next build's mail
+     * import reads a year of notifications about it and writes it straight back
+     * -- so the course is dropped and recreated for as long as the mail is in
+     * range, and neither pass is wrong on its own.
+     */
+    await importMail({ llm: llmReturning(kept()) } as never, {
+      vault,
+      messages: [notification('Debating')],
+      entities: ['cold-war-essay', 'history'],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['Debating'],
+    });
+
+    expect(await vault.read('entity', 'debating')).toBeNull();
+  });
+
   it('gets episodes onto disk before the last message is extracted', async () => {
     /*
      * A year of mail is a half-hour job, and extracting everything before

@@ -54,19 +54,7 @@ export class OpenAiProvider implements LlmProvider {
         input,
         ...(instructions ? { instructions } : {}),
         ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),
-        // Flat shape on Responses -- name/description/parameters sit at the top
-        // level, not nested under `function` as on chat completions.
-        ...(request.tools?.length
-          ? {
-              tools: request.tools.map((tool) => ({
-                type: 'function' as const,
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters,
-                strict: false,
-              })),
-            }
-          : {}),
+        ...(toolsFor(request) ? { tools: toolsFor(request) } : {}),
       },
       { signal: ctx.signal },
     );
@@ -114,6 +102,32 @@ export class OpenAiProvider implements LlmProvider {
     }
     yield { type: 'done', usage: response.usage, finishReason: response.finishReason };
   }
+}
+
+/**
+ * The tools a request carries, the caller's own and the provider's.
+ *
+ * Flat shape on Responses -- name/description/parameters sit at the top level,
+ * not nested under `function` as on chat completions.
+ *
+ * Web search is OpenAI's own, run server-side: the model searches and reads
+ * inside the one request, and the result arrives as `web_search_call` output
+ * items rather than as a `function_call` for the caller to execute. So the
+ * tool-call extraction above, which filters on `function_call`, cannot pick one
+ * up and try to run it.
+ */
+export function toolsFor(request: ChatRequest): OpenAI.Responses.Tool[] | undefined {
+  const tools: OpenAI.Responses.Tool[] = (request.tools ?? []).map((tool) => ({
+    type: 'function',
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters as Record<string, unknown>,
+    strict: false,
+  }));
+
+  if (request.webSearch) tools.push({ type: 'web_search' });
+
+  return tools.length > 0 ? tools : undefined;
 }
 
 /**

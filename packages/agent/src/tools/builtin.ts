@@ -31,6 +31,7 @@ import {
 import { browseWithAgent, readSchoolPortal, refreshSchoolPortal } from './portal.js';
 import { searchMemory } from './memory.js';
 import { searchVault } from './vault.js';
+import { openVaultDocument } from './documents.js';
 import { readWebLink } from './web/read-link.js';
 import { readYoutubeVideo } from './web/youtube.js';
 
@@ -39,6 +40,7 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   // anyone's OAuth grant.
   searchMemory as Tool<never, unknown>,
   searchVault as Tool<never, unknown>,
+  openVaultDocument as Tool<never, unknown>,
   listCalendarEvents,
   createCalendarEvent,
   updateCalendarEvent,

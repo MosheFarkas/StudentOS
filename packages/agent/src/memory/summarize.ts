@@ -1,41 +1,38 @@
-import type { ChatMessage, LlmProvider } from '@contexto/llm';
-import { PROFILE_DOC } from '../prompts/documents.js';
-import { PROFILE_CHAR_LIMIT, capProfile, type ProfileStore } from './profile.js';
+import { type ProfileStore } from './profile.js';
 import type { MemoryStore } from './types.js';
 
 /**
- * Deciding what is worth keeping about a student.
+ * Gathering up what a student said, once they have stopped saying it.
  *
- * This runs between conversations, never during one. The profile it writes is
- * pinned in the cached part of the system prompt, so rewriting it mid-turn
- * would invalidate that prefix for the rest of the conversation -- Hermes
- * calls the alternative a frozen snapshot, and the same property falls out of
- * doing the work in a background job.
+ * This runs between conversations, never during one. What it hands back is fed
+ * to the page of what has been learned about them -- and that page is pinned in
+ * the cached part of every system prompt, so rewriting it mid-turn would
+ * invalidate that prefix for the rest of the conversation. Doing the work on a
+ * background job is what makes it a frozen snapshot instead.
  *
- * What it replaces: the agent had no durable memory of a person at all. The
- * last eight exchanges rode along on every turn and everything older was
- * reachable only if the agent thought to search for it, which for a stated
- * preference it never does -- there is no question to ask. "I revise by
- * rewriting my notes", said once, was simply gone.
+ * It used to write a profile itself, per agent. That was the flaw: a student
+ * with three agents had to tell each of them separately that they read on a
+ * phone and cannot take long answers. What it collects now goes to one page
+ * that belongs to the student, so anything they say once is known everywhere.
+ *
+ * The two columns behind ProfileStore survive as the watermark. They record
+ * when an agent's memory was last CONSIDERED, which is what stops the job
+ * re-reading the same exchanges to reach the same conclusion on every wake.
  */
 
-/** How many recent exchanges the writer will look at in one pass. */
+/** How many recent exchanges one pass will look at. */
 const MAX_EXCHANGES_PER_PASS = 40;
 
-export interface ProfileWriterDeps {
-  llm: Pick<LlmProvider, 'chat'>;
+export interface ExchangeCollectorDeps {
   memory: MemoryStore;
   profiles: ProfileStore;
 }
 
-export interface ProfileWriterResult {
-  changed: boolean;
+export interface CollectedExchanges {
   /**
-   * The exchanges this pass considered, oldest first.
+   * The exchanges since this agent was last considered, oldest first.
    *
-   * Handed back so the conversation importer can write the same burst into the
-   * vault without reading it again or duplicating the watermark logic. A
-   * conversation is not a row anywhere -- it is exactly this: what was said
+   * A conversation is not a row anywhere -- it is exactly this: what was said
    * between one quiet period and the next.
    */
   exchanges: string[];
@@ -43,102 +40,59 @@ export interface ProfileWriterResult {
   newestId?: string;
   /** When the last of it happened. */
   occurred?: string;
+  /** What was previously known about this student, from the profile being retired. */
+  knownBefore?: string;
 }
 
-export interface ProfileWriterOptions {
+export interface ExchangeCollectorOptions {
   agentId: string;
-  /** The agent's owner. Inference is billed to them, not to a shared key. */
   userId: string;
   now?: Date;
 }
 
 /**
- * Rewrite one agent's profile from the exchanges since it was last written.
+ * Take the exchanges one agent has had since it was last looked at.
  *
- * Returns without spending anything when nothing has happened since, which is
- * the common case by a wide margin: a job on a timer that pays for a model
- * call every time it wakes has a bill that scales with uptime rather than with
- * use.
+ * Costs nothing when nothing has happened since, which is the common case by a
+ * wide margin: a job on a timer that pays for a model call every time it wakes
+ * has a bill that scales with uptime rather than with use.
  */
-export async function updateStudentProfile(
-  { llm, memory, profiles }: ProfileWriterDeps,
-  options: ProfileWriterOptions,
-): Promise<ProfileWriterResult> {
+export async function collectExchanges(
+  { memory, profiles }: ExchangeCollectorDeps,
+  options: ExchangeCollectorOptions,
+): Promise<CollectedExchanges> {
   const now = options.now ?? new Date();
   const existing = await profiles.read(options.agentId);
-  const current = existing?.profile ?? '';
   const since = existing?.updatedAt ?? null;
 
   const { recent } = await memory.recall(options.agentId, { limit: MAX_EXCHANGES_PER_PASS });
   const fresh = since ? recent.filter((entry) => entry.occurredAt > since) : recent;
 
-  if (fresh.length === 0) return { changed: false, exchanges: [] };
+  if (fresh.length === 0) return { exchanges: [] };
+
+  /*
+   * Move the watermark either way.
+   *
+   * It records when this agent's memory was last CONSIDERED, not when anything
+   * changed. Leaving it alone on a pass that decided nothing was worth keeping
+   * leaves the agent permanently stale, and the job re-reads the same exchanges
+   * to reach the same conclusion on every wake. Production had two agents in
+   * exactly that state within an hour of the previous version shipping.
+   */
+  const previous = existing?.profile ?? '';
+  await profiles.save(options.agentId, previous, now);
 
   const newest = fresh[fresh.length - 1];
-  const considered = {
+  return {
     exchanges: fresh.map((entry) => entry.content),
     ...(newest ? { newestId: newest.id, occurred: newest.occurredAt.toISOString() } : {}),
+    /*
+     * What this agent already knew, handed on once.
+     *
+     * The migration, and there is no SQL in it. Every student has per-agent
+     * profiles today; passing them to the first write of the shared page means
+     * nobody loses what was learned about them on the day this ships.
+     */
+    ...(previous.trim() ? { knownBefore: previous.trim() } : {}),
   };
-
-  const exchanges = fresh.map((entry) => entry.content).join('\n\n');
-
-  /*
-   * Two different asks, because "return it unchanged" is nonsense with nothing
-   * to return.
-   *
-   * The first version showed a placeholder -- "(empty, nothing known yet)" --
-   * in the slot where the document goes, and asked for it back untouched if
-   * nothing was worth keeping. Production's first run did exactly that, and
-   * the placeholder was saved as what the agent knows about a person. The
-   * model was following instructions: from where it sat, the placeholder WAS
-   * the document. So there is no placeholder to hand back now.
-   */
-  const ask = current
-    ? `The document as it stands [${current.length}/${PROFILE_CHAR_LIMIT} characters]:\n` +
-      `${current}\n\n` +
-      `Exchanges since it was last written, oldest first:\n${exchanges}\n\n` +
-      'Return the whole document, rewritten. Return it exactly as it stands if none of ' +
-      'this is worth keeping.'
-    : 'There is no document for this student yet.\n\n' +
-      `Their exchanges so far, oldest first:\n${exchanges}\n\n` +
-      `Write the first version, up to ${PROFILE_CHAR_LIMIT} characters. Reply with an ` +
-      'empty message if none of this is worth keeping, which is the usual answer.';
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: PROFILE_DOC.body },
-    { role: 'user', content: ask },
-  ];
-
-  const response = await llm.chat({ messages }, { userId: options.userId });
-  const written = capProfile(typeof response.content === 'string' ? response.content : '');
-
-  /*
-   * An empty completion must not wipe what the agent already knew.
-   *
-   * A refusal, a safety filter, or a truncated response all arrive as an empty
-   * string, and treating that as "the student is now a blank" would silently
-   * destroy months of accumulated memory with nothing to notice it.
-   */
-  /*
-   * A model narrating emptiness is not a profile.
-   *
-   * Belt and braces alongside removing the placeholder: models describe an
-   * absence in a dozen ways, and any of them saved here becomes a permanent
-   * line in a prompt that every turn pays for.
-   */
-  const describesNothing = /^\(?\s*(?:empty|none|nothing|no (?:profile|document|information))\b/i;
-
-  const keep = written === '' || written === capProfile(current) || describesNothing.test(written);
-
-  /*
-   * Write back either way, because the timestamp is a watermark.
-   *
-   * It records when this agent's memory was last CONSIDERED, not when the
-   * document last changed. Leaving it alone on a pass that decided nothing was
-   * worth keeping leaves the agent permanently stale, and the job re-reads the
-   * same exchanges to reach the same conclusion on every wake. Production had
-   * two agents in exactly that state within an hour of this shipping.
-   */
-  await profiles.save(options.agentId, keep ? capProfile(current) : written, now);
-  return { changed: !keep, ...considered };
 }

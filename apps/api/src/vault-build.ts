@@ -73,7 +73,7 @@ const building = new Map<string, Progress>();
  * minutes, and the files two hours. A single spinner over all three says the
  * same thing at second ten and at hour two.
  */
-export type BuildPhase = 'classroom' | 'drive' | 'mail' | 'files';
+export type BuildPhase = 'classroom' | 'drive' | 'mail' | 'files' | 'classes';
 
 export interface Progress {
   phase: BuildPhase;

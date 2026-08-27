@@ -391,7 +391,7 @@ describe('the assembled system prompt', () => {
 
   async function messagesFor(
     recent: Recalled,
-    profile?: string,
+    about?: string,
   ): Promise<{ role: string; content: string }[]> {
     const seen: { role: string; content: string }[] = [];
     await runAgentTurn(capturing(seen, recent), {
@@ -400,13 +400,13 @@ describe('the assembled system prompt', () => {
       purpose: 'keep me on top of chemistry',
       message: 'go',
       timezone: 'Europe/London',
-      ...(profile === undefined ? {} : { profile }),
+      ...(about === undefined ? {} : { about }),
     } as never);
     return seen;
   }
 
-  async function systemPrompt(recent: Recalled = [], profile?: string): Promise<string> {
-    return (await messagesFor(recent, profile)).find((m) => m.role === 'system')?.content ?? '';
+  async function systemPrompt(recent: Recalled = [], about?: string): Promise<string> {
+    return (await messagesFor(recent, about)).find((m) => m.role === 'system')?.content ?? '';
   }
 
   async function userMessage(recent: Recalled = []): Promise<string> {
@@ -462,31 +462,33 @@ describe('the assembled system prompt', () => {
     expect(user.indexOf('</turn_context>')).toBeLessThan(user.indexOf('go'));
   });
 
-  it('carries what it durably knows about the student', async () => {
-    const prompt = await systemPrompt([], 'Revises by rewriting notes rather than rereading.');
-    expect(prompt).toContain('Revises by rewriting notes');
-    expect(prompt).toMatch(/what you know about this student/i);
+  it('carries the page the vault writes about the student', async () => {
+    const prompt = await systemPrompt([], '# Lucas\n\n- [[class-french]] — taught by Mme Rivard');
+    expect(prompt).toContain('[[class-french]]');
+    expect(prompt).toMatch(/what their vault says about them/i);
   });
 
-  it('keeps the profile above everything volatile, so it stays cached', async () => {
-    // It changes once per conversation at most, which makes it per-agent
+  it('keeps that page above everything volatile, so it stays cached', async () => {
+    // It is rewritten between conversations at most, which makes it per-agent
     // rather than per-turn -- the tier that still caches.
-    const prompt = await systemPrompt([], 'Revises by rewriting notes.');
-    expect(prompt.indexOf('Revises by rewriting notes')).toBeGreaterThan(-1);
+    const prompt = await systemPrompt([], '# Lucas');
+    expect(prompt.indexOf('# Lucas')).toBeGreaterThan(-1);
     expect(prompt).not.toContain('Right now it is');
   });
 
-  it('carries no profile heading at all for an agent that knows nothing yet', async () => {
+  it('carries no heading at all for a student nothing has been written about', async () => {
     // An empty section would cost tokens in the cached prefix on every turn
     // of every conversation, for every new student, forever.
-    expect(await systemPrompt([], '')).not.toMatch(/what you know about this student/i);
+    expect(await systemPrompt([], '')).not.toMatch(/what their vault says about them/i);
   });
 
-  it('holds an over-long profile to the budget', async () => {
-    const huge = 'This student does a thing. '.repeat(200);
-    const prompt = await systemPrompt([], huge);
-    const section = /what you know about this student \[(\d+)\//i.exec(prompt);
-    expect(Number(section?.[1])).toBeLessThanOrEqual(1400);
+  it('no longer carries a second, per-agent document about the same student', async () => {
+    /*
+     * There used to be two: this page, and a conversation profile belonging to
+     * one agent. The split was wrong rather than merely wasteful -- a student
+     * with three agents told each of them separately that they read on a phone.
+     */
+    expect(await systemPrompt([], '# Lucas')).not.toMatch(/what you know about this student/i);
   });
 
   it('does not still carry the instruction the document replaced', async () => {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, buildGraph, readUserDoc } from '@contexto/agent';
+import { Vault, listDocuments, readDocument, readUserDoc } from '@contexto/agent';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -82,21 +82,63 @@ export function createVaultRoutes(ctx: AppContext) {
       })
 
       /*
-       * The whole vault as a shape, for the picture in Settings.
+       * The vault as a shape, for the picture in Settings.
        *
        * Scoped by student, not by agent. It was reached through an agent
        * before, which meant a student who deleted their agents lost sight of
        * their own school -- three and a half thousand notes, still on disk,
        * with nothing on the page to say so.
        *
-       * Everything a drawing needs and nothing it does not: no note bodies,
-       * because a picture of three thousand notes should not cost three
-       * thousand note bodies over the wire.
+       * The pages, not the notes. There are about ten of them and they are what
+       * a student would recognise: their classes, their school, what they have
+       * said. Drawing four thousand notes was a picture of how much there is
+       * rather than of what any of it says, and cost four thousand rows over
+       * the wire to be one.
        */
       .get('/graph', auth, async (c) => {
         const root = ctx.env?.VAULT_ROOT;
         if (!root) return c.json({ nodes: [], edges: [] });
-        return c.json(await buildGraph(new Vault(root, c.get('userId'))));
+
+        const vault = new Vault(root, c.get('userId'));
+        const documents = await listDocuments(vault);
+        const exists = new Set(documents.map((doc) => doc.name));
+
+        const edges: { from: string; to: string }[] = [];
+        for (const doc of documents) {
+          for (const match of doc.body.matchAll(/\[\[([^\]]+)\]\]/g)) {
+            const to = match[1] as string;
+            // Only links between pages. A page links out to the notes as well,
+            // and drawing those puts the four thousand back.
+            if (exists.has(to) && to !== doc.name) edges.push({ from: doc.name, to });
+          }
+        }
+
+        return c.json({
+          nodes: documents.map((doc) => ({
+            name: doc.name,
+            description: doc.description,
+            /** How many other pages point here. user.md points at all of them. */
+            degree: edges.filter((edge) => edge.to === doc.name).length,
+          })),
+          edges,
+        });
+      })
+
+      /** One page, whole. What the picture opens when something is clicked. */
+      .get('/doc/:name', auth, async (c) => {
+        const root = ctx.env?.VAULT_ROOT;
+        if (!root) throw new ContextoError('not_found', 'No vault for this student.');
+
+        const document = await readDocument(new Vault(root, c.get('userId')), c.req.param('name'));
+        if (!document) throw new ContextoError('not_found', 'No such page.');
+
+        return c.json({
+          document: {
+            name: document.name,
+            description: document.description,
+            body: document.body,
+          },
+        });
       })
 
       /** One note, and everything that ever pointed at it. */

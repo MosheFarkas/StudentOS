@@ -18,109 +18,84 @@ import { USER_DOC } from './documents.js';
 const body = USER_DOC.body;
 
 describe('what the user document is told to write', () => {
-  it('lays out the four things the document holds, in order', () => {
+  it('lays out the sections it holds, in order', () => {
     // A brief with no shape produces a different document every rebuild.
     for (const part of [/Who they are/i, /What they study/i, /What else they do/i]) {
       expect(body).toMatch(part);
     }
-    expect(body).toMatch(/four sentences/i);
   });
 
-  it('tells the writer what kind of thing each course is, rather than hinting', () => {
+  it('says the page is a way in as well as a summary', () => {
     /*
-     * This used to be the writer's judgement, made from one bit saying whether
-     * any work had ever been set -- a bit wrong in both directions, since a
-     * club that once posted a form sets work and a subject marked on paper
-     * does not. The writer has four sentences and no evidence, and was the
-     * worst placed reader in the system to be deciding it.
+     * The change this document exists to serve.
      *
-     * It is now decided against what happens inside the course, challenged,
-     * and handed over settled. What the document has to say is that the name
-     * does not get to overrule it.
+     * Everything else about a student now lives on a page of its own, and the
+     * only thing that says those pages exist is this one. A subject it fails to
+     * name is a subject the agent never learns it can look up.
      */
-    expect(body).toMatch(/you are told what kind of thing each course is/i);
-    expect(body).toMatch(/trust it over the name/i);
-    expect(body).toMatch(/house called French and a subject called French/i);
+    expect(body).toMatch(/names the other pages|way in/i);
+    expect(body).toMatch(
+      /never mentions is a class the agent will not know|will not know to look up/i,
+    );
   });
 
-  it('insists a teacher it was given is actually used', () => {
-    /*
-     * The teachers this can find are scarce and mostly attached to clubs and
-     * programmes rather than subjects. A structure that only asked for them
-     * beside subjects found four and printed none of them.
-     */
-    expect(body).toMatch(/every teacher you were given must appear/i);
-    expect(body).toMatch(/wastes the only hard fact in here/i);
+  it('requires the links, which the previous version banned', () => {
+    expect(body).toMatch(/\[\[class-french\]\]|\[\[page-name\]\]/);
+    expect(body).toMatch(/only the page names you were given/i);
   });
 
-  it('allows a teacher it was given and forbids filling the gaps', () => {
+  it('refuses a link to a page that does not exist', () => {
+    // The agent will keep trying a name it was given, and get nothing back.
+    expect(body).toMatch(/does not exist opens nothing/i);
+  });
+
+  it('forbids filling in a fact it was not given', () => {
+    expect(body).toMatch(/no teacher you were not told about/i);
+    expect(body).toMatch(/asked for something and therefore produced it/i);
+  });
+
+  it('takes the year as given rather than reading one off a course', () => {
     /*
-     * The first real document said this student takes enriched English with
-     * Gillian Shadley. He does not. Nothing in the digest said who teaches
-     * anything -- it offered a list of courses and a list of people, and the
-     * model paired them, which is what anyone would do.
+     * The year has already had the years since counted, which is the thing a
+     * writer looking at March's mail cannot do for itself.
      */
-    expect(body).toMatch(/do not fill the gap/i);
-    expect(body).toMatch(/do not guess from the subject/i);
-    expect(body).toMatch(/wrong teacher sits in front of every conversation/i);
+    expect(body).toMatch(/Use it as given/i);
+    expect(body).toMatch(/do not work one out from a course name/i);
   });
 
   it('keeps counts out, which were half the length and none of the use', () => {
-    expect(body).toMatch(/Numbers\./);
-    expect(body).toMatch(/61 pieces of work/);
-  });
-
-  it('says a shorter document is a better one', () => {
-    // A budget invites filling. It is a limit, not a quota.
-    expect(body).toMatch(/a limit, not a quota/i);
-  });
-
-  it('rules out turning counts into a verdict on the student', () => {
-    expect(body).toMatch(/never characterise them at all/i);
-  });
-
-  it('offers the reasons a record can be incomplete, rather than only forbidding', () => {
-    // A rule with no explanation is followed until it is inconvenient.
-    expect(body).toMatch(/marked on paper|does not grade in Classroom/i);
+    expect(body).toMatch(/Numbers/i);
+    expect(body).toMatch(/not how many assignments/i);
   });
 
   it('rules out characterising the student at all', () => {
-    expect(body).toMatch(/behind, weak, disorganised, strong or gifted/i);
-    expect(body).toMatch(/not what you think of them/i);
+    expect(body).toMatch(/How to write about how they are doing/i);
+    expect(body).toMatch(/becomes how they are treated/i);
   });
 
   it('keeps out what expires before the document is rewritten', () => {
-    expect(body).toMatch(/deadlines|expires/i);
-    expect(body).toMatch(/one tool call away/i);
+    expect(body).toMatch(/Anything that expires/i);
+    expect(body).toMatch(/when a term changes, not when a week does/i);
   });
 
-  it('says it is rewritten whole from the vault, not added to', () => {
-    // Otherwise it accumulates courses the student finished years ago.
-    expect(body).toMatch(/rewrite it whole|ground truth/i);
+  it('keeps everybody but the student out of it', () => {
+    expect(body).toMatch(/Anybody else/i);
+    expect(body).toMatch(/Teachers are named on the class pages/i);
   });
 
   it('names an order to cut in, so a full document degrades predictably', () => {
-    expect(body).toMatch(/their year and school come first/i);
+    expect(body).toMatch(/cut in this order/i);
+    expect(body).toMatch(/Never cut a subject entirely/i);
   });
 
-  it('bans the markup that costs a character of student per character', () => {
-    expect(body).toMatch(/no headings, no bullets/i);
-  });
-
-  it('makes the writer place today in the school year', () => {
-    /*
-     * The document said this student was preparing for an exam and finishing a
-     * project, in late August, months after both had ended. The dates were all
-     * in the vault; nothing asked the writer to look at them.
-     */
-    expect(body).toMatch(/say when, not just what/i);
-    expect(body).toMatch(/between years/i);
-    expect(body).toMatch(/past tense/i);
+  it('requires the markup the previous version stripped', () => {
+    expect(body).toMatch(/Markdown, and use it properly/i);
+    expect(body).toMatch(/the headings above/i);
   });
 
   it('is small enough to be worth loading', () => {
-    // It is a writer's brief, not a turn prompt, but a brief nobody can hold
-    // in mind is a brief that gets half followed.
-    expect(body.length).toBeLessThan(5000);
+    // It is read once at module load, not per turn -- but a document nobody
+    // will read is a document nobody will maintain.
+    expect(body.length).toBeLessThan(8_000);
   });
 });

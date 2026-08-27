@@ -45,11 +45,7 @@ export class AnthropicProvider implements LlmProvider {
         max_tokens: request.maxOutputTokens ?? 16_000,
         system,
         messages,
-        tools: request.tools?.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          input_schema: tool.parameters as Anthropic.Tool.InputSchema,
-        })),
+        tools: toolsFor(request),
       },
       { signal: ctx.signal },
     );
@@ -124,6 +120,38 @@ export class AnthropicProvider implements LlmProvider {
       finishReason: final.stop_reason === 'tool_use' ? 'tool_calls' : 'stop',
     };
   }
+}
+
+/**
+ * The tools a request carries, the caller's own and the provider's.
+ *
+ * Web search is Anthropic's, run server-side: the model searches and reads
+ * inside the one request and answers with what it found, so nothing here has to
+ * execute anything. It arrives as `server_tool_use` blocks, which is a
+ * different block type from `tool_use` -- so the tool-call extraction above
+ * cannot mistake one for the other and try to run it.
+ *
+ * Undefined rather than an empty array when there is nothing: some providers
+ * reject a zero-length tools array, and until OAuth exists no student has any.
+ */
+export function toolsFor(request: ChatRequest): Anthropic.ToolUnion[] | undefined {
+  const tools: Anthropic.ToolUnion[] = (request.tools ?? []).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.parameters as Anthropic.Tool.InputSchema,
+  }));
+
+  if (request.webSearch) {
+    tools.push({
+      type: 'web_search_20260318',
+      name: 'web_search',
+      // Priced per search. Left unbounded, a pass that decides to keep looking
+      // is the one cost in this system nothing else can cap.
+      max_uses: request.webSearch.maxUses ?? 8,
+    });
+  }
+
+  return tools.length > 0 ? tools : undefined;
 }
 
 /**

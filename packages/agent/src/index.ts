@@ -9,16 +9,11 @@
 export * from './memory/types.js';
 export { PostgresMemoryStore } from './memory/store.js';
 export {
-  updateStudentProfile,
-  type ProfileWriterOptions,
-  type ProfileWriterDeps,
+  collectExchanges,
+  type CollectedExchanges,
+  type ExchangeCollectorDeps,
 } from './memory/summarize.js';
-export {
-  PROFILE_CHAR_LIMIT,
-  capProfile,
-  profileSection,
-  type ProfileStore,
-} from './memory/profile.js';
+export { capProfile, type ProfileStore } from './memory/profile.js';
 export { PostgresProfileStore } from './memory/profile-store.js';
 
 export { UNTRUSTED_RULE, untrustedNote } from './untrusted.js';
@@ -26,6 +21,21 @@ export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/v
 export { renderNotes } from './vault/render.js';
 export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';
 export { searchVault } from './tools/vault.js';
+export { openVaultDocument } from './tools/documents.js';
+export {
+  readDocument,
+  writeDocument,
+  listDocuments,
+  capDocument,
+  classDocName,
+  USER_DOC_NAME,
+  SCHOOL_DOC_NAME,
+  CHATS_DOC_NAME,
+  CLASS_PREFIX,
+  CLASS_DOC_LIMIT,
+  CHATS_DOC_LIMIT,
+  SCHOOL_DOC_LIMIT,
+} from './vault/documents.js';
 export { importConversation } from './vault/conversation.js';
 export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
@@ -35,11 +45,20 @@ export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
+export { writeClassDocs, type ClassDocResult } from './vault/class-doc.js';
+export { writeSchoolDoc, academicYearEnd, type SchoolDocResult } from './vault/school-doc.js';
+export { updateChatsDoc } from './vault/chats-doc.js';
+export { readGrade, type GradeReading } from './vault/grade.js';
 export { classroomCourse, classroomEvent } from './vault/mail.js';
-export { vaultDigest, type VaultDigest } from './vault/digest.js';
-export { understandVault } from './vault/understand.js';
-export { askWhoTeaches } from './vault/evidence.js';
-export type { Claim, Withheld } from './vault/claims.js';
+export {
+  classifyCourses,
+  describeCourses,
+  filterSnapshot,
+  lastActivityByCourse,
+  academicYearStart,
+  sweepDroppedCourses,
+  type CourseVerdict,
+} from './vault/courses.js';
 export { collectDriveFiles } from './vault/collect-drive.js';
 export {
   collectSchoolMail,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PROFILE_CHAR_LIMIT, capProfile, profileSection } from './profile.js';
+import { PROFILE_CHAR_LIMIT, capProfile } from './profile.js';
 
 /**
  * The bound is the mechanism, not a limitation being worked around.
@@ -33,27 +33,5 @@ describe('holding the profile to its budget', () => {
 
   it('trims surrounding whitespace', () => {
     expect(capProfile('  Takes chemistry.  \n\n')).toBe('Takes chemistry.');
-  });
-});
-
-describe('rendering the profile into the prompt', () => {
-  it('labels it so the model knows what it is reading', () => {
-    const section = profileSection('Takes chemistry. Revises by rewriting notes.');
-    expect(section).toContain('Takes chemistry.');
-    expect(section).toMatch(/what you know about this student/i);
-  });
-
-  it('shows the agent how full its budget is', () => {
-    // Hermes puts the gauge in the prompt so the agent knows when it must
-    // evict something rather than simply appending.
-    const section = profileSection('Takes chemistry.');
-    expect(section).toMatch(/16\/1400 characters/);
-  });
-
-  it('is absent entirely when nothing is known yet', () => {
-    // A new agent should not carry an empty heading around, and an empty
-    // section in the cached prefix costs tokens on every turn forever.
-    expect(profileSection('')).toBeNull();
-    expect(profileSection('   ')).toBeNull();
   });
 });

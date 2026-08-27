@@ -116,15 +116,6 @@ export function loadPromptDocument(name: string, dir = DOCUMENTS_DIR): PromptDoc
 export const RESPONDING = loadPromptDocument('responding');
 
 /**
- * How the summarisation job decides what is worth keeping about a student.
- *
- * Never loaded on a turn. It is the system prompt for the background pass that
- * rewrites the profile between conversations, which is why it costs nothing
- * per turn despite being long.
- */
-export const PROFILE_DOC = loadPromptDocument('profile');
-
-/**
  * What an episode is, when to make one, and how to link it.
  *
  * Loaded by every pass that writes into ContextoVault -- mail import,
@@ -162,14 +153,35 @@ export const VAULT_READING = loadPromptDocument('vault-reading');
  * answering: every wrong fact this vault has stored came from a pass that was
  * asked for a name and therefore produced one.
  */
-export const INTERPRETING = loadPromptDocument('interpreting');
+/**
+ * How to write the page describing one of a student's classes.
+ *
+ * Never loaded on a turn -- what it produces is, when a question turns out to
+ * be about that subject. Its hardest rule is the one about expiry: a page
+ * rewritten when a course changes must not contain anything that is wrong when
+ * the week does.
+ */
+export const CLASS_DOC = loadPromptDocument('class-doc');
 
 /**
- * How to try to break a claim before it is stored.
+ * How to research a school on the open web and write down what survives.
  *
- * The counterpart to INTERPRETING and deliberately a separate document read by
- * a separate call. A model asked to check its own reasoning fails the second
- * time in the direction it failed the first; one that has committed to nothing
- * and is asked only to find the hole does not.
+ * The only pass in this product that reads anything outside the student's own
+ * account, and the only one allowed to search. What it establishes about the
+ * academic calendar is read back by the pass that decides which of their
+ * classes are current, so its instruction to decline rather than guess a date
+ * is load-bearing rather than good manners.
  */
-export const REFUTING = loadPromptDocument('refuting');
+export const SCHOOL_DOC = loadPromptDocument('school-doc');
+
+/**
+ * What survives a conversation once it is over.
+ *
+ * Replaces the per-agent conversation profile, and differs from it in the one
+ * way that matters: this page is the student's, not one agent's, so something
+ * they said in one conversation is known in the next. Its most load-bearing
+ * paragraph is the one forbidding a verdict on them -- a characterisation
+ * written down once is read on every future turn and becomes how they are
+ * treated.
+ */
+export const CHATS_DOC = loadPromptDocument('chats-doc');

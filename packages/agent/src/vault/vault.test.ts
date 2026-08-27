@@ -122,6 +122,51 @@ describe('Vault', () => {
     expect((await vault.list('episode')).map((n) => n.name)).toEqual(['2026-08-23-mock']);
   });
 
+  it('round-trips the fingerprint of what a document was written from', async () => {
+    /*
+     * What stops a build repaying for prose that has not changed.
+     *
+     * A refresh runs every six hours and a student has ten classes. Without
+     * something to compare against, that is forty model calls a day rewriting
+     * pages whose sources nobody touched.
+     */
+    await vault.write(
+      note({ name: 'class-french', kind: 'document', sourceHash: 'ab12cd34', body: 'French.' }),
+    );
+
+    expect((await vault.read('document', 'class-french'))?.sourceHash).toBe('ab12cd34');
+  });
+
+  it('keeps documents in their own place, apart from the notes', async () => {
+    /*
+     * The third kind, and the one a person actually reads.
+     *
+     * Notes are what a school did; documents are what this product worked out
+     * from them. Sharing a directory would mean `[[french]]` the course note
+     * and the French document could not both exist, and a search over the notes
+     * would rank a summary of a course above the course.
+     */
+    await vault.write(note());
+    await vault.write(note({ name: 'user', kind: 'document', body: 'Lucas is in Grade 11.' }));
+
+    expect((await vault.list('entity')).map((n) => n.name)).toEqual(['chemistry']);
+    expect((await vault.list('document')).map((n) => n.name)).toEqual(['user']);
+    expect((await vault.read('document', 'user'))?.body).toBe('Lucas is in Grade 11.');
+  });
+
+  it('does not count documents as a vault worth handing to a turn', async () => {
+    // A vault of conclusions and no evidence is not a vault.
+    await vault.write(note({ name: 'user', kind: 'document', body: 'Lucas is in Grade 11.' }));
+    expect(await vault.has()).toBe(false);
+  });
+
+  it('finds a document that points at a note', async () => {
+    await vault.write(note());
+    await vault.write(note({ name: 'user', kind: 'document', body: 'They take [[chemistry]].' }));
+
+    expect((await vault.backlinks('chemistry')).map((n) => n.name)).toContain('user');
+  });
+
   it('knows whether this agent has a vault at all', async () => {
     /*
      * Whether to hand the agent a vault, and therefore whether to load the

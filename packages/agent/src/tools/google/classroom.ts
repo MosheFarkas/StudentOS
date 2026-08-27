@@ -72,7 +72,13 @@ export const listCourses: Tool<{ includeArchived?: boolean }, unknown> = {
     }
 
     const result = await googleFetch<{
-      courses?: { id: string; name?: string; ownerId?: string; section?: string }[];
+      courses?: {
+        id: string;
+        name?: string;
+        courseState?: string;
+        ownerId?: string;
+        section?: string;
+      }[];
     }>(`${COURSES_URL}?${input.includeArchived ? STATES_EVER : STATES_NOW}`, token, {
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
@@ -88,6 +94,14 @@ export const listCourses: Tool<{ includeArchived?: boolean }, unknown> = {
        * direct answer to a question this product spent a great deal of effort
        * inferring from mail. Both were returned by the API and dropped here.
        */
+      /*
+       * What the school says about whether this course is over.
+       *
+       * ACTIVE or ARCHIVED, straight from Classroom. A school archives a course
+       * when the year ends, which makes this the only answer about a course's
+       * life that was not inferred from how quiet it has gone.
+       */
+      ...(c.courseState ? { courseState: c.courseState } : {}),
       ...(c.ownerId ? { ownerId: c.ownerId } : {}),
       ...(c.section ? { section: c.section } : {}),
     }));

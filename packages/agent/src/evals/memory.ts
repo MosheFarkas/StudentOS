@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentActivity } from '@contexto/shared';
@@ -7,7 +7,11 @@ import { runAgentTurn } from '../run.js';
 import type { AgentRunDeps } from '../run.js';
 import { ToolRegistry } from '../tools/registry.js';
 import { searchMemory } from '../tools/memory.js';
-import { updateStudentProfile } from '../memory/summarize.js';
+import { tmpdir } from 'node:os';
+import { collectExchanges } from '../memory/summarize.js';
+import { updateChatsDoc } from '../vault/chats-doc.js';
+import { readDocument, CHATS_DOC_NAME } from '../vault/documents.js';
+import { Vault } from '../vault/vault.js';
 import type { ProfileStore } from '../memory/profile.js';
 import { queryTerms, rankByTermMatches } from '../memory/search.js';
 import type { EpisodicMemory, MemoryStore, RecallOptions } from '../memory/types.js';
@@ -85,27 +89,33 @@ function seededStore(history: string[], queries: { q: string; hits: number }[]):
 }
 
 /**
- * Write a profile from this case's history, with the real writer.
+ * Write the chats page from this case's history, with the real writer.
  *
- * Hand-writing the profile would measure a document we invented rather than
- * the one the job produces, which is the only one that will ever exist.
+ * Hand-writing the page would measure a document we invented rather than the
+ * one the job produces, which is the only one that will ever exist.
  */
 async function profileFor(apiKey: string, testCase: MemoryCase): Promise<string> {
   const provider = new OpenAiProvider({ apiKey, model: PLATFORM_MODEL });
-  let written = '';
   const profiles: ProfileStore = {
     read: async () => ({ profile: '', updatedAt: null }),
-    save: async (_agentId, profile) => {
-      written = profile;
-    },
+    save: async () => {},
     stale: async () => [],
   };
 
-  await updateStudentProfile(
-    { llm: provider, memory: seededStore(testCase.history, []), profiles },
-    { agentId: 'eval', userId: 'eval' },
-  );
-  return written;
+  const root = mkdtempSync(join(tmpdir(), 'contexto-eval-memory-'));
+  try {
+    const vault = new Vault(root, 'eval');
+    const burst = await collectExchanges(
+      { memory: seededStore(testCase.history, []), profiles },
+      { agentId: 'eval', userId: 'eval' },
+    );
+
+    await updateChatsDoc({ llm: provider }, { vault, exchanges: burst.exchanges, userId: 'eval' });
+
+    return (await readDocument(vault, CHATS_DOC_NAME))?.body ?? '';
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 interface Outcome {

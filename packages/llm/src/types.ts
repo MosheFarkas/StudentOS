@@ -60,6 +60,19 @@ export interface ChatRequest {
   messages: ChatMessage[];
   tools?: ToolDefinition[];
   maxOutputTokens?: number;
+  /**
+   * Let the provider search the web itself, server-side.
+   *
+   * Not a ToolDefinition, because the loop runs inside the one request: the
+   * model searches, reads and cites without the caller ever seeing a tool call
+   * to execute. Both vendors ship it, which is why it belongs on the neutral
+   * interface rather than leaking a provider into a call site.
+   *
+   * `maxUses` is the bill. Searches are priced per search rather than per
+   * token, so a pass that decides to keep looking is a cost nothing else in
+   * this system can bound.
+   */
+  webSearch?: { maxUses?: number };
 }
 
 export interface ToolCall {

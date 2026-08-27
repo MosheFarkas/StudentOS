@@ -71,6 +71,15 @@ export interface MailImportOptions {
   userId: string;
   /** The school's domains. A sender outside them is not one of their teachers. */
   domains?: string[];
+  /**
+   * Courses the vault has decided not to hold, by their Classroom name.
+   *
+   * Recovery below writes a course note for any class a notification names, and
+   * a year of last year's mail is still in range after that course has been
+   * filtered out -- so without this the filter drops it and the next import
+   * writes it back, every build, for as long as the mail lasts.
+   */
+  dropped?: string[];
 }
 
 export interface MailImportResult {
@@ -227,13 +236,16 @@ function parseSender(from: string): { display: string; address: string } {
 
 export async function importMail(
   { llm, onProgress }: MailImportDeps,
-  { vault, messages, entities, userId, domains }: MailImportOptions,
+  { vault, messages, entities, userId, domains, dropped }: MailImportOptions,
 ): Promise<MailImportResult> {
   const existingEpisodes = await vault.list('episode');
   const already = new Set(existingEpisodes.map((note) => note.externalId).filter(Boolean));
   const takenNames = new Set(existingEpisodes.map((note) => note.name));
 
   const allowed = new Set(entities);
+
+  /** Courses the filter has already refused, so recovery does not undo it. */
+  const refused = new Set(dropped ?? []);
 
   /** Courses already noted, so mail only creates the ones nobody has. */
   const knownCourses = new Set(
@@ -455,7 +467,7 @@ export async function importMail(
        */
       if (viaClassroom) {
         const named = classroomCourse(message.body);
-        if (named) {
+        if (named && !refused.has(named)) {
           const slug = slugForNote(named);
           if (!knownCourses.has(slug)) {
             await vault.write({

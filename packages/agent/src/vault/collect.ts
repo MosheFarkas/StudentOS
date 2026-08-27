@@ -86,7 +86,7 @@ async function collect<T>(
 export async function collectClassroomSnapshot(ctx: ToolContext): Promise<Collected> {
   const skipped: string[] = [];
 
-  const courses = await collect<{ id: string; name: string }>(
+  const courses = await collect<ClassroomSnapshot['courses'][number]>(
     'courses',
     () => listCourses.execute({ includeArchived: EVERY_YEAR } as never, ctx),
     'courses',

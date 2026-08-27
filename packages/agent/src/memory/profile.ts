@@ -50,23 +50,6 @@ export function capProfile(profile: string, limit = PROFILE_CHAR_LIMIT): string 
 }
 
 /**
- * Render the profile for the system prompt, or nothing at all.
- *
- * The budget gauge is Hermes' idea and earns its handful of tokens: an agent
- * that can see its document is nearly full has the information it needs to
- * replace something rather than append to it.
- */
-export function profileSection(profile: string): string | null {
-  const capped = capProfile(profile);
-  if (capped === '') return null;
-
-  return (
-    `What you know about this student [${capped.length}/${PROFILE_CHAR_LIMIT} characters]:\n` +
-    capped
-  );
-}
-
-/**
  * Reading and writing the profile, and finding the agents that need one.
  *
  * Separate from MemoryStore because it is a different table and a different

@@ -181,6 +181,25 @@ describe("which courses count as the student's", () => {
       'Grade 10 Math',
     ]);
   });
+
+  it('keeps the state the school itself put the course in', async () => {
+    /*
+     * The only authoritative answer to whether a course is over.
+     *
+     * Everything else in this product infers it -- from the date of the last
+     * assignment, from whether anybody still posts. A school archiving a course
+     * when the year ends is the school saying so, and it arrived on every
+     * response all along with nothing keeping it.
+     */
+    courses({ ACTIVE: ['Grade 11 Math'], ARCHIVED: ['Grade 10 History'] });
+    const result = (await listCourses.execute({ includeArchived: true } as never, ctx())) as {
+      courses: { name: string; courseState?: string }[];
+    };
+    expect(Object.fromEntries(result.courses.map((c) => [c.name, c.courseState]))).toEqual({
+      'Grade 11 Math': 'ACTIVE',
+      'Grade 10 History': 'ARCHIVED',
+    });
+  });
 });
 
 describe('the work a student handed in', () => {

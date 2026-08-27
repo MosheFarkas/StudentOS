@@ -48,6 +48,7 @@ const PHASES: { key: string; label: string }[] = [
   { key: 'drive', label: 'Finding your files' },
   { key: 'mail', label: 'Going through your school mail' },
   { key: 'files', label: 'Reading what is in each file' },
+  { key: 'classes', label: 'Writing up each of your classes' },
 ];
 
 /** "about 40 minutes left", from how long the work so far actually took. */

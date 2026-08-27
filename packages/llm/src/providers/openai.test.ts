@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toResponsesInput } from './openai.js';
+import { toResponsesInput, toolsFor } from './openai.js';
 import type { ChatMessage } from '../types.js';
 
 /**
@@ -111,5 +111,39 @@ describe('toResponsesInput', () => {
       { role: 'assistant', content: 'hello' },
       { role: 'user', content: 'bye' },
     ]);
+  });
+});
+
+describe('the tools OpenAI receives', () => {
+  const request = (over = {}) => ({
+    messages: [{ role: 'user' as const, content: 'hi' }],
+    ...over,
+  });
+
+  it('sends nothing when there is nothing to send', () => {
+    expect(toolsFor(request())).toBeUndefined();
+  });
+
+  it('does not offer web search unless it is asked for', () => {
+    const tools = toolsFor(
+      request({ tools: [{ name: 'vault_open', description: 'Open a page', parameters: {} }] }),
+    );
+
+    expect(tools?.map((tool) => tool.type)).toEqual(['function']);
+  });
+
+  it('adds the provider’s own search when a pass asks to research', () => {
+    expect(toolsFor(request({ webSearch: {} }))).toEqual([{ type: 'web_search' }]);
+  });
+
+  it('keeps the caller’s own tools alongside it', () => {
+    const tools = toolsFor(
+      request({
+        tools: [{ name: 'vault_open', description: 'Open a page', parameters: {} }],
+        webSearch: {},
+      }),
+    );
+
+    expect(tools?.map((tool) => tool.type)).toEqual(['function', 'web_search']);
   });
 });

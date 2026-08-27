@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitSystem } from './anthropic.js';
+import { splitSystem, toolsFor } from './anthropic.js';
 
 /**
  * The cache breakpoint.
@@ -49,5 +49,61 @@ describe('the system prompt Anthropic receives', () => {
       { role: 'user', content: 'hi' },
     ]);
     expect(messages).toEqual([{ role: 'user', content: 'hi' }]);
+  });
+});
+
+/**
+ * Letting the model do its own searching.
+ *
+ * One document in this product -- the page about the student's school -- is
+ * written from the open web rather than from their vault. Both vendors run the
+ * search loop server-side, so this is a flag rather than a tool the caller has
+ * to execute.
+ */
+describe('the tools Anthropic receives', () => {
+  const request = (over = {}) => ({
+    messages: [{ role: 'user' as const, content: 'hi' }],
+    ...over,
+  });
+
+  it('sends nothing when there is nothing to send', () => {
+    // Some providers reject a zero-length tools array, and until a student
+    // grants OAuth they have no tools at all.
+    expect(toolsFor(request())).toBeUndefined();
+  });
+
+  it('does not offer web search unless it is asked for', () => {
+    const tools = toolsFor(
+      request({ tools: [{ name: 'vault_open', description: 'Open a page', parameters: {} }] }),
+    );
+
+    expect(tools?.map((tool) => tool.name)).toEqual(['vault_open']);
+  });
+
+  it('adds the provider’s own search when a pass asks to research', () => {
+    const tools = toolsFor(request({ webSearch: {} }));
+
+    expect(tools).toHaveLength(1);
+    expect(tools?.[0]?.type).toBe('web_search_20260318');
+  });
+
+  it('bounds the searches, because they are billed one by one', () => {
+    const tools = toolsFor(request({ webSearch: { maxUses: 3 } }));
+    expect(tools?.[0]).toMatchObject({ max_uses: 3 });
+  });
+
+  it('caps them even when the caller did not say', () => {
+    expect(toolsFor(request({ webSearch: {} }))?.[0]).toMatchObject({ max_uses: 8 });
+  });
+
+  it('keeps the caller’s own tools alongside it', () => {
+    const tools = toolsFor(
+      request({
+        tools: [{ name: 'vault_open', description: 'Open a page', parameters: {} }],
+        webSearch: {},
+      }),
+    );
+
+    expect(tools?.map((tool) => tool.name)).toEqual(['vault_open', 'web_search']);
   });
 });

@@ -28,7 +28,14 @@ import type { Vault, VaultNote } from './vault.js';
  */
 
 export interface ClassroomSnapshot {
-  courses: { id: string; name: string; ownerId?: string; section?: string }[];
+  courses: {
+    id: string;
+    name: string;
+    /** ACTIVE or ARCHIVED, as the school has it. */
+    courseState?: string;
+    ownerId?: string;
+    section?: string;
+  }[];
   coursework: Assignment[];
   topics: Topic[];
   submissions: SubmissionSummary[];
@@ -234,6 +241,15 @@ export async function importClassroom(
         `${course.name}, on Google Classroom.`,
         ...(course.section ? [`Section: ${course.section}`] : []),
         ...(course.ownerId ? [`Owned in Classroom by user ${course.ownerId}.`] : []),
+        /*
+         * Only when archived, and only as a sentence.
+         *
+         * A note saying "Active" on every current course is a line the reader
+         * pays for on every course and learns nothing from. Archiving is the
+         * event worth recording, because it is the school stating that the
+         * course is over rather than something inferring it from silence.
+         */
+        ...(course.courseState === 'ARCHIVED' ? ['Archived by the school.'] : []),
       ].join('\n'),
     });
   }

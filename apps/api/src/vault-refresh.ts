@@ -12,6 +12,12 @@ import {
   domainOf,
   importClassroom,
   importMail,
+  classifyCourses,
+  academicYearEnd,
+  describeCourses,
+  filterSnapshot,
+  writeClassDocs,
+  sweepDroppedCourses,
   readDriveFile,
   textFromDriveRead,
 } from '@contexto/agent';
@@ -112,7 +118,39 @@ async function refreshOne(
 
   onPhase?.({ phase: 'classroom', done: 0, total: 0 });
   const { snapshot } = await collectClassroomSnapshot(toolContext);
-  const classroom = await importClassroom(vault, snapshot);
+
+  /*
+   * Which of these courses belong in a vault at all.
+   *
+   * Nineteen courses on a real account, six of them last year's. Filtering
+   * before the import rather than after it is what stops the expensive half
+   * ever happening: no notes to write, nothing for search to rank, and none of
+   * their Drive attachments read at a model call each.
+   *
+   * Every build re-decides, so correcting the rule corrects the vault.
+   */
+  const today = new Date().toISOString().slice(0, 10);
+  const verdicts = await classifyCourses(
+    { llm: await ctx.llm.resolve(userId) },
+    {
+      courses: describeCourses(snapshot),
+      today,
+      /*
+       * The school's own calendar, where anything has researched it.
+       *
+       * The dependency runs in a circle -- the school page is written from a
+       * vault this filtered -- and resolves because the filter re-runs on every
+       * build: the first uses a July fallback, writes the page, and the next
+       * uses the real date.
+       */
+      ...((await academicYearEnd(vault))
+        ? { yearEnd: (await academicYearEnd(vault)) as string }
+        : {}),
+      userId,
+    },
+  );
+  const dropped = verdicts.filter((verdict) => !verdict.keep);
+  const classroom = await importClassroom(vault, filterSnapshot(snapshot, verdicts));
 
   /*
    * Mail only for a vault that already has a school in it.
@@ -140,7 +178,16 @@ async function refreshOne(
               }
             : {}),
         },
-        { vault, messages: found.messages, entities, userId, domains },
+        {
+          vault,
+          messages: found.messages,
+          entities,
+          userId,
+          domains,
+          // Or a year of last year's mail writes back every course the
+          // filter above just refused.
+          dropped: dropped.map((verdict) => verdict.course),
+        },
       );
     }
   }
@@ -179,12 +226,38 @@ async function refreshOne(
   );
 
   /*
+   * And out with anything a dropped course left behind.
+   *
+   * The filter above stops new notes being written; this is for the ones
+   * already on disk -- the morning after a year ends, or the build after the
+   * classifier is corrected. Teachers and the student's own words are spared.
+   */
+  const swept = await sweepDroppedCourses(vault, verdicts);
+
+  /*
+   * A page per class, from the notes now filed under each.
+   *
+   * Skipped where nothing under a subject has changed since the page was last
+   * written, which is what stops a six-hourly build paying a model call per
+   * class per pass to produce yesterday's prose.
+   */
+  onPhase?.({ phase: 'classes', done: 0, total: 0 });
+  const classes = await writeClassDocs(
+    { llm: await ctx.llm.resolve(userId) },
+    { vault, userId, verdicts },
+  );
+
+  /*
    * Last, because it describes everything above it.
    *
-   * Written from counts rather than notes, so it costs one model call however
-   * large the vault is -- and rewritten whole every time, because the vault is
-   * ground truth and a document that accumulates ends up describing a student
-   * who left two years ago.
+   * Written from the pages rather than the notes, so it costs one model call
+   * however large the vault is -- and rewritten whole every time, because those
+   * pages are ground truth and a document that accumulates ends up describing a
+   * student who left two years ago.
+   *
+   * The school page is not written here. It is the one pass that reaches the
+   * open web, a school's calendar does not change between Tuesdays, and it is
+   * asked for deliberately rather than every six hours.
    */
   const about = await writeUserDoc(
     { llm: await ctx.llm.resolve(userId) },
@@ -192,14 +265,14 @@ async function refreshOne(
       vault,
       userId,
       ...(owner.name ? { name: owner.name } : {}),
-      // The one fact in the vault that identifies the school at all.
-      ...(domainOf(owner.email) ? { schoolDomains: [domainOf(owner.email) as string] } : {}),
     },
   );
 
   return (
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
+    `${dropped.length > 0 ? `, dropped ${dropped.length} courses (${swept.removed} notes)` : ''}` +
+    `, ${classes.written} class pages (${classes.skipped} unchanged, ${classes.removed} gone)` +
     `${about ? `, wrote user.md (${about.length} chars)` : ''}`
   );
 }

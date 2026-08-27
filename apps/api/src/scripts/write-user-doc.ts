@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, domainOf, readUserDoc, writeUserDoc } from '@contexto/agent';
+import { Vault, listDocuments, readUserDoc, writeUserDoc } from '@contexto/agent';
 import { createContext } from '../context.js';
 import { loadEnv } from '../env.js';
 
@@ -39,8 +39,15 @@ async function main(): Promise<void> {
   }
 
   const vault = new Vault(env.VAULT_ROOT, owner.id);
-  const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
-  console.log(`Vault: ${entities.length} entities, ${episodes.length} episodes\n`);
+  const [entities, episodes, documents] = await Promise.all([
+    vault.list('entity'),
+    vault.list('episode'),
+    listDocuments(vault),
+  ]);
+  console.log(
+    `Vault: ${entities.length} entities, ${episodes.length} episodes, ` +
+      `${documents.length} pages (${documents.map((d) => d.name).join(', ') || 'none'})\n`,
+  );
 
   const before = await readUserDoc(vault);
   console.log(`--- before ---\n${before ?? '(nothing was ever written)'}\n`);
@@ -54,12 +61,11 @@ async function main(): Promise<void> {
       vault,
       userId: owner.id,
       ...(owner.name ? { name: owner.name } : {}),
-      ...(domainOf(owner.email) ? { schoolDomains: [domainOf(owner.email) as string] } : {}),
     },
   );
 
   console.log(`--- after (${Math.round((Date.now() - started) / 1000)}s) ---`);
-  console.log(after ?? '(nothing written: the vault has no courses)');
+  console.log(after ?? '(nothing written: no class pages exist yet)');
 }
 
 await main();

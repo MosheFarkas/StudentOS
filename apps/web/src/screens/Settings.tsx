@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { DeviceConnections } from './DeviceConnections.js';
-import { VaultSpace } from './VaultSpace.js';
+import { VaultMap } from './VaultMap.js';
 import { VaultBuild } from './VaultBuild.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
@@ -82,7 +82,7 @@ export function Settings({ onBack }: { onBack: () => void }) {
          * deployment to nobody.
          */}
         <VaultBuild />
-        <VaultSpace />
+        <VaultMap />
       </div>
 
       <GoogleConnections />

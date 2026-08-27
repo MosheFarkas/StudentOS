@@ -631,6 +631,33 @@ describe('what Classroom hands over and the vault was throwing away', () => {
     const note = await vault.read('entity', 'chemistry');
     expect(note?.body).toContain('117batman');
   });
+
+  it('records whether the school has archived a course', async () => {
+    /*
+     * The school's own answer to whether a course is over.
+     *
+     * Everything downstream of this decides what to keep by asking a model when
+     * a course ended, from dates that go quiet over every holiday. A school
+     * archiving a course at the end of the year is not an inference.
+     */
+    await importClassroom(
+      vault,
+      snapshot({ courses: [{ id: 'c-1', name: 'Chemistry', courseState: 'ARCHIVED' }] }),
+    );
+
+    const note = await vault.read('entity', 'chemistry');
+    expect(note?.body).toContain('Archived');
+  });
+
+  it('says nothing about archiving when a course is still running', async () => {
+    await importClassroom(
+      vault,
+      snapshot({ courses: [{ id: 'c-1', name: 'Chemistry', courseState: 'ACTIVE' }] }),
+    );
+
+    const note = await vault.read('entity', 'chemistry');
+    expect(note?.body).not.toContain('Archived');
+  });
 });
 
 describe('running it again', () => {

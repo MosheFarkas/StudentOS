@@ -1351,24 +1351,24 @@ a.button {
   transition: width 0.4s ease;
 }
 
-.vault-space-wrap {
+.vault-map-wrap {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
 
-.vault-space-bar {
+.vault-map-bar {
   display: flex;
   gap: 0.5rem;
   align-items: center;
 }
 
-.vault-space-find {
+.vault-map-find {
   flex: 1;
   min-width: 0;
 }
 
-.vault-space {
+.vault-map {
   display: block;
   width: 100%;
   height: 34rem;
@@ -1381,17 +1381,17 @@ a.button {
   touch-action: none;
 }
 
-.vault-space:active {
+.vault-map:active {
   cursor: grabbing;
 }
 
-.vault-space-card {
+.vault-map-card {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.vault-space-links {
+.vault-map-links {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
@@ -1399,7 +1399,7 @@ a.button {
   align-items: center;
 }
 
-.vault-space-links button {
+.vault-map-links button {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-soft);
@@ -1409,14 +1409,14 @@ a.button {
   cursor: pointer;
 }
 
-.vault-space-links button:hover {
+.vault-map-links button:hover {
   border-color: var(--violet);
   color: var(--violet);
 }
 
 /* The colour key. Small, quiet, and always visible -- it is the difference
    between a picture and a diagram. */
-.vault-space-key {
+.vault-map-key {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem 0.9rem;
@@ -1424,19 +1424,19 @@ a.button {
   color: var(--ink-faint);
 }
 
-.vault-space-key span {
+.vault-map-key span {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.vault-space-key i {
+.vault-map-key i {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
 }
 
-.vault-space-body {
+.vault-map-body {
   margin: 0.5rem 0 0;
   white-space: pre-wrap;
   color: var(--ink-soft);
@@ -1446,7 +1446,7 @@ a.button {
 
 /* A link inside the prose, which has to read as part of the sentence rather
    than as a control sitting in the middle of it. */
-.vault-space-inline {
+.vault-map-inline {
   border: 0;
   background: none;
   padding: 0;
@@ -1457,6 +1457,6 @@ a.button {
   text-underline-offset: 2px;
 }
 
-.vault-space-open {
+.vault-map-open {
   font-size: 0.85rem;
 }

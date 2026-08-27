@@ -452,11 +452,11 @@ describe('browsing the vault', () => {
      */
     const alice = await createUser();
     await new Vault(vaultRoot, alice.id).write({
-      name: 'chemistry',
-      kind: 'entity',
-      source: 'classroom',
-      description: 'Course',
-      body: 'Chemistry.',
+      name: 'class-chemistry',
+      kind: 'document',
+      source: 'agent',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry',
     });
 
     const res = await withVaults.request('/api/vault/graph', as(alice.token));
@@ -466,19 +466,91 @@ describe('browsing the vault', () => {
     expect(body.nodes).toHaveLength(1);
   });
 
-  it("will not hand one student another student's graph", async () => {
+  it('draws the pages, not the thousands of notes underneath them', async () => {
+    /*
+     * The picture used to be of every note. It was true and unreadable -- four
+     * thousand dots is a picture of how much there is, not of what it says --
+     * and it cost four thousand rows over the wire to be one.
+     */
     const alice = await createUser();
-    const bob = await createUser();
-    await new Vault(vaultRoot, bob.id).write({
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
       name: 'chemistry',
       kind: 'entity',
       source: 'classroom',
       description: 'Course',
       body: 'Chemistry.',
     });
+    await vault.write({
+      name: 'user',
+      kind: 'document',
+      source: 'agent',
+      description: 'Who this student is',
+      body: 'They take [[class-chemistry]].',
+    });
+    await vault.write({
+      name: 'class-chemistry',
+      kind: 'document',
+      source: 'agent',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    const body = (await res.json()) as {
+      nodes: { name: string }[];
+      edges: { from: string; to: string }[];
+    };
+
+    expect(body.nodes.map((node) => node.name).sort()).toEqual(['class-chemistry', 'user']);
+    expect(body.edges).toEqual([{ from: 'user', to: 'class-chemistry' }]);
+  });
+
+  it("will not hand one student another student's graph", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    await new Vault(vaultRoot, bob.id).write({
+      name: 'class-chemistry',
+      kind: 'document',
+      source: 'agent',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry',
+    });
 
     const res = await withVaults.request('/api/vault/graph', as(alice.token));
     expect(((await res.json()) as { nodes: unknown[] }).nodes).toHaveLength(0);
+  });
+
+  it("will not hand one student another student's page", async () => {
+    const alice = await createUser();
+    const bob = await createUser();
+    await new Vault(vaultRoot, bob.id).write({
+      name: 'class-chemistry',
+      kind: 'document',
+      source: 'agent',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry',
+    });
+
+    const res = await withVaults.request('/api/vault/doc/class-chemistry', as(alice.token));
+    expect(res.status).toBe(404);
+  });
+
+  it('opens one page by name', async () => {
+    const alice = await createUser();
+    await new Vault(vaultRoot, alice.id).write({
+      name: 'class-chemistry',
+      kind: 'document',
+      source: 'agent',
+      description: 'chemistry, as the vault has it',
+      body: '# Chemistry\n\nTaught by [[mr-ali]].',
+    });
+
+    const res = await withVaults.request('/api/vault/doc/class-chemistry', as(alice.token));
+    const body = (await res.json()) as { document: { body: string } };
+
+    expect(res.status).toBe(200);
+    expect(body.document.body).toContain('Taught by');
   });
 
   it('reads one note, and what points at it, without an agent', async () => {

@@ -11,9 +11,16 @@ import { join, resolve, sep } from 'node:path';
  * markdown with wikilinks opens in Obsidian, survives this product, and is
  * legible to a person who wants to know what a machine believes about them.
  *
- * Notes are of two kinds. Entities are the things that persist -- a course, an
+ * Notes are of three kinds. Entities are the things that persist -- a course, an
  * assignment, a teacher, a preference -- and are rewritten as they change.
  * Episodes are what happened, at a point in time, and are never rewritten.
+ * Documents are what this product worked out from the other two: a page about a
+ * class, about the school, about the student. They are rewritten whole.
+ *
+ * Documents live apart from the notes rather than beside them, because they
+ * describe the same things the notes are about. Sharing a directory would mean
+ * a course and the document about that course competing for one name, and a
+ * search over the evidence ranking a summary above what it summarises.
  *
  * `source` records who wrote the underlying material. It is not decoration: a
  * note derived from a teacher's email carries text this product did not author,
@@ -22,7 +29,7 @@ import { join, resolve, sep } from 'node:path';
  * trust boundary rather than after it.
  */
 
-export type NoteKind = 'entity' | 'episode';
+export type NoteKind = 'entity' | 'episode' | 'document';
 
 /** Who wrote the material a note is derived from. */
 export type NoteSource = 'student' | 'classroom' | 'drive' | 'gmail' | 'portal' | 'agent';
@@ -71,6 +78,23 @@ export interface VaultNote {
    * messageId. What makes re-syncing an exact lookup rather than a guess.
    */
   externalId?: string;
+  /**
+   * Documents only: a fingerprint of the notes this was written from.
+   *
+   * A document is regenerated only when what it describes has changed. Without
+   * this a six-hourly refresh pays a model call per class per pass to rewrite
+   * prose nobody has touched.
+   */
+  sourceHash?: string;
+  /**
+   * The school document only: when the academic year ends, as `MM-DD`.
+   *
+   * Structured rather than left in the prose, because the pass that decides
+   * which classes are current reads it back. A date that has to be recovered
+   * with a regex from a paragraph is a date that will one day be recovered
+   * wrongly and delete a class the student is still taking.
+   */
+  yearEnds?: string;
   /** Markdown, with [[wikilinks]] to other notes. */
   body: string;
 }
@@ -78,6 +102,7 @@ export interface VaultNote {
 const DIRECTORY: Record<NoteKind, string> = {
   entity: 'entities',
   episode: 'episodes',
+  document: 'docs',
 };
 
 /** A name that is safe to join onto a path: the slug alphabet, nothing else. */
@@ -185,6 +210,8 @@ export class Vault {
   }
 
   async has(): Promise<boolean> {
+    // Entities, not documents. A vault of conclusions with no evidence under
+    // them is not a vault, and nothing should be written from one.
     return (await this.list('entity')).length > 0;
   }
 
@@ -200,9 +227,13 @@ export class Vault {
     // Exact, inside the brackets. A substring match would put every
     // [[chemistry-mock]] on the [[chemistry]] timeline.
     const link = `[[${name}]]`;
-    const [entities, episodes] = await Promise.all([this.list('entity'), this.list('episode')]);
+    const [entities, episodes, documents] = await Promise.all([
+      this.list('entity'),
+      this.list('episode'),
+      this.list('document'),
+    ]);
 
-    return [...entities, ...episodes]
+    return [...entities, ...episodes, ...documents]
       .filter((note) => note.name !== name && note.body.includes(link))
       .sort((a, b) => (b.occurred ?? '').localeCompare(a.occurred ?? ''));
   }
@@ -272,6 +303,8 @@ function serialise(note: VaultNote): string {
     ...(note.actor ? [`actor: ${note.actor}`] : []),
     ...(note.event ? [`event: ${note.event}`] : []),
     ...(note.sourceUrl ? [`sourceUrl: ${note.sourceUrl}`] : []),
+    ...(note.sourceHash ? [`sourceHash: ${note.sourceHash}`] : []),
+    ...(note.yearEnds ? [`yearEnds: ${note.yearEnds}`] : []),
     '---',
     '',
     note.body.trim(),
@@ -310,6 +343,8 @@ function parse(raw: string, kind: NoteKind): VaultNote | null {
     ...optional('actor'),
     ...(optional('event') as { event?: EpisodeEvent }),
     ...optional('sourceUrl'),
+    ...optional('sourceHash'),
+    ...optional('yearEnds'),
     body: raw.slice(frontmatter[0].length).trim(),
   };
 }

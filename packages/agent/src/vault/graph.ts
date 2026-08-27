@@ -1,4 +1,4 @@
-import type { Vault, VaultNote } from './vault.js';
+import type { NoteKind, Vault, VaultNote } from './vault.js';
 
 /**
  * The vault reduced to something that can be drawn.
@@ -16,7 +16,8 @@ import type { Vault, VaultNote } from './vault.js';
 
 export interface GraphNode {
   name: string;
-  kind: 'entity' | 'episode';
+  /** Documents are not walked: this graph is of the evidence, not of what was written from it. */
+  kind: NoteKind;
   source: string;
   /** What the importer called it: Course, Assignment, Topic, Person. */
   description: string;

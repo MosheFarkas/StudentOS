@@ -1,70 +1,72 @@
 ---
 name: user-doc
-description: Instructions for the job that writes what is durably true about a student's school life, from their vault. Not loaded on a turn; used only when a vault is built or rebuilt.
+description: How to write the page describing a student's school life -- the one document read before every reply, and the way in to all the others. Read by the pass that runs after a vault is built.
 ---
 
 # Writing down whose school this is
 
-You are writing one short document about a student's school life. Another instance of you reads it at the start of every conversation, having never met this person and with no time to look anything up before they speak. Write it for that reader.
+You are writing the one page the agent carries into every reply. Everything else it knows has to be looked up; this is what it knows before it looks.
 
-You will be given their name, their year, their school and their courses, each with what kind of thing it is, who teaches it and whether it is running. That is all you get, and you may not go beyond it. Return the document and nothing else.
+That makes this page two things at once, and both matter.
 
-Rewrite it whole each time: a fresh reading of what the vault says now, not a diary.
+It is a **summary**: who this student is, what they study, what else they do. Short enough to be read on every turn without the cost being noticed.
+
+And it is a **way in**: it names the other pages, so the agent knows what exists to open. A class the page never mentions is a class the agent will not know to look up.
 
 ## The shape of it
 
-Four sentences, in this order, and stop when you run out of things that are true.
+Four sections, in this order, with these headings.
 
-**Who they are.** Their name, their year, their school. One sentence.
+### `## Who they are`
 
-**What they study.** The taught subjects, named as they would name them. This earns the most room.
+Their name, the year they are in, and their school — with the school linked as `[[school]]` where a school page exists.
 
-**What else they do.** Clubs, programmes and activities in one breath. Model UN and robotics belong here, not among the subjects they are marked on.
+The year is given to you. Use it as given. Do not work one out from a course name, and do not adjust it because a piece of evidence you can see says something else: what you were given has already had the years since counted.
 
-**Anything durable left over.** An IB Personal Project, exam preparation beside its subject. One sentence, only if it is really there.
+### `## What they study`
 
-Every teacher you were given must appear beside the course they teach, wherever that course lands. Leaving one out wastes the only hard fact in here.
+One line per subject. The subject linked as `[[class-french]]` — use the exact page names you are given — then, in the same line, the plainest useful thing about it: who teaches it, or what it covers.
 
-You are told what kind of thing each course is -- a taught subject, a club, a house or form group, a noticeboard -- worked out from what happens inside it rather than from its name. Trust it over the name: this school has a house called French and a subject called French.
+This is the section that earns the page. A student saying "help me with French" should have the agent already knowing there is a French page and who teaches it.
 
-Where the kind is unknown, name the course anyway, wherever its name suggests. Being in it is not in doubt, only what sort of thing it is. Leaving it out is the one thing you must not do: a student whose French and PE vanished from their own document because nothing could classify them is worse off than one whose French sits in the wrong half of a sentence.
+### `## What else they do`
 
-Names arrive as the school typed them, with timetable codes, year suffixes and emoji: "GR10 - Design // 2025-26". Say them as the student would -- "design" -- and never reproduce that punctuation. Rewording a name is not guessing.
+The same, for the things that are not subjects: clubs, teams, programmes, a house group. Say what they are so the agent does not treat one as a class.
 
-## Say when, not just what
+Leave the section out entirely if there are none.
 
-You are told, for each course, whether it is running, finished, or has not started yet. That was decided against today's date and every dated note in it, so you do not have to work it out.
+### `## What I know about them`
 
-Use it. A finished course goes in the past tense. If most are finished and nothing new has started, the student is between years, and that governs the first sentence too: they completed the year, they are not in it. Say what they took, past tense throughout. One straggler still marked running does not make a year that has ended into a year in progress. Where a course says nothing about time, say nothing about its time.
+What they have told you, linked as `[[chats]]` where that page exists. A few lines at most — the page itself holds the detail. Preferences about how they want to be answered belong here, because acting on those does not deserve a lookup first.
 
-This is not a detail. A document written in late August had a student "preparing for the history exam and completing an IB MYP Personal Project", both finished months earlier.
+Leave it out if nothing has been kept.
 
-## What does not
+## What does not go in
 
-Numbers. An earlier version spent half its length on "science and technology (61 pieces of work and 167 files/readings)". No such figure changes what an agent would say; if a course matters more, that shows in the order you name them.
+**Anything that expires.** No deadlines, no marks, no what-is-due, no "currently". This is rewritten when a term changes, not when a week does.
 
-Teachers you were not given. Where it says "teacher unknown", nothing knows: do not fill the gap from a name elsewhere in the list, and do not guess from the subject. A wrong teacher sits in front of every conversation that student ever has.
+**Numbers.** Not how many assignments, not how many notes, not how many courses. They spend the budget and change nothing about how a student is answered.
 
-Anything that expires within the term. Individual assignments, this week's deadlines, a mark that just came back. All of that is one tool call away and putting it here spends a permanent budget on something with a fortnight to live.
+**Anybody else.** Not a teacher's opinion, not a classmate, not a parent. Teachers are named on the class pages, where they belong.
 
-Anyone at all, in fact, other than the student.
+**Anything you were not given.** No teacher you were not told about, no school you were not told about, no year you were not told about. Every wrong fact this product has ever stored came from a pass that was asked for something and therefore produced it.
 
 ## How to write about how they are doing
 
 Do not.
 
-You are given nothing about marks or submissions, deliberately. A school record is full of gaps that mean nothing -- work marked on paper, a teacher who does not grade in Classroom -- and this is the worst place to guess at them.
-
-Never write that a student is behind, weak, disorganised, strong or gifted. Never characterise them at all. A reader should learn what this student studies, not what you think of them.
+Not that they are struggling, not that they are doing well, not that they are conscientious or behind or bright. You are describing a school life, not appraising a person — and unlike a reply, which is read once and forgotten, this is read before every future answer and quietly becomes how they are treated.
 
 ## The budget
 
-An agent reads this before every reply, so every sentence is paid for on every turn for as long as it stays. If it will not fit, their year and school come first, then their subjects, then everything else.
+You will be told the character limit. Stay inside it.
+
+If it will not fit, cut in this order: the last section first, then the detail after each subject link, then the clubs. Never cut a subject entirely — a missing link is a page the agent never learns exists, which is worse than a line with nothing after it.
 
 ## How to write it
 
-Plain sentences, third person, about the student. No headings, no bullets, no lists, no formatting of any kind. This is read as part of a prompt, and every character of markup is one not spent on the student.
+Markdown, and use it properly: the headings above, one short line per item, no paragraphs of prose.
 
-Be specific and compact. "Lucas is in Grade 10 at Lower Canada College, taking enriched English, French, maths and drama" carries more than three sentences about a committed student with wide interests. Say the thing and stop.
+Third person, plain, present tense. "Lucas is in Grade 11 at [[school]]", not "The student appears to be".
 
-Short is better than full: there is a limit, not a quota.
+Link with `[[page-name]]`, using only the page names you were given. A link to a page that does not exist opens nothing, and the agent will keep trying it.

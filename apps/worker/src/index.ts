@@ -20,7 +20,8 @@ import {
   PostgresProfileStore,
   Vault,
   importConversation,
-  updateStudentProfile,
+  collectExchanges,
+  updateChatsDoc,
 } from '@contexto/agent';
 
 /**
@@ -110,7 +111,7 @@ interface Job {
 
 const jobs: Job[] = [
   {
-    name: 'memory-summarization',
+    name: 'chats-page',
     // Hourly is a guess. The right cadence depends on how fast episodic memory
     // actually accumulates, which you will not know until real students use it.
     intervalMs: 60 * MINUTE,
@@ -119,9 +120,22 @@ const jobs: Job[] = [
       const stale = await ctx.profiles.stale(BATCH_SIZE, QUIET_FOR);
       if (stale.length === 0) return;
 
+      /*
+       * Grouped by student, because the page is theirs.
+       *
+       * Staleness is tracked per agent -- that is where the watermark lives --
+       * but there is one page per student. Two of their agents going quiet in
+       * the same pass would otherwise race to rewrite the same file, and one of
+       * the two rewrites would be thrown away.
+       */
+      const byStudent = new Map<string, string[]>();
+      for (const { agentId, userId } of stale) {
+        byStudent.set(userId, [...(byStudent.get(userId) ?? []), agentId]);
+      }
+
       let changed = 0;
       let recorded = 0;
-      for (const { agentId, userId } of stale) {
+      for (const [userId, agentIds] of byStudent) {
         try {
           /*
            * Billed to the agent's owner, not to a shared key.
@@ -132,11 +146,32 @@ const jobs: Job[] = [
            * invisible until it is the largest line on the bill.
            */
           const llm = await ctx.llm.resolve(userId);
-          const result = await updateStudentProfile(
-            { llm, memory: ctx.memory, profiles: ctx.profiles },
-            { agentId, userId },
-          );
-          if (result.changed) changed += 1;
+
+          const bursts = [];
+          for (const agentId of agentIds) {
+            bursts.push(
+              await collectExchanges(
+                { memory: ctx.memory, profiles: ctx.profiles },
+                { agentId, userId },
+              ),
+            );
+          }
+
+          const exchanges = bursts.flatMap((burst) => burst.exchanges);
+          if (exchanges.length === 0) continue;
+
+          if (ctx.vaultRoot) {
+            const vault = new Vault(ctx.vaultRoot, userId);
+            const knownBefore = bursts
+              .map((burst) => burst.knownBefore)
+              .filter((known): known is string => known !== undefined);
+
+            const written = await updateChatsDoc(
+              { llm },
+              { vault, exchanges, userId, ...(knownBefore.length > 0 ? { knownBefore } : {}) },
+            );
+            if (written.changed) changed += 1;
+          }
 
           /*
            * The same burst, written into the vault as an episode.
@@ -151,32 +186,35 @@ const jobs: Job[] = [
            * imported nothing gets a profile and no episodes, rather than a
            * vault containing conversations and no school.
            */
-          if (ctx.vaultRoot && result.exchanges.length > 0 && result.newestId) {
+          if (ctx.vaultRoot) {
             const vault = new Vault(ctx.vaultRoot, userId);
             if (await vault.has()) {
-              const written = await importConversation(
-                { llm },
-                {
-                  vault,
-                  exchanges: result.exchanges,
-                  conversationId: result.newestId,
-                  occurred: result.occurred ?? new Date().toISOString(),
-                  userId,
-                },
-              );
-              recorded += written.written;
+              for (const burst of bursts) {
+                if (burst.exchanges.length === 0 || !burst.newestId) continue;
+                const written = await importConversation(
+                  { llm },
+                  {
+                    vault,
+                    exchanges: burst.exchanges,
+                    conversationId: burst.newestId,
+                    occurred: burst.occurred ?? new Date().toISOString(),
+                    userId,
+                  },
+                );
+                recorded += written.written;
+              }
             }
           }
         } catch (error) {
           // One student's expired key must not stop every other student's
           // memory from being written.
-          console.error(`Profile update failed for agent ${agentId}`, error);
+          console.error(`Chats page update failed for student ${userId}`, error);
         }
       }
 
       console.log(
-        `Profiles: ${stale.length} checked, ${changed} rewritten, ` +
-          `${recorded} conversations recorded`,
+        `Chats: ${stale.length} agents checked across ${byStudent.size} students, ` +
+          `${changed} pages rewritten, ${recorded} conversations recorded`,
       );
     },
   },
