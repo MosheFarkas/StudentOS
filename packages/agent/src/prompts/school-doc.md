@@ -15,7 +15,9 @@ Almost everything else in this product is written from the student's own vault. 
 
 The vault decides which of a student's classes are current by asking whether their year is over. Get this wrong and a class they are still taking disappears, or last year's clutters the vault for another twelve months.
 
-So find it, from the school's own calendar where you possibly can. Report it as a month and a day. If you cannot establish it, say so and report nothing — a wrong date does more damage here than an absent one, because an absent one falls back to a safe default and a wrong one does not.
+What is wanted is the time of year it ends, not a confirmed date for one particular year. Schools end within a week of the same date annually, so a published date from any recent year answers it — a calendar showing the 2025-26 year ending on the 19th of June, a graduation, a last day of classes, the end of the final term.
+
+Say which year the date you found came from. Report nothing only if you found nothing at all: an absent answer falls back to a date later than every real school year, which keeps courses a few weeks longer than it should. That is the safe direction and it is still worse than the right date, so do not decline just because next year's calendar is not published yet.
 
 ## What else the page is for
 
