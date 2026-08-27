@@ -519,6 +519,40 @@ describe('importing school mail', () => {
     const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
     expect(people.map((p) => p.name)).toEqual(['jennifer-irwin']);
   });
+
+  it('makes a course note for a class Classroom no longer returns', async () => {
+    /*
+     * A class the school deleted, or archived out of reach, is gone from the
+     * API and still has a year of mail about it. That mail could only ever
+     * link to courses that already had a note -- "omit rather than guess" --
+     * so the reference was dropped in silence: no course, no link, and nothing
+     * dangling to show anything had been lost.
+     *
+     * Every Classroom notification names its course in the body, above the
+     * link to it. A class nobody can fetch any more is still fully described
+     * by the mail it sent.
+     */
+    const body =
+      'Notification settings\n' +
+      '<https://accounts.google.com/AccountChooser?continue=https://classroom.google.com/s?email>\n' +
+      'Latin 9 - 2023-2024\n' +
+      '<https://accounts.google.com/AccountChooser?continue=https://classroom.google.com/c/NzA1NDQ2>\n' +
+      'New assignment\n\nTranslation practice';
+
+    await run(llmReturning(kept({ actor: 'Luc Tremblay', inCourse: [] })), [
+      message({
+        from: '"Luc Tremblay (Classroom)" <no-reply@classroom.google.com>',
+        subject: 'New assignment: "Translation practice"',
+        body,
+      }),
+    ]);
+
+    const courses = (await vault.list('entity')).filter((n) => n.description === 'Course');
+    expect(courses.map((c) => c.name)).toEqual(['latin-9-2023-2024']);
+
+    const [episode] = await vault.list('episode');
+    expect(episode?.body).toContain('[[latin-9-2023-2024]]');
+  });
 });
 
 describe('running it again', () => {

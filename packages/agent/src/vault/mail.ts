@@ -183,6 +183,30 @@ export function classroomEvent(subject: string): EpisodeEvent | null {
   return null;
 }
 
+/**
+ * The course a Classroom notification is about.
+ *
+ * Every one of them names its course in the body, on its own line, directly
+ * above a link to that course. It is the only way to learn about a class the
+ * API will not return -- one the school deleted, or archived beyond the states
+ * this app can ask for -- and those classes had been vanishing in silence: the
+ * mail could only link to courses that already had a note, so the reference
+ * was dropped with nothing left dangling to show it had gone.
+ */
+export function classroomCourse(body: string): string | null {
+  const lines = body.split('\n');
+  const at = lines.findIndex((line) => /classroom\.google\.com\/c\//.test(line));
+  if (at < 1) return null;
+
+  // The nearest line above the link that is text rather than another link.
+  for (let i = at - 1; i >= 0 && at - i <= 3; i -= 1) {
+    const line = (lines[i] ?? '').trim();
+    if (line === '' || line.startsWith('<') || /https?:\/\//.test(line)) continue;
+    return line;
+  }
+  return null;
+}
+
 export function classroomSender(from: string, subject = ''): string | null {
   const { display, address } = parseSender(from);
   if (address !== CLASSROOM_NOTIFICATIONS) return null;
@@ -210,6 +234,14 @@ export async function importMail(
   const takenNames = new Set(existingEpisodes.map((note) => note.name));
 
   const allowed = new Set(entities);
+
+  /** Courses already noted, so mail only creates the ones nobody has. */
+  const knownCourses = new Set(
+    (await vault.list('entity'))
+      .filter((note) => note.description === 'Course')
+      .map((note) => note.name),
+  );
+  for (const slug of knownCourses) allowed.add(slug);
   const neighbours = neighbourMap(await vault.list('entity'));
 
   /*
@@ -411,6 +443,34 @@ export async function importMail(
 
       const about = parsed.about.filter((name) => allowed.has(name));
       const inCourse = parsed.inCourse.filter((name) => allowed.has(name));
+
+      /*
+       * The course this notification is about, made if nobody has made it.
+       *
+       * A class the school deleted, or archived beyond the states this app can
+       * ask for, is gone from the API and still has a year of mail about it.
+       * That mail could only link to courses that already had a note, so the
+       * reference was dropped in silence -- no course, no link, and nothing
+       * dangling to show anything had been lost.
+       */
+      if (viaClassroom) {
+        const named = classroomCourse(message.body);
+        if (named) {
+          const slug = slugForNote(named);
+          if (!knownCourses.has(slug)) {
+            await vault.write({
+              name: slug,
+              kind: 'entity',
+              source: 'gmail',
+              description: 'Course',
+              body: `${named}, on Google Classroom.\nKnown only from mail about it.`,
+            });
+            knownCourses.add(slug);
+            allowed.add(slug);
+          }
+          if (!inCourse.includes(slug)) inCourse.push(slug);
+        }
+      }
       const occurred = isoTime(message.date);
 
       await vault.write({

@@ -101,6 +101,20 @@ export async function importDrive(vault: Vault, files: DriveFile[]): Promise<Dri
     if (course) lines.push(`Part of [[${course}]].`);
 
     /*
+     * Where it lives, whether or not that is a course.
+     *
+     * The path was resolved for every file and used for one thing: an exact
+     * match against a course name. On a real account that fired for 109 files
+     * of 782, and the other 673 were written with no link and no location --
+     * a third of the vault reachable only by guessing its filename.
+     *
+     * "Robotics/CAD" is not a course and still says most of what there is to
+     * say about a file called bracket.stl. It was being computed and thrown
+     * away, which is this pipeline's oldest habit.
+     */
+    else if (file.path && file.path.length > 0) lines.push(`Filed under ${file.path.join('/')}.`);
+
+    /*
      * Whose file it is.
      *
      * The strongest signal left about whether a file matters to this student,

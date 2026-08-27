@@ -696,7 +696,16 @@ export async function listAllDriveFiles(
     const params = new URLSearchParams({
       q: 'trashed = false',
       pageSize: '1000',
-      fields: 'nextPageToken,files(id,name,mimeType,parents,ownedByMe,modifiedTime,webViewLink)',
+      /*
+       * owners, because this is the listing the importer uses.
+       *
+       * The owner was added to the search masks and missed here, which is the
+       * only call that builds a vault -- so the one source of teacher names
+       * Drive offers reached nothing.
+       */
+      fields:
+        'nextPageToken,files(id,name,mimeType,parents,ownedByMe,modifiedTime,webViewLink,' +
+        'owners(displayName,emailAddress))',
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
     });

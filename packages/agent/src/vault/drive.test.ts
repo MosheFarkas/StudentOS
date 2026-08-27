@@ -145,4 +145,24 @@ describe("importing the student's Drive", () => {
     const note = await vault.read('entity', 'titration-rubric-pdf');
     expect(note?.body).toContain('Shared by Anna Bell');
   });
+
+  it('says where a file lives, even when no course matches', async () => {
+    /*
+     * The folder path is resolved for every file and then used for one thing:
+     * an exact match between a folder name and a course. On this account that
+     * fires for 109 files out of 782, and the other 673 are written with no
+     * link and no location -- a third of the vault reachable only by guessing
+     * its filename.
+     *
+     * "Robotics/CAD" is not a course and still says almost everything about
+     * what the file is. It was computed and dropped, which is the same disease
+     * as the rest of this pipeline.
+     */
+    await importDrive(vault, [
+      file({ fileId: 'f-7', name: 'bracket.stl', path: ['Robotics', 'CAD'] }),
+    ]);
+
+    const note = await vault.read('entity', 'bracket-stl');
+    expect(note?.body).toContain('Robotics/CAD');
+  });
 });
