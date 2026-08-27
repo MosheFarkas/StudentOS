@@ -14,6 +14,7 @@ import {
   importMail,
   classifyCourses,
   academicYearEnd,
+  academicYearStart,
   describeCourses,
   filterSnapshot,
   writeClassDocs,
@@ -187,6 +188,9 @@ async function refreshOne(
           // Or a year of last year's mail writes back every course the
           // filter above just refused.
           dropped: dropped.map((verdict) => verdict.course),
+          // And the courses it never saw, because Classroom no longer returns
+          // them at all. Those get no verdict, so nothing else can refuse them.
+          since: academicYearStart(today, (await academicYearEnd(vault)) ?? '07-01'),
         },
       );
     }

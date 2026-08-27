@@ -1,6 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, classroomCourse, slugForNote } from '@contexto/agent';
+import {
+  Vault,
+  academicYearEnd,
+  academicYearStart,
+  classroomCourse,
+  slugForNote,
+} from '@contexto/agent';
 import { createContext } from '../context.js';
 import { loadEnv } from '../env.js';
 
@@ -17,6 +23,11 @@ import { loadEnv } from '../env.js';
  * Every Classroom notification names its course in its own body, so this needs
  * nothing but the notes on disk -- no model calls, no fetching. Safe to run
  * twice.
+ *
+ * Bounded to the current academic year, like the importer it mirrors. A course
+ * this recovers is one Classroom no longer returns, so the filter never forms a
+ * verdict on it and can never drop it -- recovering last year's would put it
+ * back permanently, which is the thing the filter exists to prevent.
  */
 async function main(): Promise<void> {
   const email = process.argv[2];
@@ -38,13 +49,21 @@ async function main(): Promise<void> {
   const known = new Set(entities.filter((n) => n.description === 'Course').map((n) => n.name));
   const before = known.size;
 
+  const today = new Date().toISOString().slice(0, 10);
+  const since = academicYearStart(today, (await academicYearEnd(vault)) ?? '07-01');
+
   let linked = 0;
+  let tooOld = 0;
   for (const note of await vault.list('episode')) {
     if (!/^From: .*\(Classroom\)/m.test(note.body)) continue;
     const named = classroomCourse(note.body);
     if (!named) continue;
 
     const slug = slugForNote(named);
+    if (!known.has(slug) && (note.occurred ?? '').slice(0, 10) < since) {
+      tooOld += 1;
+      continue;
+    }
     if (!known.has(slug)) {
       await vault.write({
         name: slug,
@@ -62,7 +81,8 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Courses: ${before} before, ${known.size} after. ${linked} episodes given a course link.`,
+    `Courses: ${before} before, ${known.size} after. ${linked} episodes given a course link.` +
+      (tooOld > 0 ? ` ${tooOld} left alone, from before ${since}.` : ''),
   );
 }
 

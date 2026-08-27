@@ -13,7 +13,8 @@
     "write-user-doc": "tsx src/scripts/write-user-doc.ts",
     "recover-courses": "tsx src/scripts/recover-courses.ts",
     "build-vault": "tsx src/scripts/build-vault.ts",
-    "research-school": "tsx src/scripts/research-school.ts"
+    "research-school": "tsx src/scripts/research-school.ts",
+    "check-courses": "tsx src/scripts/check-courses.ts"
   },
   "dependencies": {
     "@contexto/agent": "workspace:*",

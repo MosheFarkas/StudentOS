@@ -80,6 +80,16 @@ export interface MailImportOptions {
    * writes it back, every build, for as long as the mail lasts.
    */
   dropped?: string[];
+  /**
+   * The start of the current academic year, as an ISO date.
+   *
+   * The other half of the guard above, and the half `dropped` cannot cover. A
+   * course DELETED from Classroom never appears in a snapshot, so the filter
+   * forms no verdict on it and never names it -- while its mail stays in range
+   * for a year. Recovering one would make a course note that nothing can ever
+   * evaluate and therefore nothing can ever remove.
+   */
+  since?: string;
 }
 
 export interface MailImportResult {
@@ -236,7 +246,7 @@ function parseSender(from: string): { display: string; address: string } {
 
 export async function importMail(
   { llm, onProgress }: MailImportDeps,
-  { vault, messages, entities, userId, domains, dropped }: MailImportOptions,
+  { vault, messages, entities, userId, domains, dropped, since }: MailImportOptions,
 ): Promise<MailImportResult> {
   const existingEpisodes = await vault.list('episode');
   const already = new Set(existingEpisodes.map((note) => note.externalId).filter(Boolean));
@@ -467,7 +477,7 @@ export async function importMail(
        */
       if (viaClassroom) {
         const named = classroomCourse(message.body);
-        if (named && !refused.has(named)) {
+        if (named && !refused.has(named) && !tooOldToRecover(message.date, since)) {
           const slug = slugForNote(named);
           if (!knownCourses.has(slug)) {
             await vault.write({
@@ -650,4 +660,16 @@ function parseExtraction(content: unknown): z.infer<typeof extraction> | null {
 function isoTime(date: string): string {
   const parsed = new Date(date);
   return Number.isNaN(parsed.getTime()) ? '0000-01-01T00:00:00.000Z' : parsed.toISOString();
+}
+
+/**
+ * Whether a notification is too old to justify making a course out of it.
+ *
+ * Only bounds RECOVERY, never the episode: last year's mail is still worth
+ * keeping on the timeline, it just must not create a course note behind it.
+ */
+function tooOldToRecover(date: string | undefined, since: string | undefined): boolean {
+  if (!since || !date) return false;
+  const on = new Date(date);
+  return !Number.isNaN(on.getTime()) && on.toISOString().slice(0, 10) < since;
 }

@@ -83,6 +83,41 @@ describe('importing school mail', () => {
     expect(await vault.read('entity', 'debating')).not.toBeNull();
   });
 
+  it('does not bring back a course whose mail is older than this school year', async () => {
+    /*
+     * The hole the dropped list cannot cover.
+     *
+     * A course DELETED from Classroom never appears in a snapshot, so the
+     * filter never forms a verdict on it and never names it as dropped. Mail
+     * about it is still in range for a year, so recovery would make a note the
+     * filter can never evaluate and therefore never remove -- last year's
+     * history, back in the vault permanently.
+     */
+    await importMail({ llm: llmReturning(kept()) } as never, {
+      vault,
+      messages: [{ ...notification('Debating'), date: '2026-03-02T10:00:00Z' }],
+      entities: ['cold-war-essay', 'history'],
+      userId: 'u1',
+      domains: ['school.example'],
+      since: '2026-07-01',
+    });
+
+    expect(await vault.read('entity', 'debating')).toBeNull();
+  });
+
+  it('still brings back a course whose mail is from this year', async () => {
+    await importMail({ llm: llmReturning(kept()) } as never, {
+      vault,
+      messages: [{ ...notification('Debating'), date: '2026-09-02T10:00:00Z' }],
+      entities: ['cold-war-essay', 'history'],
+      userId: 'u1',
+      domains: ['school.example'],
+      since: '2026-07-01',
+    });
+
+    expect(await vault.read('entity', 'debating')).not.toBeNull();
+  });
+
   it('does not bring back a course the vault has decided to drop', async () => {
     /*
      * Otherwise the vault ping-pongs.
