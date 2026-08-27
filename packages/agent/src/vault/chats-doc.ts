@@ -49,6 +49,20 @@ export interface ChatsDocOptions {
 /** What a pass says when a conversation taught it nothing worth keeping. */
 const NOTHING = 'UNCHANGED';
 
+/**
+ * A model narrating an absence is not a page about a student.
+ *
+ * This failure reached production once already, on the pass this replaces: it
+ * was shown a placeholder where the document went and asked for it back
+ * untouched if nothing was worth keeping, and the first real run returned the
+ * placeholder, which was saved as what the agent knew about a person. There is
+ * no placeholder here any more, and this is the belt to that pair of braces --
+ * models describe an absence a dozen ways and any of them stored here is read
+ * on every turn afterwards.
+ */
+const DESCRIBES_NOTHING =
+  /^\(?\s*(?:unchanged|empty|none|nothing|no (?:durable|new|page|document|facts?|information|preferences?))\b/i;
+
 export async function updateChatsDoc(
   { llm }: ChatsDocDeps,
   { vault, exchanges, userId, knownBefore }: ChatsDocOptions,
@@ -90,9 +104,19 @@ export async function updateChatsDoc(
 
   const said = typeof answer.content === 'string' ? answer.content.trim() : '';
   if (said === '' || said.toUpperCase().startsWith(NOTHING)) return { changed: false };
+  if (DESCRIBES_NOTHING.test(said)) return { changed: false };
 
   const body = capDocument(said, CHATS_DOC_LIMIT);
   if (body === '') return { changed: false };
+
+  /*
+   * The page handed back as it stands is not a change.
+   *
+   * Rewriting it to identical bytes costs a write and reports a change that did
+   * not happen, which is the signal the caller uses to decide whether anything
+   * downstream needs redoing.
+   */
+  if (body === standing) return { changed: false };
 
   await writeDocument(vault, {
     name: CHATS_DOC_NAME,

@@ -42,6 +42,9 @@ describe('keeping what a student has told you', () => {
   const run = (llm: unknown, exchanges = EXCHANGES) =>
     updateChatsDoc({ llm } as never, { vault, exchanges, userId: 'u-1' });
 
+  const run2 = (into: Vault, llm: unknown) =>
+    updateChatsDoc({ llm } as never, { vault: into, exchanges: EXCHANGES, userId: 'u-1' });
+
   it('writes the page', async () => {
     const result = await run(llmSaying('# How they like to be answered\n\nShort answers.'));
 
@@ -106,6 +109,39 @@ describe('keeping what a student has told you', () => {
 
     expect(result.changed).toBe(false);
     expect((await readDocument(vault, 'chats'))?.body).toBe('Short answers.');
+  });
+
+  it('never saves a model narrating an absence', async () => {
+    /*
+     * This exact failure reached production once already.
+     *
+     * The pass this replaces showed a placeholder where the document went and
+     * asked for it back untouched if nothing was worth keeping. The first real
+     * run returned the placeholder, and it was saved as what the agent knew
+     * about a person. Models describe an absence in a dozen ways and any of
+     * them stored here is read on every turn afterwards.
+     */
+    let i = 0;
+    for (const answer of [
+      '(empty)',
+      'Nothing is known about this student yet.',
+      'No durable facts were learned.',
+      'None.',
+    ]) {
+      const fresh = new Vault(root, `student-${(i += 1)}`);
+      expect((await run2(fresh, llmSaying(answer))).changed).toBe(false);
+      expect(await readDocument(fresh, 'chats')).toBeNull();
+    }
+  });
+
+  it('reports no change when the writer hands the page back as it was', async () => {
+    await writeDocument(vault, {
+      name: 'chats',
+      description: 'What they have said',
+      body: 'Short answers.',
+    });
+
+    expect((await run(llmSaying('Short answers.'))).changed).toBe(false);
   });
 
   it('takes a starting point from what was known before, when there is no page yet', async () => {
