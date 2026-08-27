@@ -89,6 +89,41 @@ describe('writing a page per class', () => {
     expect((await readDocument(vault, 'class-french'))?.body).toContain('Taught by');
   });
 
+  it('covers both rooms when a school gives them the same name', async () => {
+    /*
+     * Two rooms of one subject do not have to be named differently.
+     *
+     * The importer already handles that -- the second becomes french-2 -- but
+     * matching a verdict back to its note on the title alone finds only the
+     * first, and everything filed under the second room is left out of the page
+     * describing the subject.
+     */
+    await vault.write({
+      name: 'french-2',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'French A, on Google Classroom.',
+    });
+    await vault.write({
+      name: 'listening-test',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Listening test.\nPart of [[french-2]].',
+    });
+
+    const llm = llmSaying('# French');
+    await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A' })] },
+    );
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('Listening test');
+    expect(sent).toContain('Oral presentation');
+  });
+
   it('shows the writer what is actually in the course', async () => {
     const llm = llmSaying('# French');
     await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });

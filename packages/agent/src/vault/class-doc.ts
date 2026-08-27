@@ -70,19 +70,31 @@ export async function writeClassDocs(
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
   const courses = entities.filter((note) => note.description === 'Course');
 
-  /** The course note a verdict is about, matched on the title the importer wrote. */
-  const noteFor = (courseName: string): VaultNote | undefined =>
-    courses.find((note) => titleOf(note) === courseName);
+  /**
+   * The course notes a verdict is about, matched on the title the importer wrote.
+   *
+   * All of them, not the first. A school can give two rooms of one subject the
+   * same name -- the importer already copes, naming the second `french-2` --
+   * and matching on the title alone would find one of the two and quietly leave
+   * everything filed under the other out of the page describing the subject.
+   */
+  const notesFor = (courseName: string): VaultNote[] =>
+    courses.filter((note) => titleOf(note) === courseName);
 
   /** subject -> the course notes it merges. */
   const subjects = new Map<string, { notes: VaultNote[]; academic: boolean }>();
   for (const verdict of kept) {
-    const note = noteFor(verdict.course);
-    if (!note) continue;
+    const found = notesFor(verdict.course);
+    if (found.length === 0) continue;
 
     const already = subjects.get(verdict.subject);
-    if (already) already.notes.push(note);
-    else subjects.set(verdict.subject, { notes: [note], academic: verdict.academic });
+    if (already) {
+      // Two verdicts naming one room must not put it in the group twice.
+      const seen = new Set(already.notes.map((note) => note.name));
+      already.notes.push(...found.filter((note) => !seen.has(note.name)));
+    } else {
+      subjects.set(verdict.subject, { notes: found, academic: verdict.academic });
+    }
   }
 
   const { nodes } = await buildGraph(vault);
