@@ -91,9 +91,25 @@ export const KEY: { colour: string; label: string }[] = [
  * drawn larger, which is the one thing the graph knows about importance.
  */
 export function sizeFor(node: DocNode): number {
-  if (node.name === CENTRE) return 44;
-  if (node.kind === 'document') return 20;
-  return Math.min(8, 1.4 + node.degree * 0.5);
+  if (node.name === CENTRE) return 90;
+  if (node.kind === 'document') return 44;
+  if (node.description === 'Course') return 26;
+  return Math.min(14, 3 + node.degree * 0.8);
+}
+
+/**
+ * How tall a name is drawn, in the same units the simulation works in.
+ *
+ * Sized against the link distance rather than the node: a name has to be
+ * readable from far enough away to be worth having, and a label scaled to a
+ * three-unit dot is a smudge. The first version used eight units on a graph a
+ * thousand across, which is how the names came out invisible.
+ */
+export function labelHeight(node: DocNode): number {
+  if (node.name === CENTRE) return 26;
+  if (node.kind === 'document') return 18;
+  if (node.description === 'Course') return 12;
+  return 8;
 }
 
 /** "class-french" is the filename; "French" is what a student calls it. */
@@ -102,14 +118,62 @@ export function labelFor(name: string): string {
 }
 
 /**
- * Which labels are worth drawing at rest.
+ * How many names to show at once, at most.
  *
- * Four thousand labels is a solid block of text with a graph somewhere behind
- * it. The pages carry theirs always; everything else earns one by being
- * pointed at, or by being what you are reading.
+ * Every name is a texture on the graphics card. Three and a half thousand of
+ * them costs seconds to build and, at any distance where the whole graph fits
+ * on screen, overlaps into a wall of text nobody can read anyway.
  */
-export function labelled(node: DocNode, focused: string | null, hovered: string | null): boolean {
-  return node.kind === 'document' || node.name === focused || node.name === hovered;
+export const NAMES_AT_ONCE = 160;
+
+/**
+ * Which names to show, given where the camera is.
+ *
+ * The pages and the courses always: they are the landmarks, and a graph whose
+ * landmarks are unlabelled is a field of dots. Everything else earns a name by
+ * being near enough to read -- so pulling back shows you the shape and coming
+ * in shows you what is in it, which is the behaviour a map has.
+ *
+ * `near` is whatever the camera is close to, worked out by the caller because
+ * only it knows where the camera is.
+ */
+export function labelled(
+  node: DocNode,
+  near: ReadonlySet<string>,
+  focused: string | null,
+  hovered: string | null,
+): boolean {
+  if (node.kind === 'document') return true;
+  if (node.description === 'Course') return true;
+  if (node.name === focused || node.name === hovered) return true;
+  return near.has(node.name);
+}
+
+/**
+ * The names worth drawing from where the camera is standing.
+ *
+ * Nearest first and capped, so flying into a dense cluster names what is in
+ * front of you rather than everything behind it as well.
+ */
+export function nearest(
+  placed: readonly { name: string; x?: number; y?: number; z?: number }[],
+  camera: { x: number; y: number; z: number },
+  within: number,
+  most = NAMES_AT_ONCE,
+): Set<string> {
+  const reach = within * within;
+
+  const close: { name: string; d: number }[] = [];
+  for (const node of placed) {
+    const dx = (node.x ?? 0) - camera.x;
+    const dy = (node.y ?? 0) - camera.y;
+    const dz = (node.z ?? 0) - camera.z;
+    const d = dx * dx + dy * dy + dz * dz;
+    if (d <= reach) close.push({ name: node.name, d });
+  }
+
+  close.sort((a, b) => a.d - b.d);
+  return new Set(close.slice(0, most).map((node) => node.name));
 }
 
 /** Every note directly joined to this one, in either direction. */

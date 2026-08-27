@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../lib/api.js';
 import { parseMarkdown, type Span } from '../lib/markdown.js';
 import { CENTRE, KEY, labelFor, neighbours, type DocEdge, type DocNode } from '../lib/vaultmap.js';
@@ -7,13 +8,13 @@ import { CENTRE, KEY, labelFor, neighbours, type DocEdge, type DocNode } from '.
  * The vault, and the page you are reading out of it.
  *
  * Everything here is the frame: what is fetched, what is open, and whether the
- * whole thing has been opened up. The ball itself lives in VaultScene, loaded
- * only when somebody looks, because it is most of a megabyte of renderer and
- * physics and a student on their way to the settings page should not pay for it.
+ * whole thing has been opened up. The ball itself lives in VaultScene, fetched
+ * only when somebody looks.
  *
- * Reading sits beside the graph rather than under it. A picture of a vault is
- * worth a moment; a vault is worth reading, and the shortest path from seeing
- * that a page exists to knowing what it says should be one click.
+ * Two shapes. On the settings page it is a picture of your school, the width of
+ * the page, and nothing else -- reading is what going inside is for, and a
+ * reader squeezed in beside it left neither enough room. Inside, it takes the
+ * window, with the page you are on beside it.
  */
 
 const VaultScene = lazy(() => import('./VaultScene.js'));
@@ -38,19 +39,23 @@ export function VaultMap() {
         setError('That could not be loaded.');
         return;
       }
-      const data = (await res.json()) as Graph;
-      setGraph(data);
-      // The page describing them, open before anybody asks. It is the way in.
-      if (data.nodes.some((node) => node.name === CENTRE)) setHeld(CENTRE);
+      setGraph((await res.json()) as Graph);
     })();
   }, []);
+
+  /* Going in opens the page describing them, because that is the way in. */
+  useEffect(() => {
+    if (inside && held === null && graph?.nodes.some((node) => node.name === CENTRE)) {
+      setHeld(CENTRE);
+    }
+  }, [inside, held, graph]);
 
   /*
    * What is being read, once something is held.
    *
    * A page, or failing that the note. The pages link outward to the evidence
-   * they were written from -- a class page names its teacher -- and following
-   * one of those links has to land somewhere.
+   * they were written from -- a class page names its teacher -- so following
+   * one of those has to land somewhere.
    */
   useEffect(() => {
     if (!held) {
@@ -88,14 +93,25 @@ export function VaultMap() {
     [graph, held],
   );
 
-  // Escape leaves, because a full-screen thing with no way out is a trap.
+  /*
+   * Escape leaves, and the page behind stops scrolling while you are in here.
+   *
+   * A full-screen thing with no way out is a trap, and a page that scrolls
+   * underneath one is why leaving it puts you somewhere you did not expect.
+   */
   useEffect(() => {
     if (!inside) return;
     const leave = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setInside(false);
     };
+    const held = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', leave);
-    return () => window.removeEventListener('keydown', leave);
+
+    return () => {
+      document.body.style.overflow = held;
+      window.removeEventListener('keydown', leave);
+    };
   }, [inside]);
 
   if (error) return <p className="muted">{error}</p>;
@@ -109,57 +125,118 @@ export function VaultMap() {
     );
   }
 
-  const reader = (
-    <aside className="vault-read">
-      {reading === null ? (
-        <p className="muted">Opening…</p>
-      ) : (
-        <>
-          <header className="vault-read-head">
-            <strong>{reading.title}</strong>
-            {joined.size > 0 && (
-              <span className="muted">
-                {joined.size} connected {joined.size === 1 ? 'note' : 'notes'}
-              </span>
-            )}
-          </header>
-          <div className="vault-read-body">{render(reading.body, setHeld)}</div>
-        </>
-      )}
-    </aside>
+  const legend = (
+    <div className="vault-key">
+      {KEY.map((entry) => (
+        <span key={entry.label}>
+          <i style={{ background: entry.colour }} />
+          {entry.label}
+        </span>
+      ))}
+    </div>
   );
 
-  return (
-    <div className={inside ? 'vault-inside' : 'vault-map-wrap'}>
-      <div className="vault-map-bar">
-        <div className="vault-map-key">
-          {KEY.map((entry) => (
-            <span key={entry.label}>
-              <i style={{ background: entry.colour }} />
-              {entry.label}
-            </span>
-          ))}
-        </div>
-        <button type="button" className="ghost" onClick={() => setInside(!inside)}>
-          {inside ? 'Leave vault' : 'Enter vault'}
+  const ball = (
+    <Stage>
+      {(width, height) => (
+        <Suspense fallback={<p className="vault-loading">Opening your vault…</p>}>
+          <VaultScene
+            nodes={graph.nodes}
+            edges={graph.edges}
+            held={held}
+            hovered={hovered}
+            width={width}
+            height={height}
+            onHold={setHeld}
+            onHover={setHovered}
+            onClear={() => setHeld(null)}
+          />
+        </Suspense>
+      )}
+    </Stage>
+  );
+
+  if (!inside) {
+    return (
+      <div className="vault-outside">
+        {legend}
+        <div className="vault-frame">{ball}</div>
+        <button type="button" className="ghost" onClick={() => setInside(true)}>
+          Enter vault
         </button>
       </div>
+    );
+  }
 
-      <div className="vault-stage">
-        <div className="vault-canvas">
-          <Suspense fallback={<p className="vault-loading">Opening your vault…</p>}>
-            <VaultScene
-              nodes={graph.nodes}
-              edges={graph.edges}
-              held={held}
-              hovered={hovered}
-              onHold={setHeld}
-              onHover={setHovered}
-            />
-          </Suspense>
-        </div>
-        {reader}
+  /*
+   * Through a portal, onto the body.
+   *
+   * A fixed overlay is only fixed to the window if no ancestor has made itself
+   * a containing block, and the settings page has several. Rendered where it
+   * sits in the tree, this covered part of the page and let the rest show
+   * through around the edges.
+   */
+  return createPortal(
+    <div className="vault-inside">
+      <header className="vault-inside-bar">
+        {legend}
+        <button type="button" className="ghost" onClick={() => setInside(false)}>
+          Leave vault
+        </button>
+      </header>
+
+      <div className="vault-inside-stage">
+        <div className="vault-frame">{ball}</div>
+        <aside className="vault-read">
+          {reading === null ? (
+            <p className="muted">Click anything to read it.</p>
+          ) : (
+            <>
+              <header className="vault-read-head">
+                <strong>{reading.title}</strong>
+                {joined.size > 0 && (
+                  <span className="muted">
+                    {joined.size} connected {joined.size === 1 ? 'note' : 'notes'}
+                  </span>
+                )}
+              </header>
+              <div className="vault-read-body">{render(reading.body, setHeld)}</div>
+            </>
+          )}
+        </aside>
       </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * A box that knows how big it is.
+ *
+ * The renderer sizes its canvas once, from whatever it is given. Left to read
+ * its own container it measured zero -- the element had not been laid out when
+ * the lazy chunk arrived -- and drew a graph nobody could see into a box of the
+ * wrong shape.
+ */
+function Stage({ children }: { children: (width: number, height: number) => React.ReactNode }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  const measure = useCallback(() => {
+    const at = box.current?.getBoundingClientRect();
+    if (at) setSize({ width: Math.round(at.width), height: Math.round(at.height) });
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const watch = new ResizeObserver(measure);
+    if (box.current) watch.observe(box.current);
+    return () => watch.disconnect();
+  }, [measure]);
+
+  return (
+    <div ref={box} className="vault-stage">
+      {size.width > 0 && size.height > 0 ? children(size.width, size.height) : null}
     </div>
   );
 }
