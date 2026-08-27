@@ -10,10 +10,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "import-vault": "tsx src/scripts/import-vault.ts",
     "write-user-doc": "tsx src/scripts/write-user-doc.ts",
-    "backfill-classroom-events": "tsx src/scripts/backfill-classroom-events.ts",
-    "recover-courses": "tsx src/scripts/recover-courses.ts"
+    "recover-courses": "tsx src/scripts/recover-courses.ts",
+    "build-vault": "tsx src/scripts/build-vault.ts"
   },
   "dependencies": {
     "@contexto/agent": "workspace:*",

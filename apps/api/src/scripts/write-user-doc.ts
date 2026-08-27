@@ -1,14 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import {
-  Vault,
-  askWhoTeaches,
-  domainOf,
-  readUserDoc,
-  understandVault,
-  vaultDigest,
-  writeUserDoc,
-} from '@contexto/agent';
+import { Vault, domainOf, readUserDoc, writeUserDoc } from '@contexto/agent';
 import { createContext } from '../context.js';
 import { loadEnv } from '../env.js';
 
@@ -50,59 +42,10 @@ async function main(): Promise<void> {
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
   console.log(`Vault: ${entities.length} entities, ${episodes.length} episodes\n`);
 
-  /*
-   * --why <course-note> prints the bundle one question is asked from, and
-   * stops. No model calls: when an answer is missing, the first thing worth
-   * knowing is whether the evidence ever reached the question, and that is
-   * decided by arithmetic before anything is asked.
-   */
-  const why = process.argv.indexOf('--why');
-  if (why > 0) {
-    const course = process.argv[why + 1] as string;
-    const question = await askWhoTeaches(vault, course, {
-      ...(domainOf(owner.email) ? { studentDomain: domainOf(owner.email) as string } : {}),
-    });
-    if (!question) {
-      console.log(`No question is asked about ${course}: nothing put a member of staff near it.`);
-      return;
-    }
-    console.log(`Candidates: ${question.candidates.join(', ')}`);
-    console.log(`Left out: ${question.omitted}\n`);
-    for (const e of question.evidence) console.log(`- ${e.note}\n  ${e.quote}\n`);
-    return;
-  }
-
   const before = await readUserDoc(vault);
   console.log(`--- before ---\n${before ?? '(nothing was ever written)'}\n`);
 
-  /*
-   * What the vault settled on, before the writer turns it into prose.
-   *
-   * A document that reads badly can be a bad writer or a bad understanding,
-   * and from the outside those look identical. Printing the claims separates
-   * them: a course missing here was never found, and a course present here and
-   * absent from the document was dropped by the writer.
-   */
   const llm = await ctx.llm.resolve(owner.id);
-  const { settled, withheld } = await understandVault({ llm }, vault, {
-    userId: owner.id,
-    ...(domainOf(owner.email) ? { studentDomain: domainOf(owner.email) as string } : {}),
-    today: new Date().toISOString().slice(0, 10),
-  });
-  const digest = await vaultDigest(vault, settled);
-
-  console.log(`--- what the vault settled (${settled.length} claims) ---`);
-  console.log(`student: ${digest.year ?? 'year unknown'}, ${digest.school ?? 'school unknown'}\n`);
-  for (const c of digest.courses) {
-    console.log(
-      `  ${c.title}\n    kind=${c.kind ?? '?'}  teacher=${c.teachers.join(' and ') || '?'}  state=${c.state ?? '?'}`,
-    );
-  }
-  console.log(`\n--- withheld (${withheld.length}) ---`);
-  for (const w of withheld.slice(0, 20)) {
-    console.log(`  ${w.claim.subject} ${w.claim.relation} ${w.claim.object} -> ${w.reason}`);
-  }
-  console.log('');
 
   const started = Date.now();
   const after = await writeUserDoc(
