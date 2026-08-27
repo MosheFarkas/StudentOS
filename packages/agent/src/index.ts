@@ -56,6 +56,7 @@ export {
   filterSnapshot,
   lastActivityByCourse,
   academicYearStart,
+  FALLBACK_YEAR_END,
   sweepDroppedCourses,
   type CourseVerdict,
 } from './vault/courses.js';

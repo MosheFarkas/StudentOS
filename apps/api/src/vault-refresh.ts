@@ -15,6 +15,7 @@ import {
   classifyCourses,
   academicYearEnd,
   academicYearStart,
+  FALLBACK_YEAR_END,
   describeCourses,
   filterSnapshot,
   writeClassDocs,
@@ -131,22 +132,24 @@ async function refreshOne(
    * Every build re-decides, so correcting the rule corrects the vault.
    */
   const today = new Date().toISOString().slice(0, 10);
+
+  /*
+   * The school's own calendar, where anything has researched it.
+   *
+   * Read once. The dependency runs in a circle -- the school page is written
+   * from a vault this filtered -- and resolves because the filter re-runs on
+   * every build: the first uses a July fallback, the page gets researched, and
+   * the next build uses the real date.
+   */
+  const yearEnd = await academicYearEnd(vault);
+  const yearStart = academicYearStart(today, yearEnd ?? FALLBACK_YEAR_END);
+
   const verdicts = await classifyCourses(
     { llm: await ctx.llm.resolve(userId) },
     {
       courses: describeCourses(snapshot, today),
       today,
-      /*
-       * The school's own calendar, where anything has researched it.
-       *
-       * The dependency runs in a circle -- the school page is written from a
-       * vault this filtered -- and resolves because the filter re-runs on every
-       * build: the first uses a July fallback, writes the page, and the next
-       * uses the real date.
-       */
-      ...((await academicYearEnd(vault))
-        ? { yearEnd: (await academicYearEnd(vault)) as string }
-        : {}),
+      ...(yearEnd ? { yearEnd } : {}),
       userId,
     },
   );
@@ -190,7 +193,7 @@ async function refreshOne(
           dropped: dropped.map((verdict) => verdict.course),
           // And the courses it never saw, because Classroom no longer returns
           // them at all. Those get no verdict, so nothing else can refuse them.
-          since: academicYearStart(today, (await academicYearEnd(vault)) ?? '07-01'),
+          since: yearStart,
         },
       );
     }

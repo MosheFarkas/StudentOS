@@ -98,7 +98,7 @@ export interface CourseVerdict {
  * one, so a course still running in June survives and one that ended in June
  * does not linger past the summer.
  */
-const FALLBACK_YEAR_END = '07-01';
+export const FALLBACK_YEAR_END = '07-01';
 
 /**
  * How much of a course to show.
