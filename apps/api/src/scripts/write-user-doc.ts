@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
 import {
   Vault,
+  askWhoTeaches,
   domainOf,
   readUserDoc,
   understandVault,
@@ -48,6 +49,28 @@ async function main(): Promise<void> {
   const vault = new Vault(env.VAULT_ROOT, owner.id);
   const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
   console.log(`Vault: ${entities.length} entities, ${episodes.length} episodes\n`);
+
+  /*
+   * --why <course-note> prints the bundle one question is asked from, and
+   * stops. No model calls: when an answer is missing, the first thing worth
+   * knowing is whether the evidence ever reached the question, and that is
+   * decided by arithmetic before anything is asked.
+   */
+  const why = process.argv.indexOf('--why');
+  if (why > 0) {
+    const course = process.argv[why + 1] as string;
+    const question = await askWhoTeaches(vault, course, {
+      ...(domainOf(owner.email) ? { studentDomain: domainOf(owner.email) as string } : {}),
+    });
+    if (!question) {
+      console.log(`No question is asked about ${course}: nothing put a member of staff near it.`);
+      return;
+    }
+    console.log(`Candidates: ${question.candidates.join(', ')}`);
+    console.log(`Left out: ${question.omitted}\n`);
+    for (const e of question.evidence) console.log(`- ${e.note}\n  ${e.quote}\n`);
+    return;
+  }
 
   const before = await readUserDoc(vault);
   console.log(`--- before ---\n${before ?? '(nothing was ever written)'}\n`);
