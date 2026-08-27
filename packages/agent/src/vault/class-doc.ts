@@ -196,9 +196,17 @@ export async function writeClassDocs(
   return result;
 }
 
-/** The title the importer wrote on the first line, up to the comma. */
+/**
+ * The name the importer wrote on the first line.
+ *
+ * Recovered by removing the suffix it appends, not by splitting on the first
+ * comma: a course really can be called "Le parlement des jeunes, 8-10 avril
+ * 2026", and splitting lost everything after "jeunes". Every course without a
+ * comma matched, which is why it took counting pages against courses to see.
+ */
 function titleOf(note: VaultNote): string {
-  return (note.body.split('\n')[0] ?? '').split(',')[0]?.trim() ?? '';
+  const first = note.body.split('\n')[0] ?? '';
+  return first.replace(/,\s*on Google Classroom\.?\s*$/i, '').trim();
 }
 
 function fingerprint(notes: VaultNote[]): string {

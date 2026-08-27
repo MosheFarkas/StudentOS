@@ -5,7 +5,7 @@ import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
 import { buildGraph } from './graph.js';
 import { retrying } from './retry.js';
-import type { Vault } from './vault.js';
+import type { Vault, VaultNote } from './vault.js';
 
 /**
  * Deciding which of a student's courses belong in their vault.
@@ -508,9 +508,7 @@ export async function sweepDroppedCourses(
    */
   const courses = (await vault.list('entity')).filter((note) => note.description === 'Course');
   const goners = new Set(
-    courses
-      .filter((note) => byName.has((note.body.split('\n')[0] ?? '').split(',')[0]?.trim() ?? ''))
-      .map((note) => note.name),
+    courses.filter((note) => byName.has(titleOf(note))).map((note) => note.name),
   );
   if (goners.size === 0) return { removed: 0, refused: false };
 
@@ -561,4 +559,17 @@ export async function sweepDroppedCourses(
   }
 
   return { removed, refused: false };
+}
+
+/**
+ * The name the importer wrote on the first line.
+ *
+ * Recovered by removing the suffix it appends, not by splitting on the first
+ * comma: a course really can be called "Le parlement des jeunes, 8-10 avril
+ * 2026", and splitting lost everything after "jeunes". Every course without a
+ * comma matched, which is why it took counting pages against courses to see.
+ */
+function titleOf(note: VaultNote): string {
+  const first = note.body.split('\n')[0] ?? '';
+  return first.replace(/,\s*on Google Classroom\.?\s*$/i, '').trim();
 }

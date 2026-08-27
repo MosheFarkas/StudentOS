@@ -124,6 +124,43 @@ describe('writing a page per class', () => {
     expect(sent).toContain('Oral presentation');
   });
 
+  it('finds a course whose name has a comma in it', async () => {
+    /*
+     * Found by counting: nine courses, eight pages.
+     *
+     * The importer writes "<name>, on Google Classroom." as the first line, and
+     * the title was recovered by taking everything before the first comma. A
+     * course actually called "Le parlement des jeunes, 8-10 avril 2026" lost
+     * everything after "jeunes", matched no verdict, and got no page -- while
+     * every course without a comma worked, which is why nothing noticed.
+     */
+    await vault.write({
+      name: 'le-parlement',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Le parlement des jeunes, 8-10 avril 2026, on Google Classroom.',
+    });
+
+    const llm = llmSaying('# Le parlement des jeunes');
+    const result = await writeClassDocs(
+      { llm },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [
+          verdict({
+            course: 'Le parlement des jeunes, 8-10 avril 2026',
+            subject: 'le-parlement-des-jeunes',
+            academic: false,
+          }),
+        ],
+      },
+    );
+
+    expect(result.written).toBe(1);
+  });
+
   it('shows the writer what is actually in the course', async () => {
     const llm = llmSaying('# French');
     await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });
