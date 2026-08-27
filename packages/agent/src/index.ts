@@ -47,7 +47,7 @@ export { importDrive, type DriveFile, type DriveImportResult } from './vault/dri
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
 export { writeClassDocs, type ClassDocResult } from './vault/class-doc.js';
 export { writeSchoolDoc, academicYearEnd, type SchoolDocResult } from './vault/school-doc.js';
-export { updateChatsDoc } from './vault/chats-doc.js';
+export { updateChatsDoc, ensureChatsDoc, NOTHING_KEPT_YET } from './vault/chats-doc.js';
 export { readGrade, type GradeReading } from './vault/grade.js';
 export { classroomCourse, classroomEvent } from './vault/mail.js';
 export {

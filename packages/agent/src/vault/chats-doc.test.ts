@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
 import { readDocument, writeDocument } from './documents.js';
-import { updateChatsDoc } from './chats-doc.js';
+import { NOTHING_KEPT_YET, ensureChatsDoc, updateChatsDoc } from './chats-doc.js';
 
 /**
  * What is kept from a student's conversations once they are over.
@@ -178,5 +178,68 @@ describe('keeping what a student has told you', () => {
     });
 
     expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).not.toContain('worked examples');
+  });
+});
+
+describe('the page existing before there is anything on it', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-chatsseed-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('makes the page so a vault is never missing one', async () => {
+    /*
+     * A vault is meant to be a folder somebody can open and see the whole shape
+     * of. A page that only appears once a student has said something durable is
+     * a hole in that picture for everybody new.
+     */
+    await ensureChatsDoc(vault);
+
+    expect((await readDocument(vault, 'chats'))?.body).toBe(NOTHING_KEPT_YET);
+  });
+
+  it('leaves a page that already says something alone', async () => {
+    await writeDocument(vault, {
+      name: 'chats',
+      description: 'What they have said',
+      body: 'They read on a phone.',
+    });
+    await ensureChatsDoc(vault);
+
+    expect((await readDocument(vault, 'chats'))?.body).toBe('They read on a phone.');
+  });
+
+  it('never hands the placeholder to the writer as if it were the page', async () => {
+    /*
+     * The failure this product has already had once.
+     *
+     * A placeholder shown in the slot where the document goes came back
+     * untouched and was saved as what the agent knew about a person. Seeding
+     * the file is only safe while the writer is told the file is empty.
+     */
+    await ensureChatsDoc(vault);
+
+    const llm = llmSaying('# Them\n\nShort answers.');
+    await updateChatsDoc({ llm } as never, { vault, exchanges: EXCHANGES, userId: 'u-1' });
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).not.toContain(NOTHING_KEPT_YET);
+    expect(sent).toContain('Nothing has been kept about this student yet');
+  });
+
+  it('replaces the placeholder rather than appending to it', async () => {
+    await ensureChatsDoc(vault);
+    await updateChatsDoc({ llm: llmSaying('They read on a phone.') } as never, {
+      vault,
+      exchanges: EXCHANGES,
+      userId: 'u-1',
+    });
+
+    expect((await readDocument(vault, 'chats'))?.body).toBe('They read on a phone.');
   });
 });

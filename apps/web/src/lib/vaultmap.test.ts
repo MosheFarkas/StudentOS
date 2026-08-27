@@ -1,120 +1,176 @@
 import { describe, expect, it } from 'vitest';
-import { neighbours, pick, place, type DocNode } from './vaultmap.js';
+import { depths, neighbours, pick, place, type DocEdge, type DocNode } from './vaultmap.js';
 
 /**
- * The picture of a vault, now that a vault is about ten pages.
+ * The picture of a vault, now that it draws the whole thing.
  *
- * The one this replaces drew four thousand notes on a cylinder. It was true and
- * unreadable. What matters here is the opposite property: the same vault must
- * draw the same way every time, or it is a lava lamp rather than a diagram.
+ * The cylinder drew four thousand notes by three numbers and was unreadable.
+ * What makes the same notes legible is that they have a shape now -- a student,
+ * the pages about them, and the evidence each page was written from -- so what
+ * these tests hold onto is that the shape survives being drawn.
  */
 
-const node = (name: string, degree = 0): DocNode => ({ name, description: name, degree });
+const doc = (name: string, over: Partial<DocNode> = {}): DocNode => ({
+  name,
+  kind: 'document',
+  source: 'agent',
+  description: name,
+  degree: 0,
+  cluster: null,
+  ...over,
+});
 
-const VAULT = [
-  node('user', 5),
-  node('chats'),
-  node('school'),
-  node('class-french'),
-  node('class-chemistry'),
-  node('class-history'),
+const note = (name: string, cluster: string | null = null): DocNode =>
+  doc(name, { kind: 'entity', source: 'classroom', cluster });
+
+const VAULT: DocNode[] = [
+  doc('user'),
+  doc('school'),
+  doc('chats'),
+  doc('class-french'),
+  doc('class-robotics'),
+  note('french-a', 'french-a'),
+  note('oral-presentation', 'french-a'),
+  note('robotics', 'robotics'),
+  note('m0duel-rulebook', 'robotics'),
+  note('stray'),
 ];
 
-describe('laying out the pages', () => {
-  it('puts the page everything is written into at the centre', () => {
-    const placed = place(VAULT, 800, 600);
+const EDGES: DocEdge[] = [
+  { from: 'user', to: 'school' },
+  { from: 'user', to: 'chats' },
+  { from: 'user', to: 'class-french' },
+  { from: 'user', to: 'class-robotics' },
+  { from: 'class-french', to: 'french-a' },
+  { from: 'class-robotics', to: 'robotics' },
+  { from: 'oral-presentation', to: 'french-a' },
+  { from: 'm0duel-rulebook', to: 'robotics' },
+];
+
+describe('how far each thing is from the student', () => {
+  it('puts the student at nothing and their pages one hop out', () => {
+    const d = depths(VAULT, EDGES);
+    expect(d.get('user')).toBe(0);
+    expect(d.get('class-french')).toBe(1);
+  });
+
+  it('puts what a page was written from beyond the page', () => {
+    const d = depths(VAULT, EDGES);
+    expect(d.get('french-a')).toBe(2);
+    expect(d.get('oral-presentation')).toBe(3);
+  });
+
+  it('walks links in either direction', () => {
+    // An assignment points at its course; the course does not point back. It is
+    // still two hops from the page, and drawing it four would be a lie.
+    const d = depths(VAULT, EDGES);
+    expect(d.get('m0duel-rulebook')).toBe(3);
+  });
+
+  it('keeps something nothing points at, at arm’s length', () => {
+    // Eight hundred notes on the real account are joined to nothing. They are
+    // real and they belong in the picture.
+    expect(depths(VAULT, EDGES).get('stray')).toBeGreaterThan(3);
+  });
+
+  it('copes with a vault that has no student page yet', () => {
+    const d = depths([doc('school'), note('x')], [{ from: 'school', to: 'x' }]);
+    expect(d.get('school')).toBe(0);
+  });
+});
+
+describe('laying the whole vault out', () => {
+  const placed = place(VAULT, EDGES, 900, 700);
+
+  it('puts the student in the middle', () => {
     const user = placed.find((p) => p.node.name === 'user');
-
-    expect(user?.x).toBe(400);
-    expect(user?.y).toBe(300);
+    expect([user?.x, user?.y]).toEqual([450, 350]);
   });
 
-  it('puts what they have said above and their school below, as in the diagram', () => {
-    const placed = place(VAULT, 800, 600);
-    const chats = placed.find((p) => p.node.name === 'chats');
-    const school = placed.find((p) => p.node.name === 'school');
-
-    expect(chats?.y).toBeLessThan(300);
-    expect(school?.y).toBeGreaterThan(300);
-    expect(chats?.x).toBe(400);
+  it('draws everything, notes included', () => {
+    expect(placed).toHaveLength(VAULT.length);
   });
 
-  it('does not stack a class on top of the two that have fixed places', () => {
-    // An even number of classes spread from angle zero would put two of them
-    // exactly where chats and school already are.
-    const placed = place(VAULT, 800, 600);
-    const fixed = placed.filter((p) => p.node.name === 'chats' || p.node.name === 'school');
+  it('draws a page bigger than a note, because it is what you are looking for', () => {
+    const page = placed.find((p) => p.node.name === 'class-french');
+    const leaf = placed.find((p) => p.node.name === 'oral-presentation');
+    expect(page?.r ?? 0).toBeGreaterThan(leaf?.r ?? 0);
+  });
 
-    for (const cls of placed.filter((p) => p.node.name.startsWith('class-'))) {
-      for (const other of fixed) {
-        expect(Math.hypot(cls.x - other.x, cls.y - other.y)).toBeGreaterThan(1);
-      }
-    }
+  it('sets a subject in the same direction as the page describing it', () => {
+    /*
+     * What stops the outer rings being a smear. A class's work sits on the
+     * bearing of its page, so a subject reads as a spoke.
+     */
+    const angle = (name: string) => {
+      const p = placed.find((q) => q.node.name === name);
+      return Math.atan2((p?.y ?? 0) - 350, (p?.x ?? 0) - 450);
+    };
+
+    expect(Math.abs(angle('class-french') - angle('french-a'))).toBeLessThan(0.6);
+  });
+
+  it('does not stack two notes under one page on the same point', () => {
+    const a = placed.find((p) => p.node.name === 'french-a');
+    const b = placed.find((p) => p.node.name === 'robotics');
+    expect(Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.y ?? 0) - (b?.y ?? 0))).toBeGreaterThan(1);
   });
 
   it('draws the same vault the same way every time', () => {
-    expect(place(VAULT, 800, 600)).toEqual(place(VAULT, 800, 600));
+    expect(place(VAULT, EDGES, 900, 700)).toEqual(place(VAULT, EDGES, 900, 700));
   });
 
-  it('keeps every page on the canvas', () => {
-    for (const item of place(VAULT, 800, 600)) {
-      expect(item.x - item.r).toBeGreaterThanOrEqual(0);
-      expect(item.x + item.r).toBeLessThanOrEqual(800);
-      expect(item.y - item.r).toBeGreaterThanOrEqual(0);
-      expect(item.y + item.r).toBeLessThanOrEqual(600);
+  it('keeps everything on the canvas', () => {
+    for (const item of place(VAULT, EDGES, 900, 700)) {
+      expect(item.x).toBeGreaterThanOrEqual(0);
+      expect(item.x).toBeLessThanOrEqual(900);
+      expect(item.y).toBeGreaterThanOrEqual(0);
+      expect(item.y).toBeLessThanOrEqual(700);
     }
   });
 
-  it('draws a page more of the vault points at larger', () => {
-    const placed = place([node('class-french', 0), node('class-history', 4)], 800, 600);
-    const [french, history] = placed;
-
-    expect(history?.r ?? 0).toBeGreaterThan(french?.r ?? 0);
+  it('lays out nothing for an empty vault', () => {
+    expect(place([], [], 900, 700)).toEqual([]);
   });
 
-  it('lays out nothing for a vault nothing has been written into', () => {
-    expect(place([], 800, 600)).toEqual([]);
-  });
+  it('handles a vault of a few thousand without falling over', () => {
+    const many = [doc('user'), doc('class-french'), note('french-a', 'french-a')];
+    for (let i = 0; i < 4000; i += 1) many.push(note(`n-${i}`, 'french-a'));
+    const edges = [...EDGES, ...many.slice(3).map((n) => ({ from: 'french-a', to: n.name }))];
 
-  it('copes with a vault that has only classes in it', () => {
-    const placed = place([node('class-french')], 800, 600);
-    expect(placed).toHaveLength(1);
+    expect(place(many, edges, 900, 700)).toHaveLength(many.length);
   });
 });
 
 describe('clicking on something', () => {
-  const placed = place(VAULT, 800, 600);
+  const placed = place(VAULT, EDGES, 900, 700);
 
-  it('finds the page under the point', () => {
+  it('finds what is under the point', () => {
     const user = placed.find((p) => p.node.name === 'user');
     expect(pick(placed, user?.x ?? 0, user?.y ?? 0)).toBe('user');
   });
 
   it('finds nothing in the gaps', () => {
-    expect(pick(placed, 5, 5)).toBeNull();
+    expect(pick(placed, 2, 2)).toBeNull();
   });
 
-  it('prefers the page whose middle is nearer when two overlap', () => {
+  it('prefers a page when a note is drawn on top of one', () => {
+    // At the outer rings the dots are three pixels across. The thing somebody
+    // is aiming at is almost always the larger one.
     const overlapping = [
-      { node: node('a'), x: 100, y: 100, r: 40 },
-      { node: node('b'), x: 120, y: 100, r: 40 },
+      { node: note('tiny'), x: 100, y: 100, r: 3, depth: 3 },
+      { node: doc('class-french'), x: 102, y: 100, r: 20, depth: 1 },
     ];
-    expect(pick(overlapping, 105, 100)).toBe('a');
+    expect(pick(overlapping, 100, 100)).toBe('class-french');
   });
 });
 
-describe('what a page is joined to', () => {
-  const edges = [
-    { from: 'user', to: 'class-french' },
-    { from: 'user', to: 'school' },
-    { from: 'class-french', to: 'school' },
-  ];
-
-  it('finds what it points at and what points at it', () => {
-    expect(neighbours(edges, 'school')).toEqual(new Set(['user', 'class-french']));
+describe('what a thing is joined to', () => {
+  it('finds both directions', () => {
+    expect(neighbours(EDGES, 'french-a')).toEqual(new Set(['class-french', 'oral-presentation']));
   });
 
-  it('finds nothing for a page joined to nothing', () => {
-    expect(neighbours(edges, 'chats').size).toBe(0);
+  it('finds nothing for something joined to nothing', () => {
+    expect(neighbours(EDGES, 'stray').size).toBe(0);
   });
 });

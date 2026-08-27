@@ -466,11 +466,27 @@ describe('browsing the vault', () => {
     expect(body.nodes).toHaveLength(1);
   });
 
-  it('draws the pages, not the thousands of notes underneath them', async () => {
+  it('shows a student the notes even before any page describes them', async () => {
+    // A vault mid-build has thousands of notes and no pages yet. Showing
+    // nothing until the pages land would hide the work as it happens.
+    const alice = await createUser();
+    await new Vault(vaultRoot, alice.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry.',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    expect(((await res.json()) as { nodes: unknown[] }).nodes).toHaveLength(1);
+  });
+
+  it('draws the pages and the notes they were written from, as one graph', async () => {
     /*
-     * The picture used to be of every note. It was true and unreadable -- four
-     * thousand dots is a picture of how much there is, not of what it says --
-     * and it cost four thousand rows over the wire to be one.
+     * A vault is one thing. The pages are what a person reads and the notes are
+     * what they were written from, and the line between them is the most useful
+     * edge in the picture -- it is what makes a page checkable.
      */
     const alice = await createUser();
     const vault = new Vault(vaultRoot, alice.id);
@@ -493,17 +509,38 @@ describe('browsing the vault', () => {
       kind: 'document',
       source: 'agent',
       description: 'chemistry, as the vault has it',
-      body: '# Chemistry',
+      body: '# Chemistry\n\nCovers [[chemistry]].',
     });
 
     const res = await withVaults.request('/api/vault/graph', as(alice.token));
     const body = (await res.json()) as {
-      nodes: { name: string }[];
+      nodes: { name: string; kind: string }[];
       edges: { from: string; to: string }[];
     };
 
-    expect(body.nodes.map((node) => node.name).sort()).toEqual(['class-chemistry', 'user']);
-    expect(body.edges).toEqual([{ from: 'user', to: 'class-chemistry' }]);
+    expect(body.nodes.map((node) => node.name).sort()).toEqual([
+      'chemistry',
+      'class-chemistry',
+      'user',
+    ]);
+    expect(body.edges).toContainEqual({ from: 'user', to: 'class-chemistry' });
+    expect(body.edges).toContainEqual({ from: 'class-chemistry', to: 'chemistry' });
+  });
+
+  it('sends what a drawing needs and not what it does not', async () => {
+    // No bodies: a picture of four thousand notes should not cost four thousand
+    // note bodies over the wire. What a thing says is fetched when clicked.
+    const alice = await createUser();
+    await new Vault(vaultRoot, alice.id).write({
+      name: 'chemistry',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Chemistry, and a great deal more prose that nobody is drawing.',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    expect(JSON.stringify(await res.json())).not.toContain('great deal more prose');
   });
 
   it("will not hand one student another student's graph", async () => {

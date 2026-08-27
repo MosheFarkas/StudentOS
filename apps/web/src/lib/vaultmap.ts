@@ -1,26 +1,31 @@
 /**
- * Laying the vault out flat, as the handful of pages it is now.
+ * Laying a whole vault out flat, pages and notes together.
  *
- * The picture this replaces drew every note -- four thousand of them, on a
- * cylinder, time along the axis and course around it. It was true and it was
- * unreadable: a picture of how much there is rather than of what any of it
- * says, and no student ever learned anything from it about their own school.
+ * The picture this replaces drew every note on a cylinder -- time along the
+ * axis, in-degree toward the core, course around the bearing. Three honest axes
+ * and unreadable, because a picture of four thousand things arranged by three
+ * numbers is a picture of how many there are.
  *
- * What is worth drawing is the layer above: about ten pages, each of which a
- * student would recognise. Their classes, their school, what they have told it.
- * At that size the shape is the point rather than the density, so the layout is
- * fixed rather than physical -- the same vault draws the same way every time,
- * which is what makes it a diagram instead of a lava lamp.
+ * What makes the same four thousand readable is that they now have a shape.
+ * There is one page describing the student, a page per class and one per school
+ * and conversation, and under those the notes each was written from. So the
+ * layout is that hierarchy rather than a physics simulation: rings outward from
+ * the student, and everything sitting on the bearing of the page it belongs to.
  *
- * The arrangement follows the arrows: what a page is written FROM sits around
- * the page written from it.
+ * Deterministic, so the same vault draws the same way every time. A layout that
+ * settles differently on every load is a lava lamp, and you cannot learn the
+ * position of anything in one.
  */
 
 export interface DocNode {
   name: string;
+  kind: 'entity' | 'episode' | 'document';
+  source: string;
   description: string;
-  /** How many other pages point here. */
+  /** How many other notes point here. */
   degree: number;
+  /** The course this belongs to, where it belongs to one. */
+  cluster: string | null;
 }
 
 export interface DocEdge {
@@ -32,90 +37,179 @@ export interface Placed {
   node: DocNode;
   x: number;
   y: number;
-  /** Drawn radius. Bigger for a page more of the vault points at. */
   r: number;
+  /** How far from the student, in hops. 0 is the student themselves. */
+  depth: number;
 }
 
 /** The page everything else is written into. It sits in the middle. */
 const CENTRE = 'user';
 
-/** The two that are not classes get the top and the bottom, as in the diagram. */
-const TOP = 'chats';
-const BOTTOM = 'school';
+/** Radius by depth, as a share of the space available. */
+const RING = [0, 0.22, 0.55, 0.82, 0.95];
 
-const MIN_RADIUS = 26;
-const MAX_RADIUS = 46;
+/** Drawn size by depth. The pages are what a person is looking for. */
+const SIZE = [30, 20, 5, 3.5, 3];
 
-/** Room for a label under the outermost page. */
-const PADDING = 56;
+/** Room for a label under the outermost ring. */
+const PADDING = 44;
 
-export function place(nodes: DocNode[], width: number, height: number): Placed[] {
+/**
+ * How far each note is from the student, walking the links.
+ *
+ * Breadth-first and undirected: a note is as close to the student as the
+ * shortest chain of references between them, whichever way the references
+ * happen to point. Anything the walk never reaches sits on the outside.
+ */
+export function depths(nodes: readonly DocNode[], edges: readonly DocEdge[]): Map<string, number> {
+  const near = new Map<string, string[]>();
+  for (const edge of edges) {
+    near.set(edge.from, [...(near.get(edge.from) ?? []), edge.to]);
+    near.set(edge.to, [...(near.get(edge.to) ?? []), edge.from]);
+  }
+
+  const depth = new Map<string, number>();
+  const start = nodes.some((node) => node.name === CENTRE)
+    ? CENTRE
+    : (nodes.find((node) => node.kind === 'document')?.name ?? nodes[0]?.name);
+  if (start === undefined) return depth;
+
+  depth.set(start, 0);
+  const queue = [start];
+  for (let at = 0; at < queue.length; at += 1) {
+    const here = queue[at] as string;
+    const next = (depth.get(here) as number) + 1;
+    for (const neighbour of near.get(here) ?? []) {
+      if (depth.has(neighbour)) continue;
+      depth.set(neighbour, next);
+      queue.push(neighbour);
+    }
+  }
+
+  // Unreached notes are real and belong in the picture, at arm's length.
+  for (const node of nodes) if (!depth.has(node.name)) depth.set(node.name, RING.length - 1);
+
+  return depth;
+}
+
+export function place(
+  nodes: readonly DocNode[],
+  edges: readonly DocEdge[],
+  width: number,
+  height: number,
+): Placed[] {
   if (nodes.length === 0) return [];
 
   const cx = width / 2;
   const cy = height / 2;
-  const ring = Math.max(80, Math.min(width, height) / 2 - MAX_RADIUS - PADDING);
-
-  const centre = nodes.find((node) => node.name === CENTRE);
-  const top = nodes.find((node) => node.name === TOP);
-  const bottom = nodes.find((node) => node.name === BOTTOM);
-  const rest = nodes.filter((node) => node !== centre && node !== top && node !== bottom);
-
-  const placed: Placed[] = [];
-  if (centre) placed.push({ node: centre, x: cx, y: cy, r: radiusFor(centre) });
-  if (top) placed.push({ node: top, x: cx, y: cy - ring, r: radiusFor(top) });
-  if (bottom) placed.push({ node: bottom, x: cx, y: cy + ring, r: radiusFor(bottom) });
+  const span = Math.max(60, Math.min(width, height) / 2 - PADDING);
+  const depth = depths(nodes, edges);
 
   /*
-   * The rest spread evenly, starting at the right.
+   * A bearing per page, and everything under a page inherits it.
    *
-   * Half a step of offset so that an even number of classes does not put two of
-   * them exactly where the top and bottom already are.
+   * This is what stops the outer rings being a smear: a class's assignments,
+   * its files and the mail about it all sit in the same direction as the page
+   * describing that class, so a subject reads as a spoke rather than as dots
+   * scattered round a circle.
    */
-  const step = rest.length > 0 ? (Math.PI * 2) / rest.length : 0;
-  rest.forEach((node, i) => {
-    const angle = i * step + step / 2;
+  const pages = nodes
+    .filter((node) => node.kind === 'document' && node.name !== CENTRE)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const bearing = new Map<string, number>();
+  pages.forEach((page, i) => bearing.set(page.name, (i / Math.max(1, pages.length)) * Math.PI * 2));
+
+  /** The page a note hangs from, by the course it clusters to. */
+  const pageOfCourse = new Map<string, string>();
+  for (const edge of edges) {
+    if (!bearing.has(edge.from) || bearing.has(edge.to)) continue;
+    if (!pageOfCourse.has(edge.to)) pageOfCourse.set(edge.to, edge.from);
+  }
+
+  const angleFor = (node: DocNode): number | null => {
+    if (bearing.has(node.name)) return bearing.get(node.name) as number;
+    if (node.cluster) {
+      const page = pageOfCourse.get(node.cluster);
+      if (page && bearing.has(page)) return bearing.get(page) as number;
+    }
+    return null;
+  };
+
+  /*
+   * Spread within a bearing, so a spoke is a fan rather than a line.
+   *
+   * Counted per (bearing, ring) so that two notes at the same depth under the
+   * same page never land on the same point.
+   */
+  const taken = new Map<string, number>();
+  const placed: Placed[] = [];
+  let loose = 0;
+
+  for (const node of nodes) {
+    const d = Math.min(depth.get(node.name) ?? RING.length - 1, RING.length - 1);
+    if (node.name === CENTRE) {
+      placed.push({ node, x: cx, y: cy, r: SIZE[0] as number, depth: 0 });
+      continue;
+    }
+
+    const own = angleFor(node);
+    // Unattached notes ring the outside evenly rather than piling up at zero.
+    const base = own ?? (loose += 1) * 2.399963;
+    const slot = `${base.toFixed(3)}:${d}`;
+    const nth = taken.get(slot) ?? 0;
+    taken.set(slot, nth + 1);
+
+    /*
+     * Fanned by a golden angle rather than evenly.
+     *
+     * An even fan needs to know how many will land in this slot before placing
+     * the first, which means two passes. This spreads without counting, and
+     * spreads more the more there are, which is the behaviour wanted.
+     */
+    const fan = own === null ? 0 : (nth * 0.381966 * Math.PI) / Math.max(1, pages.length);
+    const angle = base + fan * (nth % 2 === 0 ? 1 : -1);
+    const radius = span * (RING[d] as number) * (1 + (nth % 5) * 0.012);
+
     placed.push({
       node,
-      x: cx + Math.cos(angle) * ring,
-      y: cy + Math.sin(angle) * ring,
-      r: radiusFor(node),
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+      r: SIZE[d] as number,
+      depth: d,
     });
-  });
+  }
 
   return placed;
 }
 
 /**
- * Which page is under a point, if any.
+ * Which node is under a point, if any.
  *
- * Nearest first, so an overlap resolves to the one whose middle is closer
- * rather than to whichever happened to be drawn last.
+ * Nearest first, and pages win ties: at the outer rings the dots are three
+ * pixels across and overlap, and the thing somebody is trying to click is
+ * almost always the larger one.
  */
-export function pick(placed: Placed[], x: number, y: number): string | null {
-  let closest: { name: string; distance: number } | null = null;
+export function pick(placed: readonly Placed[], x: number, y: number): string | null {
+  let closest: { name: string; score: number } | null = null;
 
   for (const item of placed) {
     const distance = Math.hypot(item.x - x, item.y - y);
-    if (distance > item.r) continue;
-    if (!closest || distance < closest.distance) closest = { name: item.node.name, distance };
+    // A generous target for the small ones, which are unclickable otherwise.
+    if (distance > Math.max(item.r, 6)) continue;
+    const score = distance - (item.node.kind === 'document' ? 8 : 0);
+    if (!closest || score < closest.score) closest = { name: item.node.name, score };
   }
 
   return closest?.name ?? null;
 }
 
-/** Every page directly joined to this one, in either direction. */
-export function neighbours(edges: DocEdge[], name: string): Set<string> {
+/** Every note directly joined to this one, in either direction. */
+export function neighbours(edges: readonly DocEdge[], name: string): Set<string> {
   const found = new Set<string>();
   for (const edge of edges) {
     if (edge.from === name) found.add(edge.to);
     if (edge.to === name) found.add(edge.from);
   }
   return found;
-}
-
-/** A page more of the vault points at is drawn larger. */
-function radiusFor(node: DocNode): number {
-  if (node.name === CENTRE) return MAX_RADIUS;
-  return Math.min(MAX_RADIUS - 8, MIN_RADIUS + node.degree * 3);
 }

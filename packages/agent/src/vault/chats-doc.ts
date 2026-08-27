@@ -51,6 +51,34 @@ export interface ChatsDocOptions {
 const NOTHING = 'UNCHANGED';
 
 /**
+ * What the page says before a student has said anything durable.
+ *
+ * The page exists from the moment a vault does, because a vault is meant to be
+ * a folder somebody can open and see the whole shape of -- and a page that
+ * appears only once somebody has confided something is a hole in that picture
+ * for everybody new.
+ *
+ * Seeding it is only safe while the writer is told the file is empty. A
+ * placeholder handed over as though it were the document is exactly how this
+ * product once saved "(empty, nothing known yet)" as what an agent knew about a
+ * person: from where the model sat, the placeholder WAS the document.
+ */
+export const NOTHING_KEPT_YET =
+  'Nothing has been kept from their conversations yet. This fills in as they talk.';
+
+/** Make the page if it is missing, so the vault is never short one. */
+export async function ensureChatsDoc(vault: Vault): Promise<void> {
+  const existing = await readDocument(vault, CHATS_DOC_NAME);
+  if (existing) return;
+
+  await writeDocument(vault, {
+    name: CHATS_DOC_NAME,
+    description: 'What this student has told you, across every conversation',
+    body: NOTHING_KEPT_YET,
+  });
+}
+
+/**
  * A model narrating an absence is not a page about a student.
  *
  * This failure reached production once already, on the pass this replaces: it
@@ -71,7 +99,15 @@ export async function updateChatsDoc(
   if (exchanges.length === 0) return { changed: false };
 
   const existing = await readDocument(vault, CHATS_DOC_NAME);
-  const standing = existing?.body?.trim() || (knownBefore ?? []).join('\n\n').trim();
+  /*
+   * The placeholder is not the page.
+   *
+   * Shown in the slot where the document goes, it comes back untouched and gets
+   * saved as what is known about a person. There is nothing to hand over until
+   * somebody has actually said something.
+   */
+  const held = existing?.body?.trim() === NOTHING_KEPT_YET ? '' : (existing?.body?.trim() ?? '');
+  const standing = held || (knownBefore ?? []).join('\n\n').trim();
 
   const answer = await retrying(() =>
     llm.chat(

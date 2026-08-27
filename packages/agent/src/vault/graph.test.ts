@@ -154,3 +154,70 @@ describe('building the graph', () => {
     expect(nodes.filter((node) => node.kind === 'episode')).toHaveLength(2);
   });
 });
+
+describe('the pages and the notes as one graph', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-graphdocs-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('draws the pages alongside the notes they were written from', async () => {
+    /*
+     * A vault is one thing, not two. The pages are what a person reads and the
+     * notes are what they were written from, and the picture is only honest if
+     * it shows the line between them.
+     */
+    await vault.write({
+      name: 'french-a',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'French A, on Google Classroom.',
+    });
+    await vault.write({
+      name: 'class-french',
+      kind: 'document',
+      source: 'agent',
+      description: 'french',
+      body: '# French\n\nCovers [[french-a]].',
+    });
+    await vault.write({
+      name: 'user',
+      kind: 'document',
+      source: 'agent',
+      description: 'Them',
+      body: '- [[class-french]]',
+    });
+
+    const { nodes, edges } = await buildGraph(vault);
+
+    expect(nodes.map((n) => n.name).sort()).toEqual(['class-french', 'french-a', 'user']);
+    expect(edges).toContainEqual({ from: 'user', to: 'class-french' });
+    expect(edges).toContainEqual({ from: 'class-french', to: 'french-a' });
+  });
+
+  it('counts a page pointing at a note toward what that note is worth', async () => {
+    await vault.write({
+      name: 'french-a',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'French A.',
+    });
+    await vault.write({
+      name: 'class-french',
+      kind: 'document',
+      source: 'agent',
+      description: 'french',
+      body: 'Covers [[french-a]].',
+    });
+
+    const { nodes } = await buildGraph(vault);
+    expect(nodes.find((n) => n.name === 'french-a')?.degree).toBe(1);
+  });
+});

@@ -27,17 +27,42 @@ import {
  * something, the way a map is, not another panel.
  */
 
-/** Class pages, and the two that are not classes. */
+/** The pages, then the evidence underneath them. */
 const CLASS = '#a78bfa';
 const CENTRE = '#f0abfc';
 const CHATS = '#34d399';
 const SCHOOL = '#fbbf24';
 
-function colourFor(name: string): string {
-  if (name === 'user') return CENTRE;
-  if (name === 'chats') return CHATS;
-  if (name === 'school') return SCHOOL;
-  return CLASS;
+/*
+ * Notes are coloured by what they are, not by which page they hang from.
+ *
+ * Brighter than the app's own palette, because these sit on near-black: a
+ * thousand small points need a ground to be bright against.
+ */
+const NOTE: Record<string, string> = {
+  Course: '#c4b5fd',
+  Assignment: '#60a5fa',
+  Topic: '#22d3ee',
+  Person: '#f0abfc',
+  Material: '#fbbf24',
+};
+const OWN_FILE = '#a3e635';
+const GIVEN_FILE = '#fb923c';
+
+function colourFor(node: DocNode): string {
+  if (node.kind === 'document') {
+    if (node.name === 'user') return CENTRE;
+    if (node.name === 'chats') return CHATS;
+    if (node.name === 'school') return SCHOOL;
+    return CLASS;
+  }
+  if (node.kind === 'episode') {
+    // What the student said themselves is the one thing here they wrote.
+    if (node.source === 'student') return '#34d399';
+    return node.source === 'classroom' ? '#94a3b8' : '#7c8bb0';
+  }
+  if (node.description === 'File') return node.source === 'drive' ? OWN_FILE : GIVEN_FILE;
+  return NOTE[node.description] ?? '#8a8fae';
 }
 
 /** "class-french" is the filename; "French" is what a student calls it. */
@@ -50,6 +75,12 @@ const KEY: { colour: string; label: string }[] = [
   { colour: CLASS, label: 'Your classes' },
   { colour: SCHOOL, label: 'Your school' },
   { colour: CHATS, label: 'What you have told it' },
+  { colour: NOTE.Course as string, label: 'Courses' },
+  { colour: NOTE.Assignment as string, label: 'Work' },
+  { colour: NOTE.Material as string, label: 'Readings' },
+  { colour: GIVEN_FILE, label: 'Files from class' },
+  { colour: OWN_FILE, label: 'Your own files' },
+  { colour: '#94a3b8', label: 'Things that happened' },
 ];
 
 export function VaultMap() {
@@ -141,31 +172,46 @@ export function VaultMap() {
       paint.fillStyle = ground;
       paint.fillRect(0, 0, width, height);
 
-      const items = place(graph.nodes, width, height);
+      const items = place(graph.nodes, graph.edges, width, height);
       placed.current = items;
       const at = new Map(items.map((item) => [item.node.name, item]));
 
-      // Edges under the pages, so a line never crosses a label.
+      /*
+       * Edges under everything, and only the ones worth the ink.
+       *
+       * Ten thousand lines at full strength is a grey wash with the structure
+       * lost inside it. The near ones -- page to page, page to what it was
+       * written from -- carry the shape; the rest are texture until something
+       * is lit, and then the ones touching it are all that matter.
+       */
       for (const edge of graph.edges) {
         const from = at.get(edge.from);
         const to = at.get(edge.to);
         if (!from || !to) continue;
 
         const involved = lit && (lit.name === edge.from || lit.name === edge.to);
-        paint.strokeStyle = involved ? 'rgba(167,139,250,0.75)' : 'rgba(148,163,184,0.18)';
-        paint.lineWidth = involved ? 2 : 1;
+        const near = Math.min(from.depth, to.depth) <= 1;
+        if (!involved && !near && graph.edges.length > 400) continue;
+
+        paint.strokeStyle = involved
+          ? 'rgba(167,139,250,0.85)'
+          : near
+            ? 'rgba(148,163,184,0.22)'
+            : 'rgba(148,163,184,0.07)';
+        paint.lineWidth = involved ? 1.6 : 1;
         paint.beginPath();
         paint.moveTo(from.x, from.y);
         paint.lineTo(to.x, to.y);
         paint.stroke();
       }
 
-      for (const item of items) {
+      // Notes first, pages over them, so a page is never buried by its evidence.
+      for (const item of [...items].sort((a, b) => b.depth - a.depth)) {
         const dimmed =
           lit !== null && lit.name !== item.node.name && !lit.joined.has(item.node.name);
-        paint.globalAlpha = dimmed ? 0.3 : 1;
+        paint.globalAlpha = dimmed ? (item.depth > 1 ? 0.12 : 0.3) : 1;
 
-        paint.fillStyle = colourFor(item.node.name);
+        paint.fillStyle = colourFor(item.node);
         paint.beginPath();
         paint.arc(item.x, item.y, item.r, 0, Math.PI * 2);
         paint.fill();
@@ -175,12 +221,26 @@ export function VaultMap() {
           paint.lineWidth = 2;
           paint.stroke();
         }
+      }
 
-        paint.globalAlpha = dimmed ? 0.4 : 1;
+      /*
+       * Labels for the pages only, plus whatever is under the pointer.
+       *
+       * Four thousand labels is a solid block of text. The pages are what
+       * somebody is navigating by, and anything else can be read by pointing
+       * at it.
+       */
+      paint.font = '13px system-ui, sans-serif';
+      paint.textAlign = 'center';
+      for (const item of items) {
+        const named = item.depth <= 1 || item.node.name === hovered || item.node.name === focused;
+        if (!named) continue;
+
+        const dimmed =
+          lit !== null && lit.name !== item.node.name && !lit.joined.has(item.node.name);
+        paint.globalAlpha = dimmed ? 0.35 : 1;
         paint.fillStyle = '#e8ecff';
-        paint.font = '13px system-ui, sans-serif';
-        paint.textAlign = 'center';
-        paint.fillText(labelFor(item.node.name), item.x, item.y + item.r + 18);
+        paint.fillText(labelFor(item.node.name), item.x, item.y + item.r + 16);
       }
 
       paint.globalAlpha = 1;

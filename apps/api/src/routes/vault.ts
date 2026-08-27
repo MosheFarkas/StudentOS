@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, listDocuments, readDocument, readUserDoc } from '@contexto/agent';
+import { Vault, buildGraph, readDocument, readUserDoc } from '@contexto/agent';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -99,26 +99,24 @@ export function createVaultRoutes(ctx: AppContext) {
         const root = ctx.env?.VAULT_ROOT;
         if (!root) return c.json({ nodes: [], edges: [] });
 
-        const vault = new Vault(root, c.get('userId'));
-        const documents = await listDocuments(vault);
-        const exists = new Set(documents.map((doc) => doc.name));
+        const { nodes, edges } = await buildGraph(new Vault(root, c.get('userId')));
 
-        const edges: { from: string; to: string }[] = [];
-        for (const doc of documents) {
-          for (const match of doc.body.matchAll(/\[\[([^\]]+)\]\]/g)) {
-            const to = match[1] as string;
-            // Only links between pages. A page links out to the notes as well,
-            // and drawing those puts the four thousand back.
-            if (exists.has(to) && to !== doc.name) edges.push({ from: doc.name, to });
-          }
-        }
-
+        /*
+         * Lean nodes, because there are thousands of them.
+         *
+         * Everything a drawing needs and nothing it does not: no descriptions
+         * and no bodies. What a thing says is fetched when somebody clicks it,
+         * which happens once, rather than for every node in the vault, which
+         * happens on every load.
+         */
         return c.json({
-          nodes: documents.map((doc) => ({
-            name: doc.name,
-            description: doc.description,
-            /** How many other pages point here. user.md points at all of them. */
-            degree: edges.filter((edge) => edge.to === doc.name).length,
+          nodes: nodes.map((node) => ({
+            name: node.name,
+            kind: node.kind,
+            source: node.source,
+            description: node.description,
+            degree: node.degree,
+            cluster: node.cluster,
           })),
           edges,
         });

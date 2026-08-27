@@ -19,6 +19,7 @@ import {
   describeCourses,
   filterSnapshot,
   writeClassDocs,
+  ensureChatsDoc,
   sweepDroppedCourses,
   readDriveFile,
   textFromDriveRead,
@@ -253,6 +254,15 @@ async function refreshOne(
     { llm: await ctx.llm.resolve(userId) },
     { vault, userId, verdicts },
   );
+
+  /*
+   * And the page for what they have said, empty until they say it.
+   *
+   * Made here so a vault is never missing one: the picture of a vault should
+   * show every page it will ever have, and this one otherwise appears only
+   * after a student has confided something durable.
+   */
+  await ensureChatsDoc(vault);
 
   /*
    * Last, because it describes everything above it.

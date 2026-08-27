@@ -95,8 +95,20 @@ function clustersFor(
 }
 
 export async function buildGraph(vault: Vault): Promise<VaultGraph> {
-  const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
-  const notes: VaultNote[] = [...entities, ...episodes];
+  /*
+   * The pages as well as the notes, because a vault is one thing.
+   *
+   * The pages are what a person reads and the notes are what they were written
+   * from, and a picture showing only one of the two is a picture of half a
+   * vault. Drawn together, the line from a page to the evidence under it is
+   * the most useful edge in the whole graph.
+   */
+  const [entities, episodes, documents] = await Promise.all([
+    vault.list('entity'),
+    vault.list('episode'),
+    vault.list('document'),
+  ]);
+  const notes: VaultNote[] = [...entities, ...episodes, ...documents];
   const exists = new Set(notes.map((note) => note.name));
 
   const linksFrom = new Map<string, string[]>();

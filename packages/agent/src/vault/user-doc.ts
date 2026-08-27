@@ -15,6 +15,7 @@ import {
   writeDocument,
 } from './documents.js';
 import { academicYearEnd } from './school-doc.js';
+import { NOTHING_KEPT_YET } from './chats-doc.js';
 import { readGrade } from './grade.js';
 import { retrying } from './retry.js';
 import type { Vault } from './vault.js';
@@ -166,9 +167,10 @@ export async function writeUserDoc(
               school
                 ? `Their school has a page, [[${school.name}]]: ${school.description}`
                 : 'No school page has been written: do not name a school.',
-              chats
+              chats && chats.body.trim() !== NOTHING_KEPT_YET
                 ? `What they have told you is on [[${chats.name}]]: ${chats.description}`
-                : 'Nothing has been kept from their conversations yet.',
+                : 'Nothing has been kept from their conversations yet. There is a page for it' +
+                  ' and it is empty, so leave that section out rather than linking to nothing.',
               '',
               `The page may be at most ${USER_DOC_LIMIT} characters.`,
             ].join('\n'),
