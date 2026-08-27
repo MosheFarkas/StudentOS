@@ -95,7 +95,7 @@ async function main(): Promise<void> {
   console.log(`student: ${digest.year ?? 'year unknown'}, ${digest.school ?? 'school unknown'}\n`);
   for (const c of digest.courses) {
     console.log(
-      `  ${c.title}\n    kind=${c.kind ?? '?'}  teacher=${c.teacher ?? '?'}  state=${c.state ?? '?'}`,
+      `  ${c.title}\n    kind=${c.kind ?? '?'}  teacher=${c.teachers.join(' and ') || '?'}  state=${c.state ?? '?'}`,
     );
   }
   console.log(`\n--- withheld (${withheld.length}) ---`);

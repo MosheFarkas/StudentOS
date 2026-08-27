@@ -142,10 +142,12 @@ describe('digesting a vault for the profile writer', () => {
         },
       ]);
 
-      expect(digest.courses.find((c) => c.name === 'french-10')?.teacher).toBe('Lucia Coretti');
+      expect(digest.courses.find((c) => c.name === 'french-10')?.teachers).toEqual([
+        'Lucia Coretti',
+      ]);
       // And a course no claim was settled for stays empty, rather than
       // borrowing the name from the course next to it.
-      expect(digest.courses.find((c) => c.name === 'drama-10a')?.teacher).toBeNull();
+      expect(digest.courses.find((c) => c.name === 'drama-10a')?.teachers).toEqual([]);
       expect(digest).not.toHaveProperty('people');
     })();
   });

@@ -46,7 +46,7 @@ export interface CourseDigest {
    * reason to write to a class. Null far more often than not, which is the
    * honest answer: Classroom knows and will not say without a roster scope.
    */
-  teacher: string | null;
+  teachers: string[];
   /**
    * Whether it is running, finished, or has not started.
    *
@@ -124,7 +124,18 @@ export async function vaultDigest(
         .map((c) => [c.subject, c.qualifier ? `${c.object} (${c.qualifier})` : c.object]),
     );
 
-  const teaches = answers('taught by');
+  /*
+   * Everyone who teaches it, not the one who teaches it most.
+   *
+   * A class with two teachers is ordinary and the student has both of them.
+   * Naming one would be choosing, and choosing between two true answers is
+   * how the wrong French teacher got named in the first place.
+   */
+  const teaches = new Map<string, string[]>();
+  for (const claim of claims.filter((c) => c.relation === 'taught by')) {
+    const named = claim.qualifier ? `${claim.object} (${claim.qualifier})` : claim.object;
+    teaches.set(claim.subject, [...(teaches.get(claim.subject) ?? []), named]);
+  }
   const kinds = answers('is');
   const states = answers('is currently');
 
@@ -139,7 +150,7 @@ export async function vaultDigest(
       name: course.name,
       title: (course.body.split('\n')[0] ?? '').split(',')[0]?.trim() || course.name,
       kind: kinds.get(course.name) ?? null,
-      teacher: teaches.get(course.name) ?? null,
+      teachers: teaches.get(course.name) ?? [],
       state: states.get(course.name) ?? null,
       // Used only to tell a real course from an empty shell, then dropped. It
       // never reaches the writer.
@@ -154,7 +165,7 @@ export async function vaultDigest(
      */
     .filter((c) => c.weight > 0)
     .sort((a, b) => b.weight - a.weight)
-    .map(({ name, title, kind, teacher, state }) => ({ name, title, kind, teacher, state }));
+    .map(({ name, title, kind, teachers, state }) => ({ name, title, kind, teachers, state }));
 
   const times = episodes
     .map((e) => e.occurred)

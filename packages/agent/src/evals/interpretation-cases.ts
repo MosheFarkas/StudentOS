@@ -1022,9 +1022,21 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
    */
 
   {
+    /*
+     * This expected nobody, and that expectation was the bug.
+     *
+     * Co-teaching is ordinary -- French 10 on a real account is taught by two
+     * people who both post its work and both mark it -- and a relation
+     * declared to hold one answer turned that into silence. The case was
+     * written to assert the silence, so the corpus agreed with the mistake
+     * and scored it green for two days.
+     *
+     * Naming one of two real teachers would still be wrong. Naming both is
+     * the answer.
+     */
     id: 'two-teachers-share-a-class',
     domain: 'teacher',
-    trap: 'Co-teaching is ordinary and the slot holds one answer. Picking the more talkative of two is inventing a fact; naming neither is the truth.',
+    trap: 'Co-teaching is ordinary. A relation that holds one answer turns the commonest arrangement in a school into silence, and naming the more talkative of the two invents a fact.',
     course: 'science-10',
     subject: 'science-10',
     people: [staff('Anna Bell'), staff('Ken Nakamura')],
@@ -1045,7 +1057,7 @@ export const INTERPRETATION_CASES: InterpretationCase[] = [
         body: 'Mr Nakamura. I teach the physics half of this course and I have set the momentum problems, due Friday. In [[science-10]].',
       },
     ],
-    expect: null,
+    expect: 'Anna Bell and Ken Nakamura',
   },
 
   {

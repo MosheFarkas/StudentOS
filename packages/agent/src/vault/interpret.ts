@@ -79,6 +79,17 @@ export interface Question {
    * possibly find it and will confidently conclude they teach.
    */
   known?: readonly string[];
+  /**
+   * Whether this question can have more than one true answer.
+   *
+   * Asked to break "Ken Nakamura teaches science", a refuter answered that
+   * Anna Bell teaches part of it too, so the evidence does not uniquely
+   * support Ken. That is sound, and against a question admitting two answers
+   * it refuses the second one every time -- the rules it was given were
+   * written when the relation held one. A co-holder is not a rival, and the
+   * only way a reader can know which it is looking at is to be told.
+   */
+  several?: boolean;
 }
 
 export interface InterpretDeps {
@@ -99,7 +110,16 @@ export interface InterpretContext {
 const REFUTERS = 2;
 
 interface Proposal {
-  answer: string | null;
+  /**
+   * One answer, several, or none.
+   *
+   * Several because co-teaching is ordinary and a shape that cannot hold it
+   * turns the commonest arrangement in a school into silence: French 10 has
+   * two teachers, both posting its work and marking it, and the vault said
+   * nothing about who taught it because two people doing the job read as a
+   * contest and a contest withholds.
+   */
+  answer: string | string[] | null;
   confidence?: number;
   evidence?: string[];
   alternatives?: string[];
@@ -110,8 +130,8 @@ export async function interpret(
   { llm }: InterpretDeps,
   question: Question,
   { userId }: InterpretContext,
-): Promise<Claim | null> {
-  if (question.candidates.length === 0 || question.evidence.length === 0) return null;
+): Promise<Claim[]> {
+  if (question.candidates.length === 0 || question.evidence.length === 0) return [];
 
   const bundle = question.evidence.map((e) => `- ${e.note}: ${e.quote}`).join('\n');
 
@@ -159,11 +179,16 @@ export async function interpret(
 
   // An unreadable proposal is an abstention. Salvaging a name out of prose the
   // model failed to format is guessing at a guess.
-  if (!proposed || typeof proposed.answer !== 'string' || proposed.answer.trim() === '')
-    return null;
+  if (!proposed) return [];
 
-  const answer = question.candidates.find((c) => same(c, proposed.answer as string));
-  if (!answer) return null;
+  const offered = (Array.isArray(proposed.answer) ? proposed.answer : [proposed.answer])
+    .filter((a): a is string => typeof a === 'string' && a.trim() !== '')
+    .map((a) => question.candidates.find((c) => same(c, a)))
+    .filter((a): a is string => Boolean(a));
+
+  // Every answer must be one the caller offered, and duplicates are one answer.
+  const answers = [...new Set(offered)];
+  if (answers.length === 0) return [];
 
   /*
    * Citations are resolved, not read. A note name that does not appear in the
@@ -173,97 +198,120 @@ export async function interpret(
   const cited = (proposed.evidence ?? [])
     .map((name) => question.evidence.find((e) => same(e.note, name)))
     .filter((e): e is Evidence => Boolean(e));
-  if (cited.length === 0 || cited.length !== (proposed.evidence ?? []).length) return null;
+  if (cited.length === 0 || cited.length !== (proposed.evidence ?? []).length) return [];
 
   const confidence = Math.min(1, Math.max(0, Number(proposed.confidence ?? 0)));
   const alternatives = (proposed.alternatives ?? []).filter((a) =>
     question.candidates.some((c) => same(c, a)),
   );
 
-  const challenge = [
-    `The claim: ${question.subject} — ${question.relation} — ${answer}`,
-    `Proposed with confidence ${confidence.toFixed(2)}.`,
-    alternatives.length > 0 ? `They ruled out: ${alternatives.join(', ')}.` : '',
-    '',
-    ...guarantees,
-    ...(guarantees.length > 0 ? [''] : []),
-    ...settled,
-    ...(settled.length > 0 ? [''] : []),
-    'The evidence they were given, in full:',
-    bundle,
-    '',
-    'The other answers that were available to them:',
-    ...question.candidates.filter((c) => c !== answer).map((c) => `- ${c}`),
-    '',
+  /*
+   * Each answer is challenged on its own.
+   *
+   * Two people teaching one class are two claims, and a refuter shown both at
+   * once will reach for the one that fits worse and refuse the pair. What has
+   * to be asked of each is whether the evidence supports that person, not
+   * whether the set is tidy.
+   */
+  const survivors: Claim[] = [];
+  for (const answer of answers) {
+    const challenge = [
+      `The claim: ${question.subject} — ${question.relation} — ${answer}`,
+      `Proposed with confidence ${confidence.toFixed(2)}.`,
+      alternatives.length > 0 ? `They ruled out: ${alternatives.join(', ')}.` : '',
+      '',
+      ...guarantees,
+      ...(guarantees.length > 0 ? [''] : []),
+      ...settled,
+      ...(settled.length > 0 ? [''] : []),
+      'The evidence they were given, in full:',
+      bundle,
+      '',
+      'The other answers that were available to them:',
+      ...question.candidates.filter((c) => c !== answer).map((c) => `- ${c}`),
+      '',
+      /*
+       * Who the names belong to, because the refuter was refusing over it.
+       *
+       * It knocked down a correct claim on the grounds that a quote saying "Ms
+       * Adeyemi will take over the class" never established that this was Tolu
+       * Adeyemi. Every candidate is a person the school's own records already
+       * resolved to an address, and there is only one of each surname in the
+       * list -- so that objection is always available and never worth anything.
+       * Refusing on it is refusing on the format of the evidence rather than on
+       * what the evidence says.
+       */
+      ...(question.several
+        ? [
+            'This question can have more than one true answer, and more than one was',
+            'proposed. Another candidate also holding the relation is not a reason to',
+            'refuse this one: refuse only if the evidence fails to support the person',
+            'named here. "It does not uniquely support them" is not a refutation of a',
+            'question that was never asking for a unique answer.',
+            '',
+          ]
+        : []),
+      'Each candidate is a person already identified in the school records, by',
+      'their address. A surname in a quote matching exactly one candidate is that',
+      'candidate: do not refute on the grounds that only the surname appears.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
     /*
-     * Who the names belong to, because the refuter was refusing over it.
+     * Asked more than once, because one refuter is one sample.
      *
-     * It knocked down a correct claim on the grounds that a quote saying "Ms
-     * Adeyemi will take over the class" never established that this was Tolu
-     * Adeyemi. Every candidate is a person the school's own records already
-     * resolved to an address, and there is only one of each surname in the
-     * list -- so that objection is always available and never worth anything.
-     * Refusing on it is refusing on the format of the evidence rather than on
-     * what the evidence says.
+     * The judgement is not deterministic, and treating a single sample as a
+     * verdict is the mistake this whole file exists to stop -- one reading,
+     * promoted to settled. Measured under a hundred and twenty ordinary notices,
+     * a lone refuter caught the cover-teacher case about two times in three, and
+     * the other third shipped a wrong teacher.
+     *
+     * Disagreement between them is contention, and contention withholds. That is
+     * the same rule settling uses between rival readings of a slot, applied to
+     * rival readings of one claim. It costs a little recall and buys back the
+     * kind of error that is read aloud before every conversation a student has,
+     * which is the trade this system makes everywhere else too.
      */
-    'Each candidate is a person already identified in the school records, by',
-    'their address. A surname in a quote matching exactly one candidate is that',
-    'candidate: do not refute on the grounds that only the surname appears.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+    const verdicts = await Promise.all(
+      Array.from({ length: REFUTERS }, () =>
+        retrying(() =>
+          llm.chat({ messages: [system(REFUTING.body), user(challenge)] }, { userId }),
+        ).then((reply) => parse<{ refuted?: boolean }>(reply.content)),
+      ),
+    );
 
-  /*
-   * Asked more than once, because one refuter is one sample.
-   *
-   * The judgement is not deterministic, and treating a single sample as a
-   * verdict is the mistake this whole file exists to stop -- one reading,
-   * promoted to settled. Measured under a hundred and twenty ordinary notices,
-   * a lone refuter caught the cover-teacher case about two times in three, and
-   * the other third shipped a wrong teacher.
-   *
-   * Disagreement between them is contention, and contention withholds. That is
-   * the same rule settling uses between rival readings of a slot, applied to
-   * rival readings of one claim. It costs a little recall and buys back the
-   * kind of error that is read aloud before every conversation a student has,
-   * which is the trade this system makes everywhere else too.
-   */
-  const verdicts = await Promise.all(
-    Array.from({ length: REFUTERS }, () =>
-      retrying(() =>
-        llm.chat({ messages: [system(REFUTING.body), user(challenge)] }, { userId }),
-      ).then((reply) => parse<{ refuted?: boolean }>(reply.content)),
-    ),
-  );
+    // A refuter that cannot be read has not cleared the claim. Silence from the
+    // step whose whole job is doubt is not consent.
+    if (verdicts.some((verdict) => !verdict || verdict.refuted !== false)) continue;
 
-  // A refuter that cannot be read has not cleared the claim. Silence from the
-  // step whose whole job is doubt is not consent.
-  if (verdicts.some((verdict) => !verdict || verdict.refuted !== false)) return null;
+    /*
+     * A qualifier has to be in the evidence, word for word.
+     *
+     * Dropped rather than fatal, because the claim itself may be perfectly good
+     * and a composed hedge is a smaller error than a composed answer. But it is
+     * dropped: a limit nobody wrote is a limit that cannot be checked, and it
+     * would be believed more readily than the claim it qualifies.
+     */
+    const quoted = proposed.qualifier?.trim();
+    const qualifier =
+      quoted && cited.some((e) => e.quote.toLowerCase().includes(quoted.toLowerCase()))
+        ? quoted
+        : undefined;
 
-  /*
-   * A qualifier has to be in the evidence, word for word.
-   *
-   * Dropped rather than fatal, because the claim itself may be perfectly good
-   * and a composed hedge is a smaller error than a composed answer. But it is
-   * dropped: a limit nobody wrote is a limit that cannot be checked, and it
-   * would be believed more readily than the claim it qualifies.
-   */
-  const quoted = proposed.qualifier?.trim();
-  const qualifier =
-    quoted && cited.some((e) => e.quote.toLowerCase().includes(quoted.toLowerCase()))
-      ? quoted
-      : undefined;
+    survivors.push({
+      subject: question.subject,
+      relation: question.relation,
+      object: answer,
+      basis: 'inferred',
+      evidence: cited,
+      confidence,
+      alternatives,
+      ...(qualifier ? { qualifier } : {}),
+    });
+  }
 
-  return {
-    subject: question.subject,
-    relation: question.relation,
-    object: answer,
-    basis: 'inferred',
-    evidence: cited,
-    confidence,
-    alternatives,
-    ...(qualifier ? { qualifier } : {}),
-  };
+  return survivors;
 }
 
 const system = (content: string) => ({ role: 'system' as const, content });

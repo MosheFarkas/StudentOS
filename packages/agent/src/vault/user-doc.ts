@@ -129,7 +129,9 @@ export async function writeUserDoc(
             ...digest.courses.map(
               (c) =>
                 `${c.title} — ${c.kind ?? 'kind unknown'}` +
-                (c.teacher ? `, taught by ${c.teacher}` : ', teacher unknown') +
+                (c.teachers.length > 0
+                  ? `, taught by ${c.teachers.join(' and ')}`
+                  : ', teacher unknown') +
                 (c.state ? `, ${c.state}` : ', running or not unknown'),
             ),
             '',

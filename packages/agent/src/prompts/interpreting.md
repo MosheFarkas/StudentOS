@@ -10,7 +10,7 @@ You are given one question about one thing, a closed list of answers that could 
 Answer with JSON and nothing else:
 
 ```
-{"answer": "...", "confidence": 0.0-1.0, "evidence": ["note-name"], "alternatives": ["..."], "qualifier": "..."}
+{"answer": "..." or ["...", "..."], "confidence": 0.0-1.0, "evidence": ["note-name"], "alternatives": ["..."], "qualifier": "..."}
 ```
 
 To decline, `{"answer": null, "why": "..."}`.
@@ -60,6 +60,14 @@ These are verified in code after you reply. Breaking one discards your whole ans
 Your own estimate that this answer is correct, between 0 and 1.
 
 Use the range. 0.9 means the evidence states it. 0.7 means the evidence points one way and nothing points elsewhere. 0.5 means you are choosing between live possibilities, which is a decline, not a claim. Do not report 0.9 for everything: a confidence that is always the same carries no information and the step that reads it will treat it as noise.
+
+## When there is more than one true answer
+
+Some questions have several answers and all of them are right. Two people teach one class between them: both set its work, both mark it, and naming either alone is half the truth. Give every one of them, as a list.
+
+This is not the same as being unsure. Two answers you cannot choose between is a decline -- one of them is wrong and you do not know which. Two answers that are both supported by the evidence, doing the same thing in the same place, is a list. The test is whether adding the second one makes the first less true.
+
+Where the question admits only one answer by its nature, a list of two is a decline.
 
 ## Qualifier
 

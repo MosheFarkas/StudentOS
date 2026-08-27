@@ -75,7 +75,20 @@ export const INQUIRIES: Inquiry[] = [
   },
   {
     relation: 'taught by',
-    single: true,
+    /*
+     * Many, because co-teaching is ordinary.
+     *
+     * This was declared to hold one answer, so a class taught by two people
+     * read as a contest and a contest withholds -- and the vault said nothing
+     * whatever about who taught French, whose two teachers both post its work
+     * and both mark it. The shape was turning the commonest arrangement in a
+     * school into silence.
+     *
+     * The margin rules that stopped the wrong French teacher are still there;
+     * they apply between rival readings of one slot, and two people who both
+     * teach a class are not rivals.
+     */
+    single: false,
     subjects: coursesIn,
     ask: askWhoTeaches,
   },

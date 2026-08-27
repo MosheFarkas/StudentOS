@@ -344,12 +344,20 @@ async function runArm(
       ...(testCase.today ? { today: testCase.today } : {}),
     });
 
-    const found = settled.find(
-      (c) => c.subject === testCase.subject && c.relation === RELATION[testCase.domain],
-    );
+    /*
+     * Every answer for the slot, joined and sorted.
+     *
+     * A class taught by two people has two claims, and a grader that reads
+     * only the first would score half an answer as right -- or, worse, mark a
+     * complete answer wrong because the pair came back in the other order.
+     */
+    const all = settled
+      .filter((c) => c.subject === testCase.subject && c.relation === RELATION[testCase.domain])
+      .sort((a, b) => a.object.localeCompare(b.object));
+    const found = all[0];
     const why = heard.at(-1);
     return {
-      answered: found?.object ?? null,
+      answered: all.length === 0 ? null : all.map((c) => c.object).join(' and '),
       calls,
       ...(found?.qualifier ? { qualifier: found.qualifier } : {}),
       ...(why && !found ? { refutedWhy: why } : {}),

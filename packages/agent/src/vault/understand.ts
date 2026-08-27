@@ -87,8 +87,11 @@ export async function understandVault(
         .filter((c) => c.subject === subject || carriesCandidate(c, question.candidates, noteOf))
         .map((c) => `${named.get(c.subject) ?? c.subject} ${c.relation} ${phrase(c)}.`);
 
-      const claim = await interpret({ llm }, { ...question, known }, { userId });
-      if (claim) found.push(claim);
+      // Whether a co-holder is a rival is a property of the question, and the
+      // refuter cannot tell which it is looking at unless it is told.
+      found.push(
+        ...(await interpret({ llm }, { ...question, known, several: !inquiry.single }, { userId })),
+      );
     }
 
     /*

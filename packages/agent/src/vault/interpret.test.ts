@@ -66,7 +66,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: false, why: 'The announcement has her collecting the work.' }),
     ]);
 
-    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    const [claim] = await interpret({ llm }, question, { userId: 'u1' });
     expect(claim?.object).toBe('Lucia Coretti');
     expect(claim?.basis).toBe('inferred');
     expect(claim?.evidence[0]?.note).toBe('a-notice');
@@ -75,9 +75,56 @@ describe('interpreting evidence into a claim', () => {
   it('returns nothing when the proposal abstains', async () => {
     const { llm, asked } = fake([propose({ answer: null, why: 'Two names, no way to choose.' })]);
 
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
     // And does not pay for a refutation of a claim nobody made.
     expect(asked).toHaveLength(1);
+  });
+
+  it('lets a question have more than one answer where it truly does', async () => {
+    /*
+     * French 10 is taught by two people. Both post its assignments, both mark
+     * its work, and the vault said nothing at all about who teaches it --
+     * because the relation had been declared to hold one answer, so two people
+     * doing the job read as a contest and a contest withholds.
+     *
+     * It was doing what it was told. What it was told was wrong: co-teaching
+     * is ordinary, and a shape that cannot hold it turns the commonest
+     * arrangement in a school into silence.
+     */
+    const { llm } = fake([
+      propose({
+        answer: ['Lucia Coretti', 'Anna Marzilli'],
+        confidence: 0.9,
+        evidence: ['a-notice', 'b-notice'],
+      }),
+      propose({ refuted: false }),
+    ]);
+
+    const claims = await interpret({ llm }, question, { userId: 'u1' });
+    expect(claims.map((c) => c.object).sort()).toEqual(['Anna Marzilli', 'Lucia Coretti']);
+  });
+
+  it('tells the refuter when a co-holder is not a rival', async () => {
+    /*
+     * Asked to break "Ken Nakamura teaches science", a refuter answered that
+     * Anna Bell teaches part of it too, so the evidence does not uniquely
+     * support Ken. Perfectly sound, and against a question that now admits
+     * two answers it refuses the second one every time -- the rules it was
+     * given were written when the relation held one.
+     */
+    const { llm, asked } = fake([
+      propose({
+        answer: ['Lucia Coretti', 'Anna Marzilli'],
+        confidence: 0.9,
+        evidence: ['a-notice'],
+      }),
+      propose({ refuted: false }),
+    ]);
+    await interpret({ llm }, { ...question, several: true }, { userId: 'u1' });
+
+    for (const prompt of asked.slice(1)) {
+      expect(prompt).toMatch(/more than one|another.*also|not a rival/i);
+    }
   });
 
   it('drops a claim when the refuters disagree with each other', async () => {
@@ -100,7 +147,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: true, why: 'She is covering the class, not teaching it.' }),
     ]);
 
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
   });
 
   it('keeps a claim every refuter clears', async () => {
@@ -110,7 +157,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: false }),
     ]);
 
-    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    const [claim] = await interpret({ llm }, question, { userId: 'u1' });
     expect(claim?.object).toBe('Lucia Coretti');
     // One proposal, and more than one attempt to break it.
     expect(asked.length).toBeGreaterThan(2);
@@ -131,7 +178,7 @@ describe('interpreting evidence into a claim', () => {
       }),
     ]);
 
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
   });
 
   it('refuses an answer that was never one of the candidates', async () => {
@@ -146,7 +193,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ answer: 'Chris George', confidence: 0.95, evidence: ['a-notice'] }),
     ]);
 
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
   });
 
   it('refuses a claim citing a note it was never shown', async () => {
@@ -156,7 +203,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ answer: 'Lucia Coretti', confidence: 0.9, evidence: ['minutes-of-a-meeting'] }),
     ]);
 
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
   });
 
   it('keeps a qualifier that appears in the evidence word for word', async () => {
@@ -170,7 +217,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: false }),
     ]);
 
-    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    const [claim] = await interpret({ llm }, question, { userId: 'u1' });
     expect(claim?.qualifier).toBe('collect the essays');
   });
 
@@ -191,14 +238,14 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: false }),
     ]);
 
-    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    const [claim] = await interpret({ llm }, question, { userId: 'u1' });
     expect(claim?.object).toBe('Lucia Coretti');
     expect(claim?.qualifier).toBeUndefined();
   });
 
   it('abstains when the proposal cannot be read at all', async () => {
     const { llm } = fake(['I think it is probably Mme Coretti, but I am not sure.']);
-    expect(await interpret({ llm }, question, { userId: 'u1' })).toBeNull();
+    expect(await interpret({ llm }, question, { userId: 'u1' })).toEqual([]);
   });
 
   it('carries the alternatives through, so settling can see the contest', async () => {
@@ -212,7 +259,7 @@ describe('interpreting evidence into a claim', () => {
       propose({ refuted: false }),
     ]);
 
-    const claim = await interpret({ llm }, question, { userId: 'u1' });
+    const [claim] = await interpret({ llm }, question, { userId: 'u1' });
     expect(claim?.alternatives).toEqual(['Anna Marzilli']);
   });
 
