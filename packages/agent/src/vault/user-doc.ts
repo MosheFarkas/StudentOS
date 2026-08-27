@@ -96,6 +96,9 @@ export async function writeUserDoc(
    */
   if (classes.length === 0) return null;
 
+  const subjects = classes.filter((doc) => doc.academic !== false);
+  const others = classes.filter((doc) => doc.academic === false);
+
   const school = documents.find((doc) => doc.name === SCHOOL_DOC_NAME);
   const chats = documents.find((doc) => doc.name === CHATS_DOC_NAME);
 
@@ -129,8 +132,24 @@ export async function writeUserDoc(
               : 'Which year they are in is not known: do not guess it from a course name.',
             `Today is ${today}.`,
             '',
-            'Their classes, one page each. Link each by the page name shown:',
-            ...classes.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
+            /*
+             * Sorted for the writer, not left to be inferred.
+             *
+             * Which of these a student STUDIES and which they merely belong to
+             * decides which section each goes in, and it is recorded on the
+             * page rather than implied by its prose.
+             */
+            subjects.length > 0
+              ? 'The subjects they are taught, one page each. Link each by the page name shown:'
+              : 'They have no taught subjects recorded right now. Say so; do not name one.',
+            ...subjects.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
+            '',
+            ...(others.length > 0
+              ? [
+                  'Things they do rather than study — clubs, teams, programmes, groups:',
+                  ...others.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
+                ]
+              : []),
             '',
             school
               ? `Their school has a page, [[${school.name}]]: ${school.description}`

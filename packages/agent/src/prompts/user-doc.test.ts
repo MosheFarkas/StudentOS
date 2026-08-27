@@ -63,6 +63,19 @@ describe('what the user document is told to write', () => {
     expect(body).toMatch(/do not work one out from a course name/i);
   });
 
+  it('gives the writer something true to say when they have no subjects yet', () => {
+    /*
+     * Not a gap to paper over.
+     *
+     * A student between school years has last year's classes dropped and next
+     * year's not yet created by the school. That happens to everybody every
+     * summer, and an empty heading invites the writer to fill it.
+     */
+    expect(body).toMatch(/No taught subjects are recorded right now/i);
+    expect(body).toMatch(/between school years/i);
+    expect(body).toMatch(/do not list their clubs here to fill the space/i);
+  });
+
   it('keeps counts out, which were half the length and none of the use', () => {
     expect(body).toMatch(/Numbers/i);
     expect(body).toMatch(/not how many assignments/i);

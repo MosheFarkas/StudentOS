@@ -87,6 +87,16 @@ export interface VaultNote {
    */
   sourceHash?: string;
   /**
+   * Class documents only: whether this is a taught subject.
+   *
+   * False for a club, a team, an advisory or a house group -- things a student
+   * belongs to rather than studies. Structured rather than left in the prose,
+   * because the page that lists a student's classes has to sort them into the
+   * ones they study and the ones they merely do, and reading that back out of a
+   * sentence is a thing that works until somebody rewords the sentence.
+   */
+  academic?: boolean;
+  /**
    * The school document only: when the academic year ends, as `MM-DD`.
    *
    * Structured rather than left in the prose, because the pass that decides
@@ -305,6 +315,7 @@ function serialise(note: VaultNote): string {
     ...(note.sourceUrl ? [`sourceUrl: ${note.sourceUrl}`] : []),
     ...(note.sourceHash ? [`sourceHash: ${note.sourceHash}`] : []),
     ...(note.yearEnds ? [`yearEnds: ${note.yearEnds}`] : []),
+    ...(note.academic === undefined ? [] : [`academic: ${note.academic}`]),
     '---',
     '',
     note.body.trim(),
@@ -345,6 +356,7 @@ function parse(raw: string, kind: NoteKind): VaultNote | null {
     ...optional('sourceUrl'),
     ...optional('sourceHash'),
     ...optional('yearEnds'),
+    ...(fields.has('academic') ? { academic: fields.get('academic') === 'true' } : {}),
     body: raw.slice(frontmatter[0].length).trim(),
   };
 }

@@ -124,3 +124,40 @@ describe('documents in a vault', () => {
     expect((await readDocument(vault, USER_DOC_NAME))?.body).toBe('Second');
   });
 });
+
+describe('what a class document records about itself', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-docflags-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('round-trips whether it is a taught subject', async () => {
+    await writeDocument(vault, {
+      name: 'class-french',
+      description: 'french',
+      body: '# French',
+      academic: true,
+    });
+    await writeDocument(vault, {
+      name: 'class-model-un',
+      description: 'model un',
+      body: '# Model UN',
+      academic: false,
+    });
+
+    expect((await readDocument(vault, 'class-french'))?.academic).toBe(true);
+    expect((await readDocument(vault, 'class-model-un'))?.academic).toBe(false);
+  });
+
+  it('says nothing for a document the question does not apply to', () => {
+    // user.md is neither a subject nor a club, and false would be a claim.
+    return writeDocument(vault, { name: USER_DOC_NAME, description: 'Them', body: 'A' }).then(
+      async () => expect((await readDocument(vault, USER_DOC_NAME))?.academic).toBeUndefined(),
+    );
+  });
+});

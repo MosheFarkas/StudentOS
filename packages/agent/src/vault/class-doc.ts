@@ -166,6 +166,7 @@ export async function writeClassDocs(
         ? `${subject}, as the vault has it`
         : `${subject} -- not a subject they take, but something they do`,
       body,
+      academic,
       sourceHash: hash,
     });
     result.written += 1;

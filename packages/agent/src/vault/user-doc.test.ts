@@ -89,6 +89,44 @@ describe('writing the user document', () => {
     expect(sent).not.toContain('Oral presentation');
   });
 
+  it('sorts subjects from clubs for the writer, rather than leaving it to prose', async () => {
+    await writeDocument(vault, {
+      name: 'class-model-un',
+      description: 'model un',
+      body: '# Model UN',
+      academic: false,
+    });
+    const llm = llmSaying('# Lucas');
+    await run(llm);
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('Things they do rather than study');
+    expect(sent).toContain('class-model-un');
+  });
+
+  it('tells the writer plainly when there are no taught subjects at all', async () => {
+    /*
+     * Every student, every summer.
+     *
+     * Last year's classes are dropped and the school has not made next year's
+     * yet. An empty heading invites the writer to fill it.
+     */
+    const empty = new Vault(root, 'student-summer');
+    await writeDocument(empty, {
+      name: 'class-model-un',
+      description: 'model un',
+      body: '# Model UN',
+      academic: false,
+    });
+
+    const llm = llmSaying('# Lucas');
+    await writeUserDoc({ llm } as never, { vault: empty, userId: 'u-1', name: 'Lucas' });
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain(
+      'no taught subjects recorded right now',
+    );
+  });
+
   it('hands over the year rather than leaving it to be read off March’s mail', async () => {
     /*
      * The bug that survived every previous version.

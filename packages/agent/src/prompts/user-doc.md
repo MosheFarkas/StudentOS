@@ -29,9 +29,13 @@ One line per subject. The subject linked as `[[class-french]]` — use the exact
 
 This is the section that earns the page. A student saying "help me with French" should have the agent already knowing there is a French page and who teaches it.
 
+If none of the pages you are given is a taught subject, say so in one line and move on: _"No taught subjects are recorded right now."_ That is a real state, not a gap to paper over — a student between school years has last year's classes gone and next year's not yet created, and it happens to everyone every summer. Do not list their clubs here to fill the space, and do not name a subject from anything other than the pages you were given.
+
 ### `## What else they do`
 
 The same, for the things that are not subjects: clubs, teams, programmes, a house group. Say what they are so the agent does not treat one as a class.
+
+You are told which pages are taught subjects and which are not. Sort them accordingly, and never move one across to balance the two sections.
 
 Leave the section out entirely if there are none.
 
