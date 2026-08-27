@@ -9,6 +9,7 @@ import {
   writeDocument,
 } from './documents.js';
 import { renderNotes } from './render.js';
+import { retrying } from './retry.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -140,71 +141,79 @@ export async function writeSchoolDoc(
     ...episodes.slice(0, SHOWN),
   ].slice(0, SHOWN);
 
-  const brief = await llm.chat(
-    {
-      messages: [
-        { role: 'system', content: BRIEF },
-        {
-          role: 'user',
-          content: [
-            domains?.length
-              ? `Their school sends mail from: ${domains.join(', ')}.`
-              : 'No school mail domain is known.',
-            '',
-            renderNotes(evidence),
-          ].join('\n'),
-        },
-      ],
-    },
-    { userId },
+  const brief = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: BRIEF },
+          {
+            role: 'user',
+            content: [
+              domains?.length
+                ? `Their school sends mail from: ${domains.join(', ')}.`
+                : 'No school mail domain is known.',
+              '',
+              renderNotes(evidence),
+            ].join('\n'),
+          },
+        ],
+      },
+      { userId },
+    ),
   );
 
-  const found = await llm.chat(
-    {
-      messages: [
-        { role: 'system', content: RESEARCH },
-        {
-          role: 'user',
-          content: [
-            domains?.length ? `The school sends mail from: ${domains.join(', ')}.` : '',
-            '',
-            'The brief:',
-            typeof brief.content === 'string' ? brief.content : '',
-          ].join('\n'),
-        },
-      ],
-      // The only pass in this product that reaches the network.
-      webSearch: { maxUses: SEARCHES },
-    },
-    { userId },
+  const found = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: RESEARCH },
+          {
+            role: 'user',
+            content: [
+              domains?.length ? `The school sends mail from: ${domains.join(', ')}.` : '',
+              '',
+              'The brief:',
+              typeof brief.content === 'string' ? brief.content : '',
+            ].join('\n'),
+          },
+        ],
+        // The only pass in this product that reaches the network.
+        webSearch: { maxUses: SEARCHES },
+      },
+      { userId },
+    ),
   );
 
   const answers = parse(found.content);
 
-  const page = await llm.chat(
-    {
-      messages: [
-        { role: 'system', content: SCHOOL_DOC.body },
-        {
-          role: 'user',
-          content: [
-            answers?.school ? `The school is ${answers.school}.` : 'The school could not be named.',
-            '',
-            'What the research found:',
-            ...(answers?.findings ?? []).map((finding) =>
-              [
-                `- ${finding.question}`,
-                `  ${finding.answer}`,
-                ...finding.sources.map((source) => `  source: ${source}`),
-              ].join('\n'),
-            ),
-            '',
-            `The page may be at most ${SCHOOL_DOC_LIMIT} characters.`,
-          ].join('\n'),
-        },
-      ],
-    },
-    { userId },
+  const page = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: SCHOOL_DOC.body },
+          {
+            role: 'user',
+            content: [
+              answers?.school
+                ? `The school is ${answers.school}.`
+                : 'The school could not be named.',
+              '',
+              'What the research found:',
+              ...(answers?.findings ?? []).map((finding) =>
+                [
+                  `- ${finding.question}`,
+                  `  ${finding.answer}`,
+                  ...finding.sources.map((source) => `  source: ${source}`),
+                ].join('\n'),
+              ),
+              '',
+              `The page may be at most ${SCHOOL_DOC_LIMIT} characters.`,
+            ].join('\n'),
+          },
+        ],
+      },
+      { userId },
+    ),
   );
 
   const body = capDocument(typeof page.content === 'string' ? page.content : '', SCHOOL_DOC_LIMIT);

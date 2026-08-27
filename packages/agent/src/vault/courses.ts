@@ -3,6 +3,7 @@ import type { LlmProvider } from '@contexto/llm';
 import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
 import { buildGraph } from './graph.js';
+import { retrying } from './retry.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -185,14 +186,23 @@ export async function classifyCourses(
 
   let answered: z.infer<typeof verdicts>['courses'] = [];
   try {
-    const response = await llm.chat(
-      {
-        messages: [
-          { role: 'system', content: ASK },
-          { role: 'user', content: `Today is ${today}.\n\nThe courses:\n${listed}` },
-        ],
-      },
-      { userId },
+    /*
+     * Retried before it is allowed to fail open.
+     *
+     * Failing open on a rate limit means keeping every course this build, which
+     * is safe and also wrong -- and on an account whose files are being read at
+     * the same time, a 429 is the likeliest error there is.
+     */
+    const response = await retrying(() =>
+      llm.chat(
+        {
+          messages: [
+            { role: 'system', content: ASK },
+            { role: 'user', content: `Today is ${today}.\n\nThe courses:\n${listed}` },
+          ],
+        },
+        { userId },
+      ),
     );
     answered = parse(response.content)?.courses ?? [];
   } catch {

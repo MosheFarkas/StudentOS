@@ -16,6 +16,7 @@ import {
 } from './documents.js';
 import { academicYearEnd } from './school-doc.js';
 import { readGrade } from './grade.js';
+import { retrying } from './retry.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -116,64 +117,66 @@ export async function writeUserDoc(
   const yearEnd = await academicYearEnd(vault);
   const grade = await readGrade(vault, { today, ...(yearEnd ? { yearEnd } : {}) });
 
-  const answer = await llm.chat(
-    {
-      messages: [
-        { role: 'system', content: USER_DOC.body },
-        {
-          role: 'user',
-          content: [
-            student ? `The student is ${student}.` : "The student's name is not known.",
-            /*
-             * Handed over, not shown.
-             *
-             * The evidence in the vault says Grade 10, because that is what it
-             * said in March. Counting the years that have ended since is
-             * arithmetic, done in code, and a writer given the raw statement
-             * would confidently repeat last year's answer all summer.
-             */
-            grade
-              ? `They are in Grade ${grade.grade}.` +
-                (grade.rolledForward > 0
-                  ? ` Their mail says Grade ${grade.stated}, from ${grade.on.slice(0, 10)};` +
-                    ` ${grade.rolledForward} academic year(s) have ended since, so it is` +
-                    ` ${grade.grade} now. Write ${grade.grade}.`
-                  : '')
-              : 'Which year they are in is not known: do not guess it from a course name.',
-            `Today is ${today}.`,
-            '',
-            /*
-             * Sorted for the writer, not left to be inferred.
-             *
-             * Which of these a student STUDIES and which they merely belong to
-             * decides which section each goes in, and it is recorded on the
-             * page rather than implied by its prose.
-             */
-            subjects.length > 0
-              ? 'The subjects they are taught, one page each. Link each by the page name shown:'
-              : 'They have no taught subjects recorded right now. Say so; do not name one.',
-            ...subjects.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
-            '',
-            ...(others.length > 0
-              ? [
-                  'Things they do rather than study — clubs, teams, programmes, groups:',
-                  ...others.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
-                ]
-              : []),
-            '',
-            school
-              ? `Their school has a page, [[${school.name}]]: ${school.description}`
-              : 'No school page has been written: do not name a school.',
-            chats
-              ? `What they have told you is on [[${chats.name}]]: ${chats.description}`
-              : 'Nothing has been kept from their conversations yet.',
-            '',
-            `The page may be at most ${USER_DOC_LIMIT} characters.`,
-          ].join('\n'),
-        },
-      ],
-    },
-    { userId },
+  const answer = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: USER_DOC.body },
+          {
+            role: 'user',
+            content: [
+              student ? `The student is ${student}.` : "The student's name is not known.",
+              /*
+               * Handed over, not shown.
+               *
+               * The evidence in the vault says Grade 10, because that is what it
+               * said in March. Counting the years that have ended since is
+               * arithmetic, done in code, and a writer given the raw statement
+               * would confidently repeat last year's answer all summer.
+               */
+              grade
+                ? `They are in Grade ${grade.grade}.` +
+                  (grade.rolledForward > 0
+                    ? ` Their mail says Grade ${grade.stated}, from ${grade.on.slice(0, 10)};` +
+                      ` ${grade.rolledForward} academic year(s) have ended since, so it is` +
+                      ` ${grade.grade} now. Write ${grade.grade}.`
+                    : '')
+                : 'Which year they are in is not known: do not guess it from a course name.',
+              `Today is ${today}.`,
+              '',
+              /*
+               * Sorted for the writer, not left to be inferred.
+               *
+               * Which of these a student STUDIES and which they merely belong to
+               * decides which section each goes in, and it is recorded on the
+               * page rather than implied by its prose.
+               */
+              subjects.length > 0
+                ? 'The subjects they are taught, one page each. Link each by the page name shown:'
+                : 'They have no taught subjects recorded right now. Say so; do not name one.',
+              ...subjects.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
+              '',
+              ...(others.length > 0
+                ? [
+                    'Things they do rather than study — clubs, teams, programmes, groups:',
+                    ...others.map((doc) => `- [[${doc.name}]] — ${doc.description}`),
+                  ]
+                : []),
+              '',
+              school
+                ? `Their school has a page, [[${school.name}]]: ${school.description}`
+                : 'No school page has been written: do not name a school.',
+              chats
+                ? `What they have told you is on [[${chats.name}]]: ${chats.description}`
+                : 'Nothing has been kept from their conversations yet.',
+              '',
+              `The page may be at most ${USER_DOC_LIMIT} characters.`,
+            ].join('\n'),
+          },
+        ],
+      },
+      { userId },
+    ),
   );
 
   const body = capDocument(

@@ -131,6 +131,35 @@ describe('researching a school', () => {
     expect(JSON.stringify(llm.seen[1])).toContain('school.example');
   });
 
+  it('waits out a rate limit rather than throwing away the research', async () => {
+    /*
+     * Observed on the real account, mid-run.
+     *
+     * A build reading a thousand files uses most of the tokens-per-minute
+     * budget, and this pass runs alongside it. Thirty searches and two calls
+     * are a lot to discard because the third one arrived a second too early.
+     */
+    let attempts = 0;
+    const llm = {
+      chat: vi.fn(async () => {
+        attempts += 1;
+        if (attempts === 2) {
+          throw Object.assign(new Error('429 Rate limit reached'), { status: 429 });
+        }
+        return {
+          content:
+            attempts === 1 ? 'A brief.' : attempts === 3 ? RESEARCH : '# Lower Canada College',
+          toolCalls: [],
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
+          finishReason: 'stop' as const,
+        };
+      }),
+    };
+
+    expect((await run(llm)).written).toBe(true);
+    expect(attempts).toBeGreaterThan(3);
+  });
+
   it('leaves an existing page alone when the writer answers with nothing', async () => {
     await run(llmReplying(['A brief.', RESEARCH, '# Lower Canada College\n\nReal content.']));
     const result = await run(llmReplying(['A brief.', RESEARCH, '   ']));

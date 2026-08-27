@@ -11,6 +11,7 @@ import {
 } from './documents.js';
 import { buildGraph } from './graph.js';
 import { renderNotes } from './render.js';
+import { retrying } from './retry.js';
 import type { CourseVerdict } from './courses.js';
 import type { Vault, VaultNote } from './vault.js';
 
@@ -137,14 +138,16 @@ export async function writeClassDocs(
       continue;
     }
 
-    const answer = await llm.chat(
-      {
-        messages: [
-          { role: 'system', content: CLASS_DOC.body },
-          { role: 'user', content: brief(subject, academic, notes, cluster) },
-        ],
-      },
-      { userId },
+    const answer = await retrying(() =>
+      llm.chat(
+        {
+          messages: [
+            { role: 'system', content: CLASS_DOC.body },
+            { role: 'user', content: brief(subject, academic, notes, cluster) },
+          ],
+        },
+        { userId },
+      ),
     );
 
     const body = capDocument(

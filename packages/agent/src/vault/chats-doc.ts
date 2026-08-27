@@ -8,6 +8,7 @@ import {
   writeDocument,
 } from './documents.js';
 
+import { retrying } from './retry.js';
 import type { Vault } from './vault.js';
 
 /**
@@ -72,34 +73,36 @@ export async function updateChatsDoc(
   const existing = await readDocument(vault, CHATS_DOC_NAME);
   const standing = existing?.body?.trim() || (knownBefore ?? []).join('\n\n').trim();
 
-  const answer = await llm.chat(
-    {
-      messages: [
-        { role: 'system', content: CHATS_DOC.body },
-        {
-          role: 'user',
-          content: [
-            standing === ''
-              ? 'Nothing has been kept about this student yet.'
-              : `The page as it stands:\n\n${standing}`,
-            '',
-            'What has been said since, oldest first:',
-            '',
-            /*
-             * Not through renderNotes.
-             *
-             * These are the student's own words to their own agent. They are
-             * the one input in this system that carries no warning, which is
-             * the whole reason a note records who wrote it.
-             */
-            exchanges.join('\n\n'),
-            '',
-            `The page may be at most ${CHATS_DOC_LIMIT} characters.`,
-          ].join('\n'),
-        },
-      ],
-    },
-    { userId },
+  const answer = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: CHATS_DOC.body },
+          {
+            role: 'user',
+            content: [
+              standing === ''
+                ? 'Nothing has been kept about this student yet.'
+                : `The page as it stands:\n\n${standing}`,
+              '',
+              'What has been said since, oldest first:',
+              '',
+              /*
+               * Not through renderNotes.
+               *
+               * These are the student's own words to their own agent. They are
+               * the one input in this system that carries no warning, which is
+               * the whole reason a note records who wrote it.
+               */
+              exchanges.join('\n\n'),
+              '',
+              `The page may be at most ${CHATS_DOC_LIMIT} characters.`,
+            ].join('\n'),
+          },
+        ],
+      },
+      { userId },
+    ),
   );
 
   const said = typeof answer.content === 'string' ? answer.content.trim() : '';
