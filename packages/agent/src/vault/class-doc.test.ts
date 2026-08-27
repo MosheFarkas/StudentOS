@@ -174,6 +174,24 @@ describe('writing a page per class', () => {
     expect((await readDocument(vault, 'class-french'))?.body).toContain('Real content');
   });
 
+  it('does not clear every page when Classroom returns nothing at all', async () => {
+    /*
+     * A transient outage must not empty the vault.
+     *
+     * With no verdicts there is nothing to write and nothing to compare
+     * against, so the removal pass below would read "no subject wants any of
+     * these" and delete every class page the student has. Google being briefly
+     * unreachable is not the same as a student dropping all their subjects.
+     */
+    const llm = llmSaying('# French');
+    await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });
+
+    const result = await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [] });
+
+    expect(result.removed).toBe(0);
+    expect(await readDocument(vault, 'class-french')).not.toBeNull();
+  });
+
   it('takes away a page for a subject the student no longer takes', async () => {
     const llm = llmSaying('# French');
     await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });

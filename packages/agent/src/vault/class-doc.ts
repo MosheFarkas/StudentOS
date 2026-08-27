@@ -155,7 +155,13 @@ export async function writeClassDocs(
    * A class document outlives the course it describes unless something removes
    * it, and a page about last year's history is exactly what this whole change
    * exists to get out of the vault.
+   *
+   * Not when there were no verdicts at all, though. That is Classroom being
+   * briefly unreachable, not a student dropping every subject they take, and
+   * the two look identical from here -- so the one that deletes nothing wins.
    */
+  if (verdicts.length === 0) return result;
+
   for (const document of await listDocuments(vault)) {
     if (!document.name.startsWith('class-') || wanted.has(document.name)) continue;
     if (await vault.remove('document', document.name)) result.removed += 1;
