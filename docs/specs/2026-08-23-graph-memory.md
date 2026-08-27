@@ -1,7 +1,12 @@
 # Graph memory
 
-**Status:** designing, not approved
+**Status:** built, then partly superseded
 **Date:** 2026-08-23 (revised same day, after the bootstrap idea)
+**Superseded by:** [the document vault](./2026-08-27-document-vault.md), for how
+the vault is read and drawn. The vault of linked markdown notes described below
+is what got built and is still what everything else sits on. What changed is
+that last year's academic courses no longer enter it, that a layer of authored
+pages now sits above it, and that the cylinder is gone.
 
 The agent's memory of a student becomes a vault of linked markdown files. It is
 seeded on the day they connect their accounts, by mapping what Google Classroom,
