@@ -1368,21 +1368,129 @@ a.button {
   min-width: 0;
 }
 
-.vault-map {
-  display: block;
-  width: 100%;
+/* The ball and the page you are reading, side by side. Stacked on a narrow
+   screen, where a panel beside a graph leaves room for neither. */
+.vault-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem);
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+@media (max-width: 60rem) {
+  .vault-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.vault-canvas {
+  position: relative;
   height: 34rem;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  /* Matches the canvas's own darkest stop, so the corners the radius cuts
-     away do not flash the page colour while the first frame is drawn. */
+  /* The renderer's own darkest stop, so the corners the radius cuts away do
+     not flash the page colour before the first frame is drawn. */
   background: #07091c;
   cursor: grab;
   touch-action: none;
 }
 
-.vault-map:active {
+.vault-canvas:active {
   cursor: grabbing;
+}
+
+.vault-canvas > * {
+  position: absolute;
+  inset: 0;
+}
+
+.vault-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  margin: 0;
+  color: var(--ink-faint);
+}
+
+/* Entered: the vault takes the window. Everything else about the app is a
+   distraction from a thing you are meant to move around inside. */
+.vault-inside {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  background: var(--bg);
+}
+
+.vault-inside .vault-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.vault-inside .vault-canvas {
+  height: 100%;
+}
+
+.vault-inside .vault-read {
+  max-height: none;
+}
+
+/* The reading panel. Wider inside the vault, where reading is the point. */
+.vault-read {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  max-height: 34rem;
+  overflow-y: auto;
+}
+
+.vault-read-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.vault-read-body {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.vault-read-body h3,
+.vault-read-body h4,
+.vault-read-body h5,
+.vault-read-body h6 {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.vault-read-body h3:first-child {
+  margin-top: 0;
+}
+
+.vault-read-body p {
+  margin: 0 0 0.6rem;
+}
+
+.vault-read-body ul {
+  margin: 0 0 0.6rem;
+  padding-left: 1.1rem;
+}
+
+.vault-read-body li {
+  margin: 0.15rem 0;
 }
 
 .vault-map-card {

@@ -14,12 +14,16 @@
     "better-auth": "^1.6.26",
     "hono": "^4.13.1",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-force-graph-3d": "^1.29.1",
+    "three": "^0.185.1",
+    "three-spritetext": "^1.10.0"
   },
   "devDependencies": {
     "@contexto/api": "workspace:*",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.5",
     "vite": "^8.2.1"
   }

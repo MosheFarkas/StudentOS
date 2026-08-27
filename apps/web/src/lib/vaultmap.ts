@@ -1,20 +1,16 @@
 /**
- * Laying a whole vault out flat, pages and notes together.
+ * What a vault looks like, as a thing you can turn.
  *
- * The picture this replaces drew every note on a cylinder -- time along the
- * axis, in-degree toward the core, course around the bearing. Three honest axes
- * and unreadable, because a picture of four thousand things arranged by three
- * numbers is a picture of how many there are.
+ * The layout itself is a force simulation now rather than arithmetic here --
+ * bodies that repel, links that pull like rubber bands, and a centre that stops
+ * the whole thing drifting apart. Those are the same three forces Obsidian
+ * exposes in its graph view, for the same reason: a vault has no natural
+ * coordinates, so the only honest arrangement is the one its own links settle
+ * into.
  *
- * What makes the same four thousand readable is that they now have a shape.
- * There is one page describing the student, a page per class and one per school
- * and conversation, and under those the notes each was written from. So the
- * layout is that hierarchy rather than a physics simulation: rings outward from
- * the student, and everything sitting on the bearing of the page it belongs to.
- *
- * Deterministic, so the same vault draws the same way every time. A layout that
- * settles differently on every load is a lava lamp, and you cannot learn the
- * position of anything in one.
+ * What stays here is everything the simulation does not decide -- what a thing
+ * is called, what colour it is, how big it should be, and what is joined to
+ * what. Pure, so it can be tested without a WebGL context.
  */
 
 export interface DocNode {
@@ -33,175 +29,87 @@ export interface DocEdge {
   to: string;
 }
 
-export interface Placed {
-  node: DocNode;
-  x: number;
-  y: number;
-  r: number;
-  /** How far from the student, in hops. 0 is the student themselves. */
-  depth: number;
+/** The page everything else is written into. */
+export const CENTRE = 'user';
+
+/** The pages. */
+const PAGE_COLOURS: Record<string, string> = {
+  user: '#f0abfc',
+  chats: '#34d399',
+  school: '#fbbf24',
+};
+const CLASS = '#a78bfa';
+
+/*
+ * The notes, by what they are rather than by which page they hang from.
+ *
+ * Brighter than the app's own palette, because these sit on near-black: a
+ * thousand small points need a ground to be bright against.
+ */
+const NOTE_COLOURS: Record<string, string> = {
+  Course: '#c4b5fd',
+  Assignment: '#60a5fa',
+  Topic: '#22d3ee',
+  Person: '#f0abfc',
+  Material: '#fbbf24',
+};
+const OWN_FILE = '#a3e635';
+const GIVEN_FILE = '#fb923c';
+const SAID = '#34d399';
+
+export function colourFor(node: DocNode): string {
+  if (node.kind === 'document') return PAGE_COLOURS[node.name] ?? CLASS;
+  if (node.kind === 'episode') {
+    // What the student said themselves is the one thing here they wrote.
+    if (node.source === 'student') return SAID;
+    return node.source === 'classroom' ? '#94a3b8' : '#7c8bb0';
+  }
+  if (node.description === 'File') return node.source === 'drive' ? OWN_FILE : GIVEN_FILE;
+  return NOTE_COLOURS[node.description] ?? '#8a8fae';
 }
 
-/** The page everything else is written into. It sits in the middle. */
-const CENTRE = 'user';
-
-/** Radius by depth, as a share of the space available. */
-const RING = [0, 0.22, 0.55, 0.82, 0.95];
-
-/** Drawn size by depth. The pages are what a person is looking for. */
-const SIZE = [30, 20, 5, 3.5, 3];
-
-/** Room for a label under the outermost ring. */
-const PADDING = 44;
+/** What the colours mean. Without it, a picture nobody can read. */
+export const KEY: { colour: string; label: string }[] = [
+  { colour: PAGE_COLOURS.user as string, label: 'You' },
+  { colour: CLASS, label: 'Your classes' },
+  { colour: PAGE_COLOURS.school as string, label: 'Your school' },
+  { colour: PAGE_COLOURS.chats as string, label: 'What you have told it' },
+  { colour: NOTE_COLOURS.Course as string, label: 'Courses' },
+  { colour: NOTE_COLOURS.Assignment as string, label: 'Work' },
+  { colour: NOTE_COLOURS.Material as string, label: 'Readings' },
+  { colour: GIVEN_FILE, label: 'Files from class' },
+  { colour: OWN_FILE, label: 'Your own files' },
+  { colour: '#94a3b8', label: 'Things that happened' },
+];
 
 /**
- * How far each note is from the student, walking the links.
+ * How big a thing is drawn.
  *
- * Breadth-first and undirected: a note is as close to the student as the
- * shortest chain of references between them, whichever way the references
- * happen to point. Anything the walk never reaches sits on the outside.
+ * The pages are what somebody is navigating by and there are ten of them; the
+ * notes are what they were written from and there are thousands. Sizing them
+ * alike would bury the ten. Beyond that, a note more of the vault points at is
+ * drawn larger, which is the one thing the graph knows about importance.
  */
-export function depths(nodes: readonly DocNode[], edges: readonly DocEdge[]): Map<string, number> {
-  const near = new Map<string, string[]>();
-  for (const edge of edges) {
-    near.set(edge.from, [...(near.get(edge.from) ?? []), edge.to]);
-    near.set(edge.to, [...(near.get(edge.to) ?? []), edge.from]);
-  }
-
-  const depth = new Map<string, number>();
-  const start = nodes.some((node) => node.name === CENTRE)
-    ? CENTRE
-    : (nodes.find((node) => node.kind === 'document')?.name ?? nodes[0]?.name);
-  if (start === undefined) return depth;
-
-  depth.set(start, 0);
-  const queue = [start];
-  for (let at = 0; at < queue.length; at += 1) {
-    const here = queue[at] as string;
-    const next = (depth.get(here) as number) + 1;
-    for (const neighbour of near.get(here) ?? []) {
-      if (depth.has(neighbour)) continue;
-      depth.set(neighbour, next);
-      queue.push(neighbour);
-    }
-  }
-
-  // Unreached notes are real and belong in the picture, at arm's length.
-  for (const node of nodes) if (!depth.has(node.name)) depth.set(node.name, RING.length - 1);
-
-  return depth;
+export function sizeFor(node: DocNode): number {
+  if (node.name === CENTRE) return 44;
+  if (node.kind === 'document') return 20;
+  return Math.min(8, 1.4 + node.degree * 0.5);
 }
 
-export function place(
-  nodes: readonly DocNode[],
-  edges: readonly DocEdge[],
-  width: number,
-  height: number,
-): Placed[] {
-  if (nodes.length === 0) return [];
-
-  const cx = width / 2;
-  const cy = height / 2;
-  const span = Math.max(60, Math.min(width, height) / 2 - PADDING);
-  const depth = depths(nodes, edges);
-
-  /*
-   * A bearing per page, and everything under a page inherits it.
-   *
-   * This is what stops the outer rings being a smear: a class's assignments,
-   * its files and the mail about it all sit in the same direction as the page
-   * describing that class, so a subject reads as a spoke rather than as dots
-   * scattered round a circle.
-   */
-  const pages = nodes
-    .filter((node) => node.kind === 'document' && node.name !== CENTRE)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const bearing = new Map<string, number>();
-  pages.forEach((page, i) => bearing.set(page.name, (i / Math.max(1, pages.length)) * Math.PI * 2));
-
-  /** The page a note hangs from, by the course it clusters to. */
-  const pageOfCourse = new Map<string, string>();
-  for (const edge of edges) {
-    if (!bearing.has(edge.from) || bearing.has(edge.to)) continue;
-    if (!pageOfCourse.has(edge.to)) pageOfCourse.set(edge.to, edge.from);
-  }
-
-  const angleFor = (node: DocNode): number | null => {
-    if (bearing.has(node.name)) return bearing.get(node.name) as number;
-    if (node.cluster) {
-      const page = pageOfCourse.get(node.cluster);
-      if (page && bearing.has(page)) return bearing.get(page) as number;
-    }
-    return null;
-  };
-
-  /*
-   * Spread within a bearing, so a spoke is a fan rather than a line.
-   *
-   * Counted per (bearing, ring) so that two notes at the same depth under the
-   * same page never land on the same point.
-   */
-  const taken = new Map<string, number>();
-  const placed: Placed[] = [];
-  let loose = 0;
-
-  for (const node of nodes) {
-    const d = Math.min(depth.get(node.name) ?? RING.length - 1, RING.length - 1);
-    if (node.name === CENTRE) {
-      placed.push({ node, x: cx, y: cy, r: SIZE[0] as number, depth: 0 });
-      continue;
-    }
-
-    const own = angleFor(node);
-    // Unattached notes ring the outside evenly rather than piling up at zero.
-    const base = own ?? (loose += 1) * 2.399963;
-    const slot = `${base.toFixed(3)}:${d}`;
-    const nth = taken.get(slot) ?? 0;
-    taken.set(slot, nth + 1);
-
-    /*
-     * Fanned by a golden angle rather than evenly.
-     *
-     * An even fan needs to know how many will land in this slot before placing
-     * the first, which means two passes. This spreads without counting, and
-     * spreads more the more there are, which is the behaviour wanted.
-     */
-    const fan = own === null ? 0 : (nth * 0.381966 * Math.PI) / Math.max(1, pages.length);
-    const angle = base + fan * (nth % 2 === 0 ? 1 : -1);
-    const radius = span * (RING[d] as number) * (1 + (nth % 5) * 0.012);
-
-    placed.push({
-      node,
-      x: cx + Math.cos(angle) * radius,
-      y: cy + Math.sin(angle) * radius,
-      r: SIZE[d] as number,
-      depth: d,
-    });
-  }
-
-  return placed;
+/** "class-french" is the filename; "French" is what a student calls it. */
+export function labelFor(name: string): string {
+  return name.replace(/^class-/, '').replaceAll('-', ' ');
 }
 
 /**
- * Which node is under a point, if any.
+ * Which labels are worth drawing at rest.
  *
- * Nearest first, and pages win ties: at the outer rings the dots are three
- * pixels across and overlap, and the thing somebody is trying to click is
- * almost always the larger one.
+ * Four thousand labels is a solid block of text with a graph somewhere behind
+ * it. The pages carry theirs always; everything else earns one by being
+ * pointed at, or by being what you are reading.
  */
-export function pick(placed: readonly Placed[], x: number, y: number): string | null {
-  let closest: { name: string; score: number } | null = null;
-
-  for (const item of placed) {
-    const distance = Math.hypot(item.x - x, item.y - y);
-    // A generous target for the small ones, which are unclickable otherwise.
-    if (distance > Math.max(item.r, 6)) continue;
-    const score = distance - (item.node.kind === 'document' ? 8 : 0);
-    if (!closest || score < closest.score) closest = { name: item.node.name, score };
-  }
-
-  return closest?.name ?? null;
+export function labelled(node: DocNode, focused: string | null, hovered: string | null): boolean {
+  return node.kind === 'document' || node.name === focused || node.name === hovered;
 }
 
 /** Every note directly joined to this one, in either direction. */
@@ -213,3 +121,41 @@ export function neighbours(edges: readonly DocEdge[], name: string): Set<string>
   }
   return found;
 }
+
+/**
+ * What is lit when something is held: the thing, and what it touches.
+ *
+ * Nothing held means everything is lit, which is what stops a resting graph
+ * looking like it is switched off.
+ */
+export function litBy(
+  edges: readonly DocEdge[],
+  held: string | null,
+): { name: string; joined: Set<string> } | null {
+  return held ? { name: held, joined: neighbours(edges, held) } : null;
+}
+
+export function isDimmed(
+  node: DocNode,
+  lit: { name: string; joined: Set<string> } | null,
+): boolean {
+  if (!lit) return false;
+  return lit.name !== node.name && !lit.joined.has(node.name);
+}
+
+/**
+ * The three forces, tuned the way Obsidian tunes its own.
+ *
+ * Repel separates unrelated notes, link pulls related ones together like a
+ * rubber band, and centre stops the whole thing drifting off. On a vault of
+ * four thousand the repel has to be gentler than the default or the outer
+ * shells fly apart faster than the centre can hold them.
+ */
+export const FORCES = {
+  /** Node repulsion. Negative attracts; this pushes apart. */
+  charge: -55,
+  /** How long a link wants to be, in world units. */
+  linkDistance: 34,
+  /** How tightly a link pulls back to that length, 0 to 1. */
+  linkStrength: 0.35,
+} as const;
