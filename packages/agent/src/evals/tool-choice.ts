@@ -9,6 +9,8 @@ import { queryTerms, rankByTermMatches } from '../memory/search.js';
 import type { EpisodicMemory, MemoryStore } from '../memory/types.js';
 import { buildToolRegistry } from '../tools/builtin.js';
 import { Vault } from '../vault/vault.js';
+import { USER_DOC_NAME, writeDocument } from '../vault/documents.js';
+import { readUserDoc } from '../vault/user-doc.js';
 
 /**
  * Does the agent know which of its two memories to ask?
@@ -49,7 +51,7 @@ interface Case {
   /** Any one of these in the reply counts as answered. */
   expect: string[];
   /** The one tool that should have been enough. */
-  enough: 'vault_search' | 'memory_search' | 'none';
+  enough: 'vault_search' | 'vault_open' | 'memory_search' | 'none';
 }
 
 /**
@@ -74,6 +76,13 @@ const OLD_EXCHANGES = [
 ];
 
 const CASES: Case[] = [
+  {
+    id: 'what-a-class-is',
+    why: 'the page about a subject says this, and the page is named in the one they carry',
+    question: 'what is my english class actually like',
+    expect: ['irwin', 'essay', 'novel'],
+    enough: 'vault_open',
+  },
   {
     id: 'school-fact',
     why: 'a grade lives in the vault and nowhere else',
@@ -177,6 +186,37 @@ async function seedVault(root: string): Promise<Vault> {
     body: 'Mrs Bell moved the Cold War essay from the 14th to the 21st.\n\nAbout [[cold-war-essay]]\nIn [[history]]',
   });
 
+  /*
+   * And the layer an agent actually reads.
+   *
+   * Without these the eval measures a system that no longer exists: one where
+   * everything about a student had to be searched for, because there was
+   * nothing naming what could be opened instead.
+   */
+  await writeDocument(vault, {
+    name: 'class-english',
+    description: 'english, as the vault has it',
+    academic: true,
+    body: [
+      '# English',
+      '',
+      'Enriched English 10, taught by Mrs Irwin.',
+      '',
+      '## How it works',
+      '',
+      'Essays and portfolios on the novels studied, marked out of eight.',
+    ].join('\n'),
+  });
+
+  await writeDocument(vault, {
+    name: USER_DOC_NAME,
+    description: 'Who this student is, and what else there is to open',
+    student: 'the student',
+    body: ['# The student', '', '## What they study', '', '- [[class-english]] — English'].join(
+      '\n',
+    ),
+  });
+
   return vault;
 }
 
@@ -210,6 +250,8 @@ async function runCase(apiKey: string, testCase: Case): Promise<Outcome> {
       message: testCase.question,
       timezone: 'Europe/London',
       vault,
+      // The real turn always carries this, and it is what names the pages.
+      about: (await readUserDoc(vault)) ?? undefined,
       onActivity: (activity: { kind: string; name?: string }) => {
         if (activity.kind === 'tool' && activity.name) called.push(activity.name);
       },
