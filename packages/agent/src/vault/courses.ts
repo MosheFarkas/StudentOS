@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { LlmProvider } from '@contexto/llm';
+import { untrustedNote } from '../untrusted.js';
 import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
 import { buildGraph } from './graph.js';
@@ -182,7 +183,22 @@ export async function classifyCourses(
 ): Promise<CourseVerdict[]> {
   if (courses.length === 0) return [];
 
-  const listed = courses.map(describe).join('\n\n');
+  /*
+   * Wrapped, because every word of it is a teacher's.
+   *
+   * Course names, briefs, handouts and announcements come straight off
+   * Classroom. An announcement asserting that a course is a club -- or that all
+   * of them are finished -- would otherwise arrive in the same voice as the
+   * question being asked about it. The blast cap on the sweep stops the worst
+   * outcome; this stops the attempt from reading as an instruction at all.
+   */
+  const listed = [
+    '<untrusted>',
+    untrustedNote('The courses below are described in their teachers’ own words.'),
+    '',
+    courses.map(describe).join('\n\n'),
+    '</untrusted>',
+  ].join('\n');
 
   let answered: z.infer<typeof verdicts>['courses'] = [];
   try {
@@ -256,6 +272,11 @@ export async function classifyCourses(
   });
 }
 
+/** Angle brackets folded, so nothing a school typed can close the wrapper. */
+function defang(text: string): string {
+  return text.replaceAll('<', '‹').replaceAll('>', '›');
+}
+
 /** One course, as much of it as fits, for the classifier to read. */
 function describe(course: ClassifiableCourse): string {
   const some = (label: string, items: string[] | undefined, total?: number): string[] => {
@@ -265,8 +286,8 @@ function describe(course: ClassifiableCourse): string {
   };
 
   return [
-    `- ${course.name}`,
-    ...(course.section ? [`  Section: ${course.section}`] : []),
+    `- ${defang(course.name)}`,
+    ...(course.section ? [`  Section: ${defang(course.section)}`] : []),
     ...(course.courseState === 'ARCHIVED' ? ['  The school has archived this one.'] : []),
     ...(course.lastActivity ? [`  Last dated activity: ${course.lastActivity}`] : []),
     `  Anything in it marked: ${course.graded ? 'yes' : 'no'}`,
@@ -338,7 +359,14 @@ export function describeCourses(snapshot: ClassroomSnapshot, today: string): Cla
   const forCourse = <T extends { course: string }>(items: T[], name: string): T[] =>
     items.filter((item) => item.course === name);
 
-  const trim = (text: string): string => text.replace(/\s+/g, ' ').trim().slice(0, SAMPLE.brief);
+  /** Angle brackets folded, so nothing in a teacher's text can close the wrapper. */
+  const trim = (text: string): string =>
+    text
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, SAMPLE.brief)
+      .replaceAll('<', '‹')
+      .replaceAll('>', '›');
 
   return snapshot.courses.map((course) => {
     const work = forCourse(snapshot.coursework, course.name);
