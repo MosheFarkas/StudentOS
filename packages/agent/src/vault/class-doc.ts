@@ -61,6 +61,16 @@ export interface ClassDocResult {
  */
 const SHOWN = 60;
 
+/**
+ * And how much of it, in characters.
+ *
+ * The count alone is not a bound. Mail episodes on a real account run to
+ * thirteen thousand characters each, so sixty notes can be a six-figure prompt
+ * -- per class, nine times a build, every six hours. This is roughly six
+ * thousand tokens of reading, which is enough to say what a subject is.
+ */
+const BUDGET = 24_000;
+
 export async function writeClassDocs(
   { llm }: ClassDocDeps,
   { vault, verdicts, userId }: ClassDocOptions,
@@ -232,6 +242,28 @@ function brief(
      * document rather than to a reply makes them safe, and this is the pass
      * whose output is later labelled as ours.
      */
-    renderNotes([...courses, ...cluster].slice(0, SHOWN)),
+    renderNotes(withinBudget([...courses, ...cluster])),
   ].join('\n');
+}
+
+/**
+ * As many notes as fit, courses first.
+ *
+ * Whole notes rather than a truncated string: half a note reads as a complete
+ * one that happens to stop, which is worse than an absent one. The course notes
+ * are prepended by the caller and so are never the ones dropped -- whatever
+ * else is cut, the thing the page is about survives the cut.
+ */
+function withinBudget(notes: VaultNote[]): VaultNote[] {
+  const kept: VaultNote[] = [];
+  let spent = 0;
+
+  for (const note of notes.slice(0, SHOWN)) {
+    const cost = note.body.length + note.description.length;
+    if (kept.length > 0 && spent + cost > BUDGET) continue;
+    kept.push(note);
+    spent += cost;
+  }
+
+  return kept;
 }

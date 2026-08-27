@@ -133,6 +133,52 @@ describe('writing a page per class', () => {
     expect(sent).toContain('mme-rivard');
   });
 
+  it('holds the writer’s reading to a budget', async () => {
+    /*
+     * A year of a busy subject does not fit in a prompt.
+     *
+     * Mail episodes on a real account run to thirteen thousand characters each,
+     * and a course can have hundreds of things filed under it. Handing over
+     * everything would be a six-figure prompt per class, nine times a build,
+     * every six hours.
+     */
+    for (let i = 0; i < 60; i += 1) {
+      await vault.write({
+        name: `long-note-${i}`,
+        kind: 'episode',
+        source: 'gmail',
+        description: 'A long message',
+        occurred: '2026-03-02T10:00:00.000Z',
+        event: 'message',
+        body: `In [[french-a]].\n\n## The message\n\n${'x'.repeat(5000)}`,
+      });
+    }
+
+    const llm = llmSaying('# French');
+    await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent.length).toBeLessThan(60_000);
+  });
+
+  it('still shows the course itself when everything else is enormous', async () => {
+    // Whatever is cut, the thing the page is about must survive the cut.
+    await vault.write({
+      name: 'huge',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'A huge message',
+      occurred: '2026-03-02T10:00:00.000Z',
+      event: 'message',
+      body: `In [[french-a]].\n\n${'x'.repeat(100_000)}`,
+    });
+
+    const llm = llmSaying('# French');
+    await writeClassDocs({ llm }, { vault, userId: 'u-1', verdicts: [verdict({})] });
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain('French A');
+  });
+
   it('writes nothing for a course the vault has dropped', async () => {
     const llm = llmSaying('# French');
 
