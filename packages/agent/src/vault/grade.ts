@@ -64,24 +64,59 @@ export async function readGrade(
     .filter((note) => note.occurred)
     .sort((a, b) => (b.occurred as string).localeCompare(a.occurred as string));
 
+  /*
+   * Every mention, counted, rather than the newest one believed.
+   *
+   * Believing the newest was wrong on the first real account: a school-wide
+   * orientation notice in late August named Grade 8, and that became the
+   * student's year on the page read before every reply. Their own year was all
+   * over the spring -- sixty mentions of Grade 10 against that one.
+   *
+   * Counting works because of what rolling forward does to it. A mention of
+   * Grade 10 last May and one of Grade 11 last week are the same claim once
+   * both are brought to today, so a student's real year accumulates from both
+   * sides of the summer while a newsletter's Grade 1 and somebody else's
+   * orientation stay scattered.
+   */
+  const votes = new Map<number, GradeReading>();
+  const tally = new Map<number, number>();
+
   for (const note of dated) {
-    const matches = [...note.body.matchAll(STATED)];
-    const first = matches[0]?.[1];
-    if (!first) continue;
+    const said = [...note.body.matchAll(STATED)].map((match) => Number(match[1]));
 
-    const stated = Number(first);
-    const on = note.occurred as string;
-    const rolledForward = yearsEndedBetween(on, today, ends);
+    /*
+     * An episode naming several different year groups is talking to a school,
+     * not about this student.
+     *
+     * "Grade 1 sports day, Grade 2 concert" is a newsletter. It says nothing
+     * about whose inbox it landed in, and counting each of its mentions lets a
+     * fortnight of them outvote the year a student is actually in.
+     */
+    if (new Set(said).size !== 1) continue;
 
-    return {
-      grade: Math.min(stated + rolledForward, LEAVING),
-      stated,
-      on,
-      rolledForward,
-    };
+    for (const stated of said) {
+      const on = note.occurred as string;
+      const rolledForward = yearsEndedBetween(on, today, ends);
+      const grade = Math.min(stated + rolledForward, LEAVING);
+
+      tally.set(grade, (tally.get(grade) ?? 0) + 1);
+      // Episodes are newest first, so the first sighting of a grade is the most
+      // recent evidence for it, which is what a reader would want quoted.
+      if (!votes.has(grade)) votes.set(grade, { grade, stated, on, rolledForward });
+    }
   }
 
-  return null;
+  let best: GradeReading | null = null;
+  let most = 0;
+  for (const [grade, count] of tally) {
+    // Ties go to the more recent evidence, which is the order votes was filled.
+    if (count > most) {
+      most = count;
+      best = votes.get(grade) as GradeReading;
+    }
+  }
+
+  return best;
 }
 
 /**

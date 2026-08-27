@@ -77,6 +77,48 @@ describe('reading which year a student is in', () => {
     expect((await readGrade(vault, { today: '2026-06-25', yearEnd: '08-15' }))?.grade).toBe(10);
   });
 
+  it('is not fooled by one mention of somebody else’s year group', async () => {
+    /*
+     * The failure this was found by, on the real account.
+     *
+     * A school-wide orientation notice arrived in late August mentioning Grade
+     * 8. Reading the newest dated mention made that the student's year, and the
+     * page carried it into every reply. Their own year was all over the spring:
+     * sixty mentions of Grade 10 against one of Grade 8.
+     */
+    await said('Grade 10 parents evening is on Thursday.', '2026-03-14T09:00:00.000Z');
+    await said('Grade 10 reports go out Friday.', '2026-05-02T09:00:00.000Z');
+    await said('Grade 8 orientation is on the first day.', '2026-08-25T20:00:00.000Z');
+
+    expect((await readGrade(vault, { today: '2026-08-27' }))?.grade).toBe(11);
+  });
+
+  it('ignores the year groups a school newsletter happens to name', async () => {
+    /*
+     * A mail naming several year groups is talking to a school rather than
+     * about this student, so it is not evidence of anybody's year.
+     */
+    await said('Grade 10 reports go out Friday.', '2026-05-02T09:00:00.000Z');
+    await said(
+      'LCC Mail: Grade 1 sports day, Grade 2 concert, Grade 3 trip.',
+      '2026-06-12T16:00:00.000Z',
+    );
+    await said('LCC Mail: Grade 1 concert, Grade 2 swimming.', '2026-06-19T16:00:00.000Z');
+
+    expect((await readGrade(vault, { today: '2026-08-27' }))?.grade).toBe(11);
+  });
+
+  it('lets evidence from either side of the summer agree', async () => {
+    /*
+     * The property that makes counting work at all: rolled forward, a spring
+     * mention of Grade 10 and an autumn mention of Grade 11 are the same claim.
+     */
+    await said('Grade 10 reports go out Friday.', '2026-05-02T09:00:00.000Z');
+    await said('Welcome to Grade 11.', '2026-08-20T09:00:00.000Z');
+
+    expect((await readGrade(vault, { today: '2026-08-27' }))?.grade).toBe(11);
+  });
+
   it('believes the most recent statement', async () => {
     await said('Grade 9 reports go out Friday.', '2025-05-02T09:00:00.000Z');
     await said('Welcome to Grade 10.', '2025-09-04T09:00:00.000Z');
