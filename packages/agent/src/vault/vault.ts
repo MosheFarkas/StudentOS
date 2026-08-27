@@ -87,6 +87,15 @@ export interface VaultNote {
    */
   sourceHash?: string;
   /**
+   * The user document only: the student's own name.
+   *
+   * Kept so the page can be rewritten by something that does not have it to
+   * hand. The name lives in a database the background job would need a second
+   * dependency to reach, and a page that forgets whose it is on every rewrite
+   * is worse than a field.
+   */
+  student?: string;
+  /**
    * Class documents only: whether this is a taught subject.
    *
    * False for a club, a team, an advisory or a house group -- things a student
@@ -316,6 +325,7 @@ function serialise(note: VaultNote): string {
     ...(note.sourceHash ? [`sourceHash: ${note.sourceHash}`] : []),
     ...(note.yearEnds ? [`yearEnds: ${note.yearEnds}`] : []),
     ...(note.academic === undefined ? [] : [`academic: ${note.academic}`]),
+    ...(note.student ? [`student: ${note.student}`] : []),
     '---',
     '',
     note.body.trim(),
@@ -357,6 +367,7 @@ function parse(raw: string, kind: NoteKind): VaultNote | null {
     ...optional('sourceHash'),
     ...optional('yearEnds'),
     ...(fields.has('academic') ? { academic: fields.get('academic') === 'true' } : {}),
+    ...optional('student'),
     body: raw.slice(frontmatter[0].length).trim(),
   };
 }

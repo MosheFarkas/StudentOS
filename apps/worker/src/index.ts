@@ -22,6 +22,7 @@ import {
   importConversation,
   collectExchanges,
   updateChatsDoc,
+  writeUserDoc,
 } from '@contexto/agent';
 
 /**
@@ -170,7 +171,26 @@ const jobs: Job[] = [
               { llm },
               { vault, exchanges, userId, ...(knownBefore.length > 0 ? { knownBefore } : {}) },
             );
-            if (written.changed) changed += 1;
+
+            if (written.changed) {
+              changed += 1;
+              /*
+               * And the page that describes them, because it is written from
+               * this one.
+               *
+               * Otherwise something a student said this morning waits for the
+               * six-hourly vault build to reach the page the agent actually
+               * carries. Only when the chats page moved, which is the unusual
+               * case -- most conversations teach nothing durable.
+               *
+               * Safe here and nowhere else: this job runs only once a student
+               * has been quiet, so the page it rewrites is not the one being
+               * read mid-conversation. Rewriting it during one would change the
+               * system prompt under a live turn and cost the whole cached
+               * prefix for the rest of that conversation.
+               */
+              await writeUserDoc({ llm }, { vault, userId });
+            }
           }
 
           /*

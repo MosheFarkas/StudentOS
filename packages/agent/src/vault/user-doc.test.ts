@@ -153,6 +153,19 @@ describe('writing the user document', () => {
     expect(sent).toContain('academic year(s) have ended since');
   });
 
+  it('remembers whose page it is, so a rewrite need not be told', async () => {
+    /*
+     * The background job that rewrites this after a student says something new
+     * has their exchanges and their vault, and not their name.
+     */
+    await run(llmSaying('# Lucas'));
+
+    const llm = llmSaying('# Lucas');
+    await writeUserDoc({ llm } as never, { vault, userId: 'u-1' });
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain('The student is Lucas.');
+  });
+
   it('tells the writer not to guess a year when nothing says', async () => {
     const llm = llmSaying('# Lucas');
     await run(llm);

@@ -68,6 +68,8 @@ export interface DocumentToWrite {
   yearEnds?: string;
   /** Class documents only: whether this is a taught subject rather than a club. */
   academic?: boolean;
+  /** The user document only: the student's own name, so a rewrite need not be told it. */
+  student?: string;
 }
 
 /** The document a subject is written into. Two rooms of one subject share it. */
@@ -108,6 +110,7 @@ export async function writeDocument(vault: Vault, doc: DocumentToWrite): Promise
     ...(doc.sourceHash ? { sourceHash: doc.sourceHash } : {}),
     ...(doc.yearEnds ? { yearEnds: doc.yearEnds } : {}),
     ...(doc.academic === undefined ? {} : { academic: doc.academic }),
+    ...(doc.student ? { student: doc.student } : {}),
     body: doc.body.trim(),
   });
 }

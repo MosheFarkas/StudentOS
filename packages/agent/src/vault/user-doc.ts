@@ -102,6 +102,16 @@ export async function writeUserDoc(
   const school = documents.find((doc) => doc.name === SCHOOL_DOC_NAME);
   const chats = documents.find((doc) => doc.name === CHATS_DOC_NAME);
 
+  /*
+   * Whose page this is, from the caller or from the last time it was written.
+   *
+   * The background job that rewrites this when a student says something new
+   * does not have their name to hand, and a page that forgets who it is about
+   * every time it is rewritten is worse than remembering it here.
+   */
+  const existing = documents.find((doc) => doc.name === USER_DOC_NAME);
+  const student = name ?? existing?.student;
+
   const today = new Date().toISOString().slice(0, 10);
   const yearEnd = await academicYearEnd(vault);
   const grade = await readGrade(vault, { today, ...(yearEnd ? { yearEnd } : {}) });
@@ -113,7 +123,7 @@ export async function writeUserDoc(
         {
           role: 'user',
           content: [
-            name ? `The student is ${name}.` : "The student's name is not known.",
+            student ? `The student is ${student}.` : "The student's name is not known.",
             /*
              * Handed over, not shown.
              *
@@ -183,6 +193,7 @@ export async function writeUserDoc(
     name: USER_DOC_NAME,
     description: 'Who this student is, and what else there is to open',
     body,
+    ...(student ? { student } : {}),
   });
 
   /*
