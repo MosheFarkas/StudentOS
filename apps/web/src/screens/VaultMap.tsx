@@ -73,26 +73,41 @@ export function VaultMap() {
   }, []);
 
   /*
-   * The page itself, once something is actually held.
+   * What was clicked, once something is actually held.
    *
    * Only on a click, never on a hover. Seeing that a page exists is worth much
    * less than reading what it says, and a request per pointer move would be a
    * request per pointer move.
+   *
+   * A page, or failing that a note. The pages link outward to the evidence they
+   * were written from -- a class page names its teacher as [[mme-rivard]] --
+   * and those are notes rather than pages. Following one has to land somewhere,
+   * or the panel sits on "Opening..." for a name that was never going to
+   * resolve.
    */
   useEffect(() => {
     if (!focused) {
       setHeld(null);
       return;
     }
+    setHeld(null);
+
     let dropped = false;
     void (async () => {
-      const res = await api.vault.doc[':name'].$get({ param: { name: focused } });
+      const page = await api.vault.doc[':name'].$get({ param: { name: focused } });
       // A click that lands while an older request is in flight must win, or the
       // panel fills in with whatever the student stopped caring about.
-      if (!res.ok || dropped) return;
-      const data = await res.json();
-      setHeld(data.document.body);
+      if (dropped) return;
+      if (page.ok) {
+        setHeld((await page.json()).document.body);
+        return;
+      }
+
+      const note = await api.vault.note[':name'].$get({ param: { name: focused } });
+      if (dropped) return;
+      setHeld(note.ok ? (await note.json()).note.body : 'There is nothing here to open.');
     })();
+
     return () => {
       dropped = true;
     };
@@ -217,7 +232,8 @@ export function VaultMap() {
         <div className="card vault-map-card">
           <strong>{labelFor(focused)}</strong>
           <span className="muted">
-            {graph.nodes.find((node) => node.name === focused)?.description}
+            {graph.nodes.find((node) => node.name === focused)?.description ??
+              'From the notes this was written from'}
           </span>
           {held === null ? (
             <p className="muted vault-map-body">Opening…</p>
