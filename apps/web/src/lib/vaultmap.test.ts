@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   KEY,
-  NAMES_AT_ONCE,
+  NAMES_SHOWN,
+  importantNames,
   colourFor,
   isDimmed,
   labelFor,
   labelHeight,
   labelled,
   litBy,
-  nearest,
   neighbours,
   sizeFor,
   type DocEdge,
@@ -121,23 +121,56 @@ describe('naming things the way a student would', () => {
 
   it('always names the landmarks', () => {
     // A graph whose pages and courses are unlabelled is a field of dots.
-    const none = new Set<string>();
-    expect(labelled(node({ name: 'class-french', kind: 'document' }), none, null, null)).toBe(true);
-    expect(labelled(node({ description: 'Course' }), none, null, null)).toBe(true);
+    const names = importantNames([
+      node({ name: 'class-french', kind: 'document' }),
+      node({ name: 'french-a', description: 'Course' }),
+      node({ name: 'a-file', description: 'File' }),
+    ]);
+
+    expect(names.has('class-french')).toBe(true);
+    expect(names.has('french-a')).toBe(true);
+    expect(names.has('a-file')).toBe(false);
   });
 
-  it('names a note once the camera is near it, and not before', () => {
-    const leaf = node({ name: 'cold-war-essay' });
+  it('names the notes the rest of the vault points at most', () => {
+    const names = importantNames(
+      [
+        node({ name: 'much-cited', degree: 40 }),
+        node({ name: 'cited', degree: 3 }),
+        node({ name: 'lonely', degree: 0 }),
+      ],
+      2,
+    );
 
-    expect(labelled(leaf, new Set(), null, null)).toBe(false);
-    expect(labelled(leaf, new Set(['cold-war-essay']), null, null)).toBe(true);
+    expect(names.has('much-cited')).toBe(true);
+    expect(names.has('lonely')).toBe(false);
   });
 
-  it('names whatever is being pointed at or read, wherever it is', () => {
+  it('never names something nothing points at', () => {
+    // Eight hundred notes on the real account are joined to nothing. Naming
+    // them fills the picture with words about things of no consequence.
+    expect(importantNames([node({ name: 'lonely', degree: 0 })], 100).has('lonely')).toBe(false);
+  });
+
+  it('shows no more names than a screen can hold', () => {
+    const many = Array.from({ length: 4000 }, (_, i) => node({ name: `n-${i}`, degree: 5 }));
+    expect(importantNames(many).size).toBe(NAMES_SHOWN);
+  });
+
+  it('names whatever is being read, however unimportant it is', () => {
     const leaf = node({ name: 'cold-war-essay' });
 
-    expect(labelled(leaf, new Set(), null, 'cold-war-essay')).toBe(true);
-    expect(labelled(leaf, new Set(), 'cold-war-essay', null)).toBe(true);
+    expect(labelled(leaf, new Set(), null)).toBe(false);
+    expect(labelled(leaf, new Set(), 'cold-war-essay')).toBe(true);
+  });
+
+  it('picks the same names every time, so the picture holds still', () => {
+    /*
+     * Chosen by importance rather than by where the camera is. Names that
+     * appear and vanish as you drift make a map you cannot learn.
+     */
+    const nodes = [node({ name: 'a', degree: 9 }), node({ name: 'b', degree: 2 })];
+    expect(importantNames(nodes)).toEqual(importantNames(nodes));
   });
 
   it('draws a name big enough to read from where it is worth reading', () => {
@@ -175,36 +208,5 @@ describe('lighting up what a thing is joined to', () => {
   it('leaves everything lit when nothing is held', () => {
     // A resting graph must not look like one that has been switched off.
     expect(isDimmed(node({ name: 'anything' }), litBy(edges, null))).toBe(false);
-  });
-});
-
-describe('which names the camera is close enough to read', () => {
-  const at = (name: string, x: number) => ({ name, x, y: 0, z: 0 });
-
-  it('names what is in front of you and not what is behind everything else', () => {
-    const near = nearest([at('a', 10), at('b', 500)], { x: 0, y: 0, z: 0 }, 100);
-    expect(near).toEqual(new Set(['a']));
-  });
-
-  it('takes the nearest first when a cluster is too dense to name whole', () => {
-    const many = Array.from({ length: 400 }, (_, i) => at(`n-${i}`, i));
-    const near = nearest(many, { x: 0, y: 0, z: 0 }, 1000, 10);
-
-    expect(near.size).toBe(10);
-    expect(near.has('n-0')).toBe(true);
-    expect(near.has('n-399')).toBe(false);
-  });
-
-  it('never names more than a screen can hold', () => {
-    const many = Array.from({ length: 4000 }, (_, i) => at(`n-${i}`, 0));
-    expect(nearest(many, { x: 0, y: 0, z: 0 }, 1000).size).toBe(NAMES_AT_ONCE);
-  });
-
-  it('names nothing when the camera is nowhere near anything', () => {
-    expect(nearest([at('a', 0)], { x: 9000, y: 0, z: 0 }, 100).size).toBe(0);
-  });
-
-  it('copes with a node the simulation has not placed yet', () => {
-    expect(nearest([{ name: 'a' }], { x: 0, y: 0, z: 0 }, 100)).toEqual(new Set(['a']));
   });
 });

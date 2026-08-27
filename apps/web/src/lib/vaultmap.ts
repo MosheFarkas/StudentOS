@@ -118,62 +118,48 @@ export function labelFor(name: string): string {
 }
 
 /**
- * How many names to show at once, at most.
+ * How many names to show.
  *
- * Every name is a texture on the graphics card. Three and a half thousand of
- * them costs seconds to build and, at any distance where the whole graph fits
- * on screen, overlaps into a wall of text nobody can read anyway.
+ * Every name is a texture on the graphics card, and three and a half thousand
+ * of them is both seconds of building and, at any distance where the whole
+ * graph fits on screen, a wall of overlapping text. This is about what fits
+ * before the names start colliding with each other.
  */
-export const NAMES_AT_ONCE = 160;
+export const NAMES_SHOWN = 120;
 
 /**
- * Which names to show, given where the camera is.
+ * Which names are worth showing, decided once.
  *
- * The pages and the courses always: they are the landmarks, and a graph whose
- * landmarks are unlabelled is a field of dots. Everything else earns a name by
- * being near enough to read -- so pulling back shows you the shape and coming
- * in shows you what is in it, which is the behaviour a map has.
+ * The landmarks always -- the pages and the courses -- because a graph whose
+ * landmarks are unlabelled is a field of dots. Then the notes the rest of the
+ * vault points at most, which is the only thing the graph itself knows about
+ * importance.
  *
- * `near` is whatever the camera is close to, worked out by the caller because
- * only it knows where the camera is.
+ * Fixed rather than chosen by where the camera is. Names that appear and
+ * vanish as you drift make a picture that will not hold still, and the whole
+ * point of a map is that you can learn where things are on it.
  */
-export function labelled(
-  node: DocNode,
-  near: ReadonlySet<string>,
-  focused: string | null,
-  hovered: string | null,
-): boolean {
-  if (node.kind === 'document') return true;
-  if (node.description === 'Course') return true;
-  if (node.name === focused || node.name === hovered) return true;
-  return near.has(node.name);
-}
+export function importantNames(nodes: readonly DocNode[], most = NAMES_SHOWN): Set<string> {
+  const names = new Set<string>();
+  const rest: DocNode[] = [];
 
-/**
- * The names worth drawing from where the camera is standing.
- *
- * Nearest first and capped, so flying into a dense cluster names what is in
- * front of you rather than everything behind it as well.
- */
-export function nearest(
-  placed: readonly { name: string; x?: number; y?: number; z?: number }[],
-  camera: { x: number; y: number; z: number },
-  within: number,
-  most = NAMES_AT_ONCE,
-): Set<string> {
-  const reach = within * within;
-
-  const close: { name: string; d: number }[] = [];
-  for (const node of placed) {
-    const dx = (node.x ?? 0) - camera.x;
-    const dy = (node.y ?? 0) - camera.y;
-    const dz = (node.z ?? 0) - camera.z;
-    const d = dx * dx + dy * dy + dz * dz;
-    if (d <= reach) close.push({ name: node.name, d });
+  for (const node of nodes) {
+    if (node.kind === 'document' || node.description === 'Course') names.add(node.name);
+    else rest.push(node);
   }
 
-  close.sort((a, b) => a.d - b.d);
-  return new Set(close.slice(0, most).map((node) => node.name));
+  for (const node of [...rest].sort((a, b) => b.degree - a.degree)) {
+    if (names.size >= most) break;
+    if (node.degree === 0) break;
+    names.add(node.name);
+  }
+
+  return names;
+}
+
+/** Whether this one says what it is: because it matters, or because you are on it. */
+export function labelled(node: DocNode, names: ReadonlySet<string>, held: string | null): boolean {
+  return names.has(node.name) || node.name === held;
 }
 
 /** Every note directly joined to this one, in either direction. */

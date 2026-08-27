@@ -27,7 +27,6 @@ interface Graph {
 export function VaultMap() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [held, setHeld] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
   const [reading, setReading] = useState<{ title: string; body: string } | null>(null);
   const [inside, setInside] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +87,9 @@ export function VaultMap() {
     };
   }, [held]);
 
+  /* Letting go of a thing, and lighting the whole vault back up. */
+  const clear = useCallback(() => setHeld(null), []);
+
   const joined = useMemo(
     () => (held && graph ? neighbours(graph.edges, held) : new Set<string>()),
     [graph, held],
@@ -144,12 +146,10 @@ export function VaultMap() {
             nodes={graph.nodes}
             edges={graph.edges}
             held={held}
-            hovered={hovered}
             width={width}
             height={height}
             onHold={setHeld}
-            onHover={setHovered}
-            onClear={() => setHeld(null)}
+            onClear={clear}
           />
         </Suspense>
       )}

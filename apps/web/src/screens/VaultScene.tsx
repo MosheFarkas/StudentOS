@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { CanvasTexture, Sprite, SpriteMaterial } from 'three';
 import {
   colourFor,
+  importantNames,
   isDimmed,
   labelFor,
   labelHeight,
   labelled,
   litBy,
-  nearest,
   sizeFor,
   FORCES,
   type DocEdge,
@@ -42,36 +42,14 @@ interface Props {
   nodes: DocNode[];
   edges: DocEdge[];
   held: string | null;
-  hovered: string | null;
   width: number;
   height: number;
   onHold: (name: string) => void;
-  onHover: (name: string | null) => void;
   onClear: () => void;
 }
 
-/**
- * How close the camera has to be for a note to say what it is.
- *
- * Roughly a dozen link-lengths: near enough that what is named is what you are
- * looking at, far enough that flying toward a cluster names it before you
- * arrive rather than as you pass through.
- */
-const READING_RANGE = FORCES.linkDistance * 12;
-
-export default function VaultScene({
-  nodes,
-  edges,
-  held,
-  hovered,
-  width,
-  height,
-  onHold,
-  onHover,
-  onClear,
-}: Props) {
+function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Props) {
   const engine = useRef<Engine | null>(null);
-  const [near, setNear] = useState<ReadonlySet<string>>(new Set());
 
   /*
    * Built once, and never rebuilt on a hover.
@@ -90,30 +68,40 @@ export default function VaultScene({
     };
   }, [nodes, edges]);
 
-  const lit = useMemo(() => litBy(edges, hovered ?? held), [edges, hovered, held]);
+  const lit = useMemo(() => litBy(edges, held), [edges, held]);
+
+  /** Which names are worth drawing. Decided once, from the graph itself. */
+  const names = useMemo(() => importantNames(nodes), [nodes]);
 
   /*
-   * What the camera is close enough to read, checked a few times a second.
+   * The labels, built once and never rebuilt.
    *
-   * Polled rather than driven by an event: the library exposes no camera-moved
-   * hook, and a poll at this rate costs one pass over the nodes while somebody
-   * is flying and nothing at all while they are not. The set is replaced only
-   * when it actually changes, because replacing it rebuilds every label.
+   * This accessor's identity is what the renderer watches to decide whether
+   * every node's 3d object needs making again. Written inline it was a new
+   * function on every render, so a hover rebuilt three and a half thousand
+   * sprites -- which is why clicking the dark flashed the names up and dropped
+   * them. Held apart from the highlight, which changes colours and nothing else.
    */
-  useEffect(() => {
-    const tick = window.setInterval(() => {
-      const where = engine.current?.cameraPosition();
-      if (!where) return;
+  const labels = useCallback(
+    (node: unknown) => {
+      const at = node as Sim;
+      return labelled(at, names, null) ? label(labelFor(at.name), labelHeight(at)) : undefined;
+    },
+    [names],
+  );
 
-      const found = nearest(data.nodes, where, READING_RANGE);
-      setNear((was) => {
-        if (was.size === found.size && [...found].every((name) => was.has(name))) return was;
-        return found;
-      });
-    }, 400);
-
-    return () => window.clearInterval(tick);
-  }, [data]);
+  /*
+   * The colours, held steady between clicks.
+   *
+   * The frame around this re-renders whenever a page finishes loading, so an
+   * accessor written inline would be a new function each time and the renderer
+   * would take that as a reason to go over every node again.
+   */
+  const paintNode = useCallback(
+    (node: unknown) =>
+      isDimmed(node as Sim, lit) ? 'rgba(120,130,160,0.14)' : colourFor(node as Sim),
+    [lit],
+  );
 
   /** Which end of a link is which, once the simulation has replaced ids with nodes. */
   const touching = useCallback(
@@ -126,6 +114,18 @@ export default function VaultScene({
     },
     [lit],
   );
+
+  const paintLink = useCallback(
+    (link: unknown) =>
+      touching(link)
+        ? 'rgba(216,205,255,0.95)'
+        : lit
+          ? 'rgba(148,163,184,0.05)'
+          : 'rgba(148,163,184,0.22)',
+    [touching, lit],
+  );
+
+  const widthOf = useCallback((link: unknown) => (touching(link) ? 1.6 : 0.4), [touching]);
 
   /*
    * Fly to what was clicked.
@@ -178,9 +178,7 @@ export default function VaultScene({
       nodeRelSize={1}
       nodeLabel={((node: Sim) => labelFor(node.name)) as never}
       nodeVal={((node: Sim) => sizeFor(node)) as never}
-      nodeColor={
-        ((node: Sim) => (isDimmed(node, lit) ? 'rgba(120,130,160,0.14)' : colourFor(node))) as never
-      }
+      nodeColor={paintNode as never}
       nodeOpacity={0.95}
       nodeResolution={8}
       /*
@@ -191,24 +189,11 @@ export default function VaultScene({
        * to read in here rather than in a list.
        */
       nodeThreeObjectExtend
-      nodeThreeObject={
-        ((node: Sim) =>
-          labelled(node, near, held, hovered)
-            ? label(labelFor(node.name), labelHeight(node), isDimmed(node, lit))
-            : undefined) as never
-      }
-      linkColor={
-        ((link: unknown) =>
-          touching(link)
-            ? 'rgba(216,205,255,0.95)'
-            : lit
-              ? 'rgba(148,163,184,0.05)'
-              : 'rgba(148,163,184,0.22)') as never
-      }
-      linkWidth={((link: unknown) => (touching(link) ? 1.6 : 0.4)) as never}
+      nodeThreeObject={labels as never}
+      linkColor={paintLink as never}
+      linkWidth={widthOf as never}
       linkOpacity={0.6}
       onNodeClick={focus as never}
-      onNodeHover={((node: Sim | null) => onHover(node ? node.name : null)) as never}
       /* Clicking the dark is how you let go of something and see it all again. */
       onBackgroundClick={onClear}
       /*
@@ -234,7 +219,7 @@ export default function VaultScene({
  * a sprite is resampled as you approach, and one drawn small goes to mush
  * exactly when somebody has come close enough to want to read it.
  */
-function label(text: string, height: number, dimmed: boolean): Sprite | undefined {
+function label(text: string, height: number): Sprite | undefined {
   const canvas = document.createElement('canvas');
   const measuring = canvas.getContext('2d');
   if (!measuring) return undefined;
@@ -260,7 +245,7 @@ function label(text: string, height: number, dimmed: boolean): Sprite | undefine
   paint.lineWidth = 8;
   paint.strokeStyle = 'rgba(5,7,26,0.85)';
   paint.strokeText(text, 12, canvas.height / 2);
-  paint.fillStyle = dimmed ? 'rgba(200,208,232,0.28)' : '#eef1ff';
+  paint.fillStyle = '#eef1ff';
   paint.fillText(text, 12, canvas.height / 2);
 
   const sprite = new Sprite(
@@ -270,3 +255,11 @@ function label(text: string, height: number, dimmed: boolean): Sprite | undefine
   sprite.position.set(0, height * 1.4, 0);
   return sprite;
 }
+
+/*
+ * Held still while the frame around it changes.
+ *
+ * Opening a page is state in the parent, so without this every click would
+ * re-render three and a half thousand nodes to show a paragraph of text.
+ */
+export default memo(VaultScene);
