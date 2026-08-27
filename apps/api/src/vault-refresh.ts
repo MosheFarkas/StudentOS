@@ -134,7 +134,7 @@ async function refreshOne(
   const verdicts = await classifyCourses(
     { llm: await ctx.llm.resolve(userId) },
     {
-      courses: describeCourses(snapshot),
+      courses: describeCourses(snapshot, today),
       today,
       /*
        * The school's own calendar, where anything has researched it.

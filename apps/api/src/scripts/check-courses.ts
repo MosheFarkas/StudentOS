@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     : null;
 
   const today = new Date().toISOString().slice(0, 10);
-  const described = describeCourses(snapshot);
+  const described = describeCourses(snapshot, today);
   const verdicts = await classifyCourses(
     { llm: await ctx.llm.resolve(owner.id) },
     { courses: described, today, ...(yearEnd ? { yearEnd } : {}), userId: owner.id },

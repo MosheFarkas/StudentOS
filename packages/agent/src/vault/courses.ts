@@ -141,21 +141,34 @@ const ASK = [
   '',
   'course must be copied exactly from the list you are given.',
   '',
-  'academic is true only for a taught, graded subject -- maths, French, history, a',
-  'science. It is false for anything a student belongs to rather than studies: a club,',
-  'a team, an advisory or homeroom or house group, a year-wide announcements room, a',
-  'wellbeing or careers programme, a parent or admin room.',
+  'academic is true for a taught, graded subject -- the things that appear on a report',
+  'card. Start from the name. A course named after a school subject IS that subject:',
+  'French, English, maths, history, geography, a science, design, drama, music, art,',
+  'PHE. A level or year in the name -- "French 10", "GR11 Chemistry", "Enriched English',
+  '10" -- confirms it. So does a section, a set, or a stream.',
   '',
-  'Read what is IN each course, not only what it is called. A house group and a subject',
-  'can share a name, and on a real account they do. What tells them apart is underneath:',
-  'a taught subject files work under units, sets work with a brief, and has marks on it.',
-  'A room a student merely belongs to posts announcements and sets nothing. Where the',
-  'name and the contents disagree, believe the contents.',
+  'academic is false only for things a student BELONGS TO rather than studies: a club, a',
+  'team, an advisory or homeroom or house group, a year-wide announcements room, a',
+  'mentoring or wellbeing or careers programme, a one-off trip, a parent or admin room.',
+  '',
+  'Marks do not settle it on their own -- a robotics team marks work too. The name does.',
+  'A course called "French 10" with assignments on it is French, however administrative',
+  'its announcements read; it is NOT an advisory. Calling a subject an advisory is the',
+  'single most costly mistake available here, and it has been made on real data.',
+  '',
+  "Where the name genuinely says nothing -- an acronym, a room number, a teacher's name",
+  '-- then read what is in it: a taught subject files work under units and sets work with',
+  'a brief, and a room a student merely belongs to posts announcements and sets nothing.',
   '',
   'subject is a short lowercase slug naming the class a student would say they have:',
-  '"french", "math", "history". Two rooms of the same subject -- different teachers,',
-  'sets or halves of a year -- must be given the SAME subject, because they are one',
-  'class to the student. Different subjects must never share one.',
+  '"french", "math", "history", "model-un". It must come from THIS course\'s own name --',
+  'never from what kind of thing you decided it is, so "advisory" is only ever the',
+  'subject of a course that is actually an advisory. Strip the level, the year and the',
+  'section: "GR10 - Design // 2025-26" is "design".',
+  '',
+  'Two rooms of the same subject -- different teachers, sets or halves of a year -- must',
+  'be given the SAME subject, because they are one class to the student. Different',
+  'subjects must never share one.',
   '',
   'year is the academic year the course belongs to, as "2025-2026", when the course',
   'name, its section or its year group says so. Use null when nothing states it. Do not',
@@ -309,8 +322,8 @@ function parse(content: unknown): z.infer<typeof verdicts> | null {
  *
  * Sampled rather than complete. See SAMPLE.
  */
-export function describeCourses(snapshot: ClassroomSnapshot): ClassifiableCourse[] {
-  const activity = lastActivityByCourse(snapshot);
+export function describeCourses(snapshot: ClassroomSnapshot, today: string): ClassifiableCourse[] {
+  const activity = lastActivityByCourse(snapshot, today);
 
   const forCourse = <T extends { course: string }>(items: T[], name: string): T[] =>
     items.filter((item) => item.course === name);
@@ -357,14 +370,26 @@ export function describeCourses(snapshot: ClassroomSnapshot): ClassifiableCourse
  * newest date is last June is not -- which is a better answer than either the
  * flag or a year written into a course name.
  *
- * A course where nothing carries a date is absent rather than old. Nothing here
- * can prove it is over.
+ * A course where nothing carries a date is absent rather than old -- and so is
+ * one whose only dates are still ahead of it. Nothing there can prove it is
+ * over, and absent is the answer that keeps it.
  */
-export function lastActivityByCourse(snapshot: ClassroomSnapshot): Map<string, string> {
+export function lastActivityByCourse(
+  snapshot: ClassroomSnapshot,
+  today: string,
+): Map<string, string> {
   const newest = new Map<string, string>();
 
   const seen = (course: string, date: string | null | undefined) => {
     if (!date) return;
+    /*
+     * Only what has actually happened.
+     *
+     * A deadline is a plan, not evidence a course is running. A teacher on a
+     * real account typed 2027 into a Grade 10 due date, and read as activity it
+     * made a course the student finished in June look like this year's.
+     */
+    if (date.slice(0, 10) > today) return;
     const already = newest.get(course);
     if (!already || date > already) newest.set(course, date);
   };

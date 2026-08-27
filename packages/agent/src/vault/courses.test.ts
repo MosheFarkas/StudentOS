@@ -525,38 +525,88 @@ describe('sweeping out a course the vault should no longer hold', () => {
 
 describe('working out when a course was last active', () => {
   it('takes the newest date anything in the course carries', () => {
-    const activity = lastActivityByCourse({
-      courses: [{ id: 'c-1', name: 'History' }],
-      coursework: [
-        { id: 'w-1', course: 'History', title: 'Essay', due: '2026-05-02' },
-        { id: 'w-2', course: 'History', title: 'Test', due: '2026-06-09' },
-      ],
-      topics: [],
-      submissions: [],
-      announcements: [
-        {
-          id: 'a-1',
-          course: 'History',
-          text: 'Good luck',
-          postedAt: '2026-06-11',
-          attachments: [],
-        },
-      ],
-      materials: [],
-    });
+    const activity = lastActivityByCourse(
+      {
+        courses: [{ id: 'c-1', name: 'History' }],
+        coursework: [
+          { id: 'w-1', course: 'History', title: 'Essay', due: '2026-05-02' },
+          { id: 'w-2', course: 'History', title: 'Test', due: '2026-06-09' },
+        ],
+        topics: [],
+        submissions: [],
+        announcements: [
+          {
+            id: 'a-1',
+            course: 'History',
+            text: 'Good luck',
+            postedAt: '2026-06-11',
+            attachments: [],
+          },
+        ],
+        materials: [],
+      },
+      '2026-08-27',
+    );
 
     expect(activity.get('History')).toBe('2026-06-11');
   });
 
+  it('ignores a date that has not happened yet', () => {
+    /*
+     * A deadline is a plan, not evidence the course is running.
+     *
+     * A real teacher on a real account typed 2027 into a Grade 10 due date.
+     * Read as activity it made last year's course look like this year's, and
+     * the filter kept a course the student finished in June.
+     */
+    const activity = lastActivityByCourse(
+      {
+        courses: [{ id: 'c-1', name: 'Design' }],
+        coursework: [
+          { id: 'w-1', course: 'Design', title: 'Portfolio', due: '2027-06-02' },
+          { id: 'w-2', course: 'Design', title: 'Sketches', due: '2026-05-14' },
+        ],
+        topics: [],
+        submissions: [],
+        announcements: [],
+        materials: [],
+      },
+      '2026-08-27',
+    );
+
+    expect(activity.get('Design')).toBe('2026-05-14');
+  });
+
+  it('says nothing when everything a course carries is still in the future', () => {
+    // A course set up for a term that has not started has no activity yet, and
+    // absent is the answer that keeps it: nothing here can prove it is over.
+    const activity = lastActivityByCourse(
+      {
+        courses: [{ id: 'c-1', name: 'Design' }],
+        coursework: [{ id: 'w-1', course: 'Design', title: 'Portfolio', due: '2027-06-02' }],
+        topics: [],
+        submissions: [],
+        announcements: [],
+        materials: [],
+      },
+      '2026-08-27',
+    );
+
+    expect(activity.has('Design')).toBe(false);
+  });
+
   it('says nothing about a course nothing is dated in', () => {
-    const activity = lastActivityByCourse({
-      courses: [{ id: 'c-1', name: 'Model UN' }],
-      coursework: [{ id: 'w-1', course: 'Model UN', title: 'Position paper', due: null }],
-      topics: [],
-      submissions: [],
-      announcements: [],
-      materials: [],
-    });
+    const activity = lastActivityByCourse(
+      {
+        courses: [{ id: 'c-1', name: 'Model UN' }],
+        coursework: [{ id: 'w-1', course: 'Model UN', title: 'Position paper', due: null }],
+        topics: [],
+        submissions: [],
+        announcements: [],
+        materials: [],
+      },
+      '2026-08-27',
+    );
 
     expect(activity.has('Model UN')).toBe(false);
   });
@@ -612,7 +662,7 @@ describe('telling the classifier what is actually in a course', () => {
   });
 
   it('carries the work, the topics and the materials of each course', () => {
-    const [chemistry] = describeCourses(roster());
+    const [chemistry] = describeCourses(roster(), TODAY);
 
     expect(chemistry?.topics).toEqual(['Acids and bases']);
     expect(chemistry?.work?.[0]).toContain('Titration writeup');
@@ -626,21 +676,21 @@ describe('telling the classifier what is actually in a course', () => {
      * A house group posts announcements and sets nothing. A taught course
      * carries work that somebody puts a number on.
      */
-    const [chemistry, advisory] = describeCourses(roster());
+    const [chemistry, advisory] = describeCourses(roster(), TODAY);
 
     expect(chemistry?.graded).toBe(true);
     expect(advisory?.graded).toBe(false);
   });
 
   it('carries what a course announces when that is all it does', () => {
-    const advisory = describeCourses(roster())[1];
+    const advisory = describeCourses(roster(), TODAY)[1];
 
     expect(advisory?.announcements?.[0]).toContain('house assembly');
     expect(advisory?.work).toEqual([]);
   });
 
   it('keeps the section and the archive state', () => {
-    const [chemistry] = describeCourses(roster());
+    const [chemistry] = describeCourses(roster(), TODAY);
 
     expect(chemistry?.section).toBe('Set 2');
     expect(chemistry?.courseState).toBe('ACTIVE');
@@ -655,7 +705,7 @@ describe('telling the classifier what is actually in a course', () => {
       due: '2026-09-14',
     }));
 
-    const [chemistry] = describeCourses(many);
+    const [chemistry] = describeCourses(many, TODAY);
 
     expect(chemistry?.work?.length).toBeLessThanOrEqual(10);
     expect(chemistry?.workCount).toBe(40);
@@ -671,7 +721,7 @@ describe('telling the classifier what is actually in a course', () => {
 
     await classifyCourses(
       { llm },
-      { courses: describeCourses(roster()), today: TODAY, userId: 'u-1' },
+      { courses: describeCourses(roster(), TODAY), today: TODAY, userId: 'u-1' },
     );
 
     const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
