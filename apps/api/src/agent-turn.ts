@@ -2,7 +2,13 @@ import { eq } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
 import type { Message } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
-import { Vault, buildToolRegistry, readUserDoc, runAgentTurn } from '@contexto/agent';
+import {
+  Vault,
+  buildToolRegistry,
+  listDocuments,
+  readUserDoc,
+  runAgentTurn,
+} from '@contexto/agent';
 import type { AppContext } from './context.js';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import { DbPortalSnapshots } from './portal-snapshots.js';
@@ -16,11 +22,26 @@ import { beginTurn, endTurn, setActivity } from './turns-in-flight.js';
  * transcript. If these ever diverge you have two agents wearing one name, which
  * is exactly what the product promises not to be.
  */
-/** The student's vault, if this deployment has vaults and they have one. */
-async function vaultFor(root: string | undefined, ownerId: string): Promise<Vault | undefined> {
+/**
+ * The student's vault, if this deployment has vaults and they have one.
+ *
+ * Entities OR pages. Notes are the usual reason a vault is worth handing to a
+ * turn, but they are not the only one: what a student has told us across their
+ * conversations is kept as a page in here now, and it is written for anyone who
+ * talks to their agent whether or not they have ever connected a school.
+ *
+ * Gating on notes alone regressed exactly that. The document it replaced was a
+ * column on the agent row and was read on every turn regardless; this one sat
+ * on disk being written and never read for anybody with nothing imported.
+ */
+export async function vaultFor(
+  root: string | undefined,
+  ownerId: string,
+): Promise<Vault | undefined> {
   if (!root) return undefined;
   const vault = new Vault(root, ownerId);
-  return (await vault.has()) ? vault : undefined;
+  if (await vault.has()) return vault;
+  return (await listDocuments(vault)).length > 0 ? vault : undefined;
 }
 
 export async function runTurnForAgent(
