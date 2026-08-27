@@ -93,6 +93,17 @@ export async function readDocument(vault: Vault, name: string): Promise<VaultNot
   }
 }
 
+/**
+ * The markers that separate our words from other people's, in a page's body.
+ *
+ * A page renders in the trusted half of a prompt, undefanged -- that is what
+ * being ours means. Which makes carrying these the one thing a page must never
+ * do: it would blur the only boundary a later reader has. The writers are told
+ * not to copy their evidence, and this is the case where being told is not
+ * enough, because the cost of being wrong once is every prompt afterwards.
+ */
+const WRAPPER = /<\/?untrusted>/gi;
+
 export async function writeDocument(vault: Vault, doc: DocumentToWrite): Promise<void> {
   await vault.write({
     name: doc.name,
@@ -111,7 +122,7 @@ export async function writeDocument(vault: Vault, doc: DocumentToWrite): Promise
     ...(doc.yearEnds ? { yearEnds: doc.yearEnds } : {}),
     ...(doc.academic === undefined ? {} : { academic: doc.academic }),
     ...(doc.student ? { student: doc.student } : {}),
-    body: doc.body.trim(),
+    body: doc.body.replace(WRAPPER, '').trim(),
   });
 }
 
