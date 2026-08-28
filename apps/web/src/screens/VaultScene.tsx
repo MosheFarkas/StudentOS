@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
+import { forceCollide } from 'd3-force-3d';
 import { CanvasTexture, Sprite, SpriteMaterial } from 'three';
 import {
   colourFor,
@@ -8,6 +9,7 @@ import {
   labelHeight,
   labelled,
   litBy,
+  radiusFor,
   volumeFor,
   FORCES,
   type DocEdge,
@@ -34,7 +36,9 @@ type Sim = DocNode & { id: string; x?: number; y?: number; z?: number };
 interface Engine {
   cameraPosition: (p?: unknown, look?: unknown, ms?: number) => { x: number; y: number; z: number };
   zoomToFit: (ms?: number, px?: number) => void;
-  d3Force: (name: string) => Record<string, (v: number) => void> | undefined;
+  /** Getter with one argument, setter with two, as d3's own force accessor is. */
+  d3Force: ((name: string) => Record<string, (v: number) => void> | undefined) &
+    ((name: string, force: unknown) => void);
 }
 
 interface Props {
@@ -163,6 +167,20 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
     graph.d3Force('link')?.strength?.(FORCES.linkStrength);
 
     /*
+     * And a force that stops them sitting inside each other.
+     *
+     * Repulsion is a soft law -- it falls off with distance and loses to a link
+     * pulling the other way, so two notes on the same assignment end up as one
+     * dot with a bulge. Collision is a hard one: a sphere may not be inside
+     * another sphere. It costs a pass over an octree each tick, which is the
+     * price of a picture where every node is its own node.
+     */
+    graph.d3Force(
+      'collide',
+      forceCollide((node: never) => radiusFor(node as DocNode) + 1.5).strength(0.85) as never,
+    );
+
+    /*
      * Framed once the simulation has stopped thrashing.
      *
      * Fitting immediately frames a knot at the origin, because nothing has
@@ -186,7 +204,14 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
       nodeVal={((node: Sim) => volumeFor(node)) as never}
       nodeColor={paintNode as never}
       nodeOpacity={0.95}
-      nodeResolution={8}
+      /*
+       * Round enough to read as a sphere.
+       *
+       * Eight segments is an octagon spun round -- visibly faceted at any size
+       * worth looking at. Sixteen is smooth to the eye and still cheap, which
+       * matters when there are three thousand of them.
+       */
+      nodeResolution={16}
       /*
        * Names as sprites, so perspective does the resizing.
        *
@@ -257,8 +282,23 @@ function label(text: string, height: number): Sprite | undefined {
   paint.fillText(text, 12, canvas.height / 2);
 
   const sprite = new Sprite(
-    new SpriteMaterial({ map: new CanvasTexture(canvas), depthWrite: false, transparent: true }),
+    new SpriteMaterial({
+      map: new CanvasTexture(canvas),
+      transparent: true,
+      /*
+       * Drawn over everything, never behind it.
+       *
+       * A name is not a thing in the vault, it is a caption on one -- and a
+       * caption that disappears because a note has drifted in front of it is
+       * worse than no caption, because you cannot tell which. Depth testing off
+       * takes it out of the queue that decides what is in front; the render
+       * order puts it after the spheres so it lands on top of them.
+       */
+      depthTest: false,
+      depthWrite: false,
+    }),
   );
+  sprite.renderOrder = 10;
   sprite.scale.set((height * canvas.width) / canvas.height, height, 1);
   sprite.position.set(0, height * 1.4, 0);
   return sprite;
