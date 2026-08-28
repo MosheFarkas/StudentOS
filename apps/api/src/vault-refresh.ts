@@ -21,6 +21,7 @@ import {
   writeClassDocs,
   ensureChatsDoc,
   sweepDroppedCourses,
+  sweepUnattachedFiles,
   readDriveFile,
   textFromDriveRead,
 } from '@contexto/agent';
@@ -243,6 +244,16 @@ async function refreshOne(
   const swept = await sweepDroppedCourses(vault, verdicts);
 
   /*
+   * And the files that belong to no course they take.
+   *
+   * The Drive import will not bring one in any more, but a vault built before
+   * that rule is full of them -- a thousand of twelve hundred on the first real
+   * account, attached to nothing and answering searches about subjects that
+   * ended in June.
+   */
+  const loose = await sweepUnattachedFiles(vault);
+
+  /*
    * A page per class, from the notes now filed under each.
    *
    * Skipped where nothing under a subject has changed since the page was last
@@ -289,6 +300,7 @@ async function refreshOne(
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
     `${dropped.length > 0 ? `, dropped ${dropped.length} courses (${swept.removed} notes)` : ''}` +
+    `${loose.removed > 0 ? `, ${loose.removed} unattached files` : ''}` +
     `, ${classes.written} class pages (${classes.skipped} unchanged, ${classes.removed} gone)` +
     `${about ? `, wrote user.md (${about.length} chars)` : ''}`
   );

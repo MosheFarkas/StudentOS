@@ -9,6 +9,7 @@ import {
   describeCourses,
   lastActivityByCourse,
   sweepDroppedCourses,
+  sweepUnattachedFiles,
   type ClassifiableCourse,
   type CourseVerdict,
 } from './courses.js';
@@ -796,5 +797,80 @@ describe('telling the classifier what is actually in a course', () => {
     expect(sent).toContain('Acids and bases');
     expect(sent).toContain('Titration writeup');
     expect(sent).toContain('house assembly');
+  });
+});
+
+describe('sweeping out files that belong to no course', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-orphanfiles-'));
+    vault = new Vault(root, 'student-1');
+
+    await vault.write({
+      name: 'history',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'History, on Google Classroom.',
+    });
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const file = (name: string, body: string) =>
+    vault.write({ name, kind: 'entity', source: 'drive', description: 'File', body });
+
+  it('takes a file attached to nothing', async () => {
+    /*
+     * A thousand of twelve hundred on the first real account: sitting in the
+     * picture attached to nothing, answering searches about subjects that
+     * ended in June.
+     */
+    await file('loose-photo', 'A photo.\nFiled under Camera uploads.');
+    expect(await sweepUnattachedFiles(vault)).toEqual({ removed: 1 });
+  });
+
+  it('keeps a file that names its course', async () => {
+    await file('an-essay', 'An essay.\nPart of [[history]].');
+    await sweepUnattachedFiles(vault);
+    expect(await vault.read('entity', 'an-essay')).not.toBeNull();
+  });
+
+  it('keeps a file something else points at', async () => {
+    // Whatever its folder said, a file an assignment references is in use.
+    await file('a-handout', 'A handout.');
+    await vault.write({
+      name: 'cold-war-essay',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Cold War essay.\nPart of [[history]].\nAttached: [[a-handout]]',
+    });
+
+    await sweepUnattachedFiles(vault);
+    expect(await vault.read('entity', 'a-handout')).not.toBeNull();
+  });
+
+  it('leaves everything that is not a file alone', async () => {
+    // People, courses and episodes are not filed under anything and are not
+    // this rule's business.
+    await vault.write({
+      name: 'mme-rivard',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      body: 'Teaches French.',
+    });
+
+    await sweepUnattachedFiles(vault);
+    expect(await vault.read('entity', 'mme-rivard')).not.toBeNull();
+  });
+
+  it('takes nothing twice', async () => {
+    await file('loose-photo', 'A photo.');
+    await sweepUnattachedFiles(vault);
+    expect(await sweepUnattachedFiles(vault)).toEqual({ removed: 0 });
   });
 });

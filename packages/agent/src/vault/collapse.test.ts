@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { absorptions, collapse, isNumbered } from './collapse.js';
+import { absorptions, collapse, courseForFolder, isNumbered, meaningfulWords } from './collapse.js';
 import type { GraphNode, VaultGraph } from './graph.js';
 
 /**
@@ -186,5 +186,47 @@ describe('folding them in', () => {
 
   it('leaves a graph alone when nothing folds', () => {
     expect(collapse(graph, [])).toBe(graph);
+  });
+});
+
+describe('working out which course a Drive folder belongs to', () => {
+  const courses = new Map([
+    ['GR10 - Design // 2025-26', 'gr10-design'],
+    ['2025/2026 Robotics', 'robotics-2025-2026'],
+    ['Enriched English 10', 'enriched-english-10'],
+  ]);
+
+  it('reads a folder and a course as the same subject said twice', () => {
+    /*
+     * Five hundred and twenty-three files sat in a folder called DESIGN 10
+     * belonging to nothing, because the course is called GR10 - Design //
+     * 2025-26 and the two were compared as written.
+     */
+    expect(courseForFolder('DESIGN 10', courses)).toBe('gr10-design');
+  });
+
+  it('does not match a folder that shares no subject with any course', () => {
+    // The competition is not the club. Guessing here attaches a student's work
+    // to a course it was never part of.
+    expect(courseForFolder('2026 – MØDUEL', courses)).toBeNull();
+  });
+
+  it('matches nothing for a folder that is only a grade', () => {
+    // "Gr 10" names a year, not a subject, and every course that year would
+    // match it equally.
+    expect(courseForFolder('Gr 10', courses)).toBeNull();
+  });
+
+  it('will not match a folder on part of a course name', () => {
+    expect(courseForFolder('English Literature Club', courses)).toBeNull();
+  });
+
+  it('strips the decoration a school puts round a subject', () => {
+    expect(meaningfulWords('GR10 - Design // 2025-26')).toEqual(new Set(['design']));
+    expect(meaningfulWords('Drama 10A 25/26')).toEqual(new Set(['drama']));
+  });
+
+  it('folds accents, so Francais and Français are one word', () => {
+    expect(meaningfulWords('Français 11')).toEqual(meaningfulWords('Francais 11'));
   });
 });

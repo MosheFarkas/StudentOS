@@ -573,3 +573,40 @@ function titleOf(note: VaultNote): string {
   const first = note.body.split('\n')[0] ?? '';
   return first.replace(/,\s*on Google Classroom\.?\s*$/i, '').trim();
 }
+
+/**
+ * Files in the vault that belong to no course the student takes.
+ *
+ * The import will not bring one in any more, but a vault built before that
+ * rule existed is full of them: on the first real account, a thousand of
+ * twelve hundred, sitting in the picture attached to nothing and answering
+ * searches about subjects that ended in June.
+ *
+ * Only files, and only ones nothing points at. A file a teacher attached in
+ * Classroom carries its own course link and is somebody else's to remove; one
+ * that any surviving note references is being used, whatever its folder said.
+ */
+export async function sweepUnattachedFiles(vault: Vault): Promise<{ removed: number }> {
+  const [entities, episodes, documents] = await Promise.all([
+    vault.list('entity'),
+    vault.list('episode'),
+    vault.list('document'),
+  ]);
+
+  const referenced = new Set<string>();
+  for (const note of [...entities, ...episodes, ...documents]) {
+    for (const match of note.body.matchAll(/\[\[([^\]]+)\]\]/g)) referenced.add(match[1] as string);
+  }
+
+  let removed = 0;
+  for (const note of entities) {
+    if (note.description !== 'File') continue;
+    // Points at a course, or something points at it: either way it belongs.
+    if (/^Part of \[\[/m.test(note.body)) continue;
+    if (referenced.has(note.name)) continue;
+
+    if (await vault.remove('entity', note.name)) removed += 1;
+  }
+
+  return { removed };
+}

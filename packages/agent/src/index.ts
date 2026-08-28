@@ -59,6 +59,7 @@ export {
   academicYearStart,
   FALLBACK_YEAR_END,
   sweepDroppedCourses,
+  sweepUnattachedFiles,
   type CourseVerdict,
 } from './vault/courses.js';
 export { collectDriveFiles } from './vault/collect-drive.js';

@@ -20,11 +20,19 @@ import { importDrive, type DriveFile } from './drive.js';
  * later by the pass that reads it.
  */
 
+/*
+ * Filed under History by default.
+ *
+ * A file that belongs to no course the student takes is not imported at all
+ * now, so every fixture here needs a home -- which is the rule these tests are
+ * about rather than an inconvenience they work around.
+ */
 const file = (over: Partial<DriveFile> = {}): DriveFile => ({
   fileId: 'd1',
   name: 'Grade 10 History Outline 2025',
   mimeType: 'application/vnd.google-apps.document',
   ownedByStudent: true,
+  path: ['History'],
   ...over,
 });
 
@@ -32,9 +40,16 @@ describe("importing the student's Drive", () => {
   let root: string;
   let vault: Vault;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     root = mkdtempSync(join(tmpdir(), 'contexto-drive-'));
     vault = new Vault(root, 'student-1');
+    await vault.write({
+      name: 'history',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'History, on Google Classroom.',
+    });
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -84,7 +99,7 @@ describe("importing the student's Drive", () => {
     ]);
 
     expect(result.written).toBe(0);
-    expect(await vault.list('entity')).toHaveLength(0);
+    expect((await vault.list('entity')).filter((n) => n.description === 'File')).toHaveLength(0);
   });
 
   it('records whether the student wrote it', async () => {
@@ -122,7 +137,7 @@ describe("importing the student's Drive", () => {
     const again = await importDrive(vault, files);
 
     expect(again.written).toBe(0);
-    expect(await vault.list('entity')).toHaveLength(1);
+    expect((await vault.list('entity')).filter((n) => n.description === 'File')).toHaveLength(1);
   });
 
   it('records who shared a file that is not the student\u2019s own', async () => {
@@ -146,23 +161,94 @@ describe("importing the student's Drive", () => {
     expect(note?.body).toContain('Shared by Anna Bell');
   });
 
-  it('says where a file lives, even when no course matches', async () => {
+  it('says which piece of work inside the course a file belongs to', async () => {
     /*
-     * The folder path is resolved for every file and then used for one thing:
-     * an exact match between a folder name and a course. On this account that
-     * fires for 109 files out of 782, and the other 673 are written with no
-     * link and no location -- a third of the vault reachable only by guessing
-     * its filename.
-     *
-     * "Robotics/CAD" is not a course and still says almost everything about
-     * what the file is. It was computed and dropped, which is the same disease
-     * as the rest of this pipeline.
+     * The course alone is not the whole address. "History/Cold War essay/drafts"
+     * names the subject and then says which piece of work, which is most of
+     * what there is to say about a file called draft3.docx.
      */
     await importDrive(vault, [
-      file({ fileId: 'f-7', name: 'bracket.stl', path: ['Robotics', 'CAD'] }),
+      file({ fileId: 'p1', name: 'Draft three', path: ['History', 'Cold War essay', 'drafts'] }),
     ]);
 
-    const note = await vault.read('entity', 'bracket-stl');
-    expect(note?.body).toContain('Robotics/CAD');
+    const note = await vault.read('entity', 'draft-three');
+    expect(note?.body).toContain('Part of [[history]]');
+    expect(note?.body).toContain('History/Cold War essay/drafts');
+  });
+});
+
+describe('a file has to belong to a course they still take', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-driverule-'));
+    vault = new Vault(root, 'student-1');
+    await vault.write({
+      name: 'gr10-design',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'GR10 - Design // 2025-26, on Google Classroom.',
+    });
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  /** No folder by default: belonging to nothing is the case under test. */
+  const loose = (over: Partial<DriveFile>): DriveFile =>
+    ({
+      fileId: 'f-1',
+      name: 'A file',
+      mimeType: 'application/vnd.google-apps.document',
+      ownedByStudent: true,
+      ...over,
+    }) as DriveFile;
+
+  const files = async () =>
+    (await vault.list('entity')).filter((note) => note.description === 'File');
+
+  it('keeps a file whose folder names a course they take', async () => {
+    // "DESIGN 10" and "GR10 - Design // 2025-26" are one subject said twice.
+    await importDrive(vault, [loose({ fileId: 'f-1', path: ['DESIGN 10'] })]);
+    expect(await files()).toHaveLength(1);
+  });
+
+  it('leaves out a file in a folder that names no course', async () => {
+    /*
+     * Left out rather than brought in and swept.
+     *
+     * Reading a file is a model call. Importing one and removing it again pays
+     * that on every build, for ever, for a file nobody wanted kept.
+     */
+    await importDrive(vault, [loose({ fileId: 'f-2', path: ['Music', 'loops'] })]);
+    expect(await files()).toHaveLength(0);
+  });
+
+  it('leaves out a file in no folder at all', async () => {
+    await importDrive(vault, [loose({ fileId: 'f-3' })]);
+    expect(await files()).toHaveLength(0);
+  });
+
+  it('says how many it left out, rather than passing over it in silence', async () => {
+    const result = await importDrive(vault, [
+      loose({ fileId: 'f-4', path: ['Music'] }),
+      loose({ fileId: 'f-5' }),
+    ]);
+    expect(result.skipped).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not reach across and take a file a teacher attached', async () => {
+    // Those come in through the Classroom importer with their own course link.
+    await vault.write({
+      name: 'handout',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'File',
+      body: 'Handout.\nPart of [[gr10-design]].',
+    });
+
+    await importDrive(vault, [loose({ fileId: 'f-6' })]);
+    expect(await vault.read('entity', 'handout')).not.toBeNull();
   });
 });

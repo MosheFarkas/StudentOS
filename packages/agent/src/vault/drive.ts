@@ -1,3 +1,4 @@
+import { courseForFolder } from './collapse.js';
 import { slugForNote } from './slug.js';
 import type { Vault } from './vault.js';
 
@@ -55,10 +56,17 @@ export async function importDrive(vault: Vault, files: DriveFile[]): Promise<Dri
   const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
   const takenNames = new Set(existing.map((note) => note.name));
 
+  /*
+   * The courses still in the vault, by the title the school gave them.
+   *
+   * By title rather than by note name, because a folder is matched on the words
+   * that say what a subject is -- and the title is where those words are
+   * written the way a person writes them.
+   */
   const courses = new Map(
     existing
       .filter((note) => note.description === 'Course')
-      .map((note) => [note.name.toLowerCase(), note.name]),
+      .map((note) => [(note.body.split('\n')[0] ?? '').split(', on Google')[0] ?? '', note.name]),
   );
 
   const result: DriveImportResult = { written: 0, skipped: 0 };
@@ -93,26 +101,48 @@ export async function importDrive(vault: Vault, files: DriveFile[]): Promise<Dri
 
     const lines = [`${file.name}.`, ''];
 
-    // The one edge available before anything reads the file, on the rare
-    // occasion a folder name happens to be a course.
+    /*
+     * Which course this belongs to, from the folder it sits in.
+     *
+     * Matched on the words that say what a subject is rather than on the names
+     * as written: a folder called "DESIGN 10" and a course called "GR10 -
+     * Design // 2025-26" are one subject said twice, and comparing them
+     * literally left five hundred files of design coursework belonging to
+     * nothing at all.
+     */
     const course = (file.path ?? [])
-      .map((folder) => courses.get(slugForNote(folder).toLowerCase()))
+      .map((folder) => courseForFolder(folder, courses))
       .find(Boolean);
-    if (course) lines.push(`Part of [[${course}]].`);
 
     /*
-     * Where it lives, whether or not that is a course.
+     * And a file that belongs to no course they take does not come in.
      *
-     * The path was resolved for every file and used for one thing: an exact
-     * match against a course name. On a real account that fired for 109 files
-     * of 782, and the other 673 were written with no link and no location --
-     * a third of the vault reachable only by guessing its filename.
+     * Left out rather than brought in and swept afterwards, because reading one
+     * is a model call: importing and then removing pays that on every build for
+     * ever, for a file nobody wanted kept. The same reason last year's courses
+     * are filtered before the import rather than after it.
      *
-     * "Robotics/CAD" is not a course and still says most of what there is to
-     * say about a file called bracket.stl. It was being computed and thrown
-     * away, which is this pipeline's oldest habit.
+     * It costs the personal half of a Drive -- music, photographs, an
+     * application to another school -- which is a real loss and a deliberate
+     * one. A vault is what an agent reads about somebody's schooling, and a
+     * thousand files it can say nothing about are a thousand ways for a search
+     * to answer with the wrong thing.
      */
-    else if (file.path && file.path.length > 0) lines.push(`Filed under ${file.path.join('/')}.`);
+    if (!course) {
+      result.skipped += 1;
+      continue;
+    }
+
+    lines.push(`Part of [[${course}]].`);
+
+    /*
+     * And where it lives, which is more than the course alone says.
+     *
+     * "Design 10/Chair project/iterations" names the course and then says which
+     * piece of work inside it, which is most of what there is to say about a
+     * file called bracket.stl.
+     */
+    if (file.path && file.path.length > 0) lines.push(`Filed under ${file.path.join('/')}.`);
 
     /*
      * Whose file it is.
