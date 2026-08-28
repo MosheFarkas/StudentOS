@@ -21,6 +21,7 @@ import {
   writeClassDocs,
   ensureChatsDoc,
   sweepDroppedCourses,
+  sweepCourseMail,
   sweepUnattachedFiles,
   readDriveFile,
   textFromDriveRead,
@@ -254,6 +255,15 @@ async function refreshOne(
   const loose = await sweepUnattachedFiles(vault);
 
   /*
+   * And the mail about classes they no longer take.
+   *
+   * The last place last year survives: the course is gone and its assignments
+   * went with it, and the mail stayed because the course was removed thoroughly
+   * enough that nothing was left to sweep it with.
+   */
+  const oldMail = await sweepCourseMail(vault, verdicts);
+
+  /*
    * A page per class, from the notes now filed under each.
    *
    * Skipped where nothing under a subject has changed since the page was last
@@ -301,6 +311,7 @@ async function refreshOne(
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
     `${dropped.length > 0 ? `, dropped ${dropped.length} courses (${swept.removed} notes)` : ''}` +
     `${loose.removed > 0 ? `, ${loose.removed} unattached files` : ''}` +
+    `${oldMail.removed > 0 ? `, ${oldMail.removed} old-class messages` : ''}` +
     `, ${classes.written} class pages (${classes.skipped} unchanged, ${classes.removed} gone)` +
     `${about ? `, wrote user.md (${about.length} chars)` : ''}`
   );

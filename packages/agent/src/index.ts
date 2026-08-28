@@ -59,6 +59,7 @@ export {
   academicYearStart,
   FALLBACK_YEAR_END,
   sweepDroppedCourses,
+  sweepCourseMail,
   sweepUnattachedFiles,
   type CourseVerdict,
 } from './vault/courses.js';

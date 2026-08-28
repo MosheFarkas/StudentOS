@@ -83,6 +83,73 @@ describe('importing school mail', () => {
     expect(await vault.read('entity', 'debating')).not.toBeNull();
   });
 
+  it('does not keep the mail about a class they no longer take', async () => {
+    /*
+     * The last place last year survives. Its course is gone and its assignments
+     * went with it, and the mail stays precisely because the course was removed
+     * thoroughly enough that nothing is left to sweep it with. Nearly two
+     * hundred messages about one dropped course on a real account.
+     */
+    const llm = llmReturning(kept());
+    await importMail({ llm } as never, {
+      vault,
+      messages: [notification('2025/2026 - 10 Science and Technology - 04 (ST and STE)')],
+      entities: ['cold-war-essay', 'history'],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['2025/2026 - 10 Science and Technology - 04 (ST and STE)'],
+    });
+
+    expect(await vault.list('episode')).toHaveLength(0);
+    // And it cost nothing: skipped before the extraction, not after it.
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
+  it('matches the course even with what the school appends after it', async () => {
+    // The line reads "<course> 04 - Mr. Chuprun" on a real account.
+    const llm = llmReturning(kept());
+    await importMail({ llm } as never, {
+      vault,
+      messages: [notification('Grade 10 Math 04 - Mr. Chuprun')],
+      entities: [],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['Grade 10 Math'],
+    });
+
+    expect(await vault.list('episode')).toHaveLength(0);
+  });
+
+  it('keeps the mail about a class they do take', async () => {
+    const llm = llmReturning(kept());
+    await importMail({ llm } as never, {
+      vault,
+      messages: [notification('Grade 11 Math')],
+      entities: [],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['Grade 10 Math'],
+    });
+
+    expect(await vault.list('episode')).toHaveLength(1);
+  });
+
+  it('keeps mail that is not Classroom writing about a course at all', async () => {
+    // A teacher writing to them directly names no course on a line of its own,
+    // and is theirs whatever it happens to mention.
+    const llm = llmReturning(kept());
+    await importMail({ llm } as never, {
+      vault,
+      messages: [message({ body: 'About your Grade 10 Math results.' })],
+      entities: [],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['Grade 10 Math'],
+    });
+
+    expect(await vault.list('episode')).toHaveLength(1);
+  });
+
   it('does not bring back a course whose mail is older than this school year', async () => {
     /*
      * The hole the dropped list cannot cover.

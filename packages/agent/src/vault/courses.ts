@@ -4,6 +4,7 @@ import { untrustedNote } from '../untrusted.js';
 import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
 import { buildGraph } from './graph.js';
+import { namesCourse } from './mail.js';
 import { retrying } from './retry.js';
 import type { Vault, VaultNote } from './vault.js';
 
@@ -606,6 +607,38 @@ export async function sweepUnattachedFiles(vault: Vault): Promise<{ removed: num
     if (referenced.has(note.name)) continue;
 
     if (await vault.remove('entity', note.name)) removed += 1;
+  }
+
+  return { removed };
+}
+
+/**
+ * Mail about classes they no longer take, taken out.
+ *
+ * The import will not bring one in any more, but a vault built before that rule
+ * is full of them: on the first real account, nearly two hundred messages about
+ * one dropped science course alone. Its course is gone and its assignments went
+ * with it, and the mail stayed precisely because the course was removed
+ * thoroughly enough that nothing was left to sweep it with.
+ *
+ * People are never touched. A teacher outlives the class they taught, may teach
+ * this student again, and is evidence about the school besides -- and the
+ * student's own words are theirs whatever they were about.
+ */
+export async function sweepCourseMail(
+  vault: Vault,
+  verdicts: CourseVerdict[],
+): Promise<{ removed: number }> {
+  const dropped = verdicts.filter((verdict) => !verdict.keep).map((verdict) => verdict.course);
+  if (dropped.length === 0) return { removed: 0 };
+
+  let removed = 0;
+  for (const note of await vault.list('episode')) {
+    // Their own words, which no import can write again.
+    if (note.source === 'student') continue;
+    if (!namesCourse(note.body, dropped)) continue;
+
+    if (await vault.remove('episode', note.name)) removed += 1;
   }
 
   return { removed };

@@ -9,6 +9,7 @@ import {
   describeCourses,
   lastActivityByCourse,
   sweepDroppedCourses,
+  sweepCourseMail,
   sweepUnattachedFiles,
   type ClassifiableCourse,
   type CourseVerdict,
@@ -872,5 +873,70 @@ describe('sweeping out files that belong to no course', () => {
     await file('loose-photo', 'A photo.');
     await sweepUnattachedFiles(vault);
     expect(await sweepUnattachedFiles(vault)).toEqual({ removed: 0 });
+  });
+});
+
+describe('sweeping out the mail about a class they no longer take', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-coursemail-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const dropped: CourseVerdict[] = [
+    { course: 'Grade 10 Math', academic: true, subject: 'math', year: '2025-2026', keep: false },
+  ];
+
+  const notified = (name: string, course: string, source: 'gmail' | 'student' = 'gmail') =>
+    vault.write({
+      name,
+      kind: 'episode',
+      source,
+      description: 'A notification',
+      occurred: '2026-03-02T10:00:00.000Z',
+      event: 'assignment-posted',
+      body: `Something was posted.\n\n## The message\n\n${course}\nhttps://classroom.google.com/c/abc`,
+    });
+
+  it('takes a notification about the dropped class', async () => {
+    await notified('a-notification', 'Grade 10 Math 04 - Mr. Chuprun');
+    expect(await sweepCourseMail(vault, dropped)).toEqual({ removed: 1 });
+  });
+
+  it('keeps a notification about a class they still take', async () => {
+    await notified('still-taking', 'Grade 11 Math');
+    await sweepCourseMail(vault, dropped);
+    expect(await vault.read('episode', 'still-taking')).not.toBeNull();
+  });
+
+  it('never takes the student’s own words', async () => {
+    // Theirs, whatever they were about, and no import can write them again.
+    await notified('what-they-said', 'Grade 10 Math', 'student');
+    await sweepCourseMail(vault, dropped);
+    expect(await vault.read('episode', 'what-they-said')).not.toBeNull();
+  });
+
+  it('leaves mail that names no course on a line of its own', async () => {
+    await vault.write({
+      name: 'a-letter',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'A letter',
+      occurred: '2026-03-02T10:00:00.000Z',
+      event: 'message',
+      body: 'About your Grade 10 Math results.',
+    });
+
+    await sweepCourseMail(vault, dropped);
+    expect(await vault.read('episode', 'a-letter')).not.toBeNull();
+  });
+
+  it('takes nothing when every course is kept', async () => {
+    await notified('a-notification', 'Grade 10 Math');
+    expect(await sweepCourseMail(vault, [{ ...dropped[0]!, keep: true }])).toEqual({ removed: 0 });
   });
 });

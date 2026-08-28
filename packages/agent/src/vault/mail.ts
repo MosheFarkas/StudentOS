@@ -226,6 +226,28 @@ export function classroomCourse(body: string): string | null {
   return null;
 }
 
+/**
+ * Whether a message is Classroom writing about one of these courses.
+ *
+ * Every Classroom notification names its course on its own line above the link
+ * to it, followed by whatever else the school appends -- a section, a teacher.
+ * So the test is whether that line begins with a course we no longer hold,
+ * which uses the school's own name for it rather than guessing from prose.
+ *
+ * Mail about a dropped class is the last place last year survives. Its course
+ * is gone, its assignments are gone, and the mail stays precisely because the
+ * course was removed thoroughly enough that nothing is left to sweep it with.
+ */
+export function namesCourse(body: string, courses: readonly string[]): boolean {
+  if (courses.length === 0) return false;
+
+  const line = classroomCourse(body);
+  if (!line) return false;
+
+  const said = line.toLowerCase();
+  return courses.some((course) => said.startsWith(course.toLowerCase()));
+}
+
 export function classroomSender(from: string, subject = ''): string | null {
   const { display, address } = parseSender(from);
   if (address !== CLASSROOM_NOTIFICATIONS) return null;
@@ -256,6 +278,7 @@ export async function importMail(
 
   /** Courses the filter has already refused, so recovery does not undo it. */
   const refused = new Set(dropped ?? []);
+  const refusedTitles = dropped ?? [];
 
   /** Courses already noted, so mail only creates the ones nobody has. */
   const knownCourses = new Set(
@@ -340,7 +363,21 @@ export async function importMail(
    * state -- name uniqueness, which people already exist -- and racing on it
    * would produce exactly the duplicates the ids were meant to prevent.
    */
-  const pending = messages.filter((message) => !already.has(message.messageId));
+  /*
+   * And nothing about a class they no longer take.
+   *
+   * Filtered before the extraction rather than after, because each message
+   * costs a model call: the mail about one dropped course on a real account
+   * runs to nearly two hundred messages, and paying to summarise them in order
+   * to delete them is paying twice for nothing.
+   *
+   * This is the last place last year survives. Its course is gone and its
+   * assignments went with it, and the mail stays precisely because the course
+   * was removed thoroughly enough that nothing is left to sweep it with.
+   */
+  const pending = messages
+    .filter((message) => !already.has(message.messageId))
+    .filter((message) => !namesCourse(message.body, refusedTitles));
   let seen = 0;
 
   /*
