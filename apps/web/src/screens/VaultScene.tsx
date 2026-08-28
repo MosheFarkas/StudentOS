@@ -1,15 +1,14 @@
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { CanvasTexture, Sprite, SpriteMaterial } from 'three';
 import {
   colourFor,
   importantNames,
-  isDimmed,
   labelFor,
   labelHeight,
   labelled,
   litBy,
-  sizeFor,
+  volumeFor,
   FORCES,
   type DocEdge,
   type DocNode,
@@ -52,6 +51,15 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
   const engine = useRef<Engine | null>(null);
 
   /*
+   * What the pointer is over, kept in here.
+   *
+   * Purely how the graph looks, so the frame around it -- which holds the page
+   * being read -- has no reason to re-render when the pointer moves across
+   * three thousand nodes.
+   */
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  /*
    * Built once, and never rebuilt on a hover.
    *
    * The simulation mutates what it is given -- positions, velocities -- so a
@@ -68,7 +76,7 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
     };
   }, [nodes, edges]);
 
-  const lit = useMemo(() => litBy(edges, held), [edges, held]);
+  const lit = useMemo(() => litBy(edges, hovered ?? held), [edges, hovered, held]);
 
   /** Which names are worth drawing. Decided once, from the graph itself. */
   const names = useMemo(() => importantNames(nodes), [nodes]);
@@ -97,11 +105,7 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
    * accessor written inline would be a new function each time and the renderer
    * would take that as a reason to go over every node again.
    */
-  const paintNode = useCallback(
-    (node: unknown) =>
-      isDimmed(node as Sim, lit) ? 'rgba(120,130,160,0.14)' : colourFor(node as Sim),
-    [lit],
-  );
+  const paintNode = useCallback((node: unknown) => colourFor(node as Sim, lit), [lit]);
 
   /** Which end of a link is which, once the simulation has replaced ids with nodes. */
   const touching = useCallback(
@@ -115,17 +119,20 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
     [lit],
   );
 
+  /*
+   * A link is grey until one of its ends is held, and then it is the colour of
+   * the thing holding it.
+   *
+   * Unheld links stay drawn rather than fading away: they are the shape of the
+   * vault, and hiding them to make one note legible leaves a picture of a note
+   * with nothing around it.
+   */
   const paintLink = useCallback(
-    (link: unknown) =>
-      touching(link)
-        ? 'rgba(216,205,255,0.95)'
-        : lit
-          ? 'rgba(148,163,184,0.05)'
-          : 'rgba(148,163,184,0.22)',
-    [touching, lit],
+    (link: unknown) => (touching(link) ? '#a78bfa' : 'rgba(148,163,184,0.18)'),
+    [touching],
   );
 
-  const widthOf = useCallback((link: unknown) => (touching(link) ? 1.6 : 0.4), [touching]);
+  const widthOf = useCallback((link: unknown) => (touching(link) ? 2.4 : 0.5), [touching]);
 
   /*
    * Fly to what was clicked.
@@ -175,9 +182,8 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
       /* Trackball: drag to turn it, wheel to come closer, right-drag to pan. */
       controlType="trackball"
       nodeId="id"
-      nodeRelSize={1}
       nodeLabel={((node: Sim) => labelFor(node.name)) as never}
-      nodeVal={((node: Sim) => sizeFor(node)) as never}
+      nodeVal={((node: Sim) => volumeFor(node)) as never}
       nodeColor={paintNode as never}
       nodeOpacity={0.95}
       nodeResolution={8}
@@ -192,8 +198,10 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
       nodeThreeObject={labels as never}
       linkColor={paintLink as never}
       linkWidth={widthOf as never}
-      linkOpacity={0.6}
+      /* One, because the colours above already carry their own. */
+      linkOpacity={1}
       onNodeClick={focus as never}
+      onNodeHover={((node: Sim | null) => setHovered(node ? node.name : null)) as never}
       /* Clicking the dark is how you let go of something and see it all again. */
       onBackgroundClick={onClear}
       /*

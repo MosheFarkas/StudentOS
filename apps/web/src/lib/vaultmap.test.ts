@@ -4,13 +4,15 @@ import {
   NAMES_SHOWN,
   importantNames,
   colourFor,
-  isDimmed,
+  isLit,
+  RESTING,
   labelFor,
   labelHeight,
   labelled,
   litBy,
   neighbours,
-  sizeFor,
+  radiusFor,
+  volumeFor,
   type DocEdge,
   type DocNode,
 } from './vaultmap.js';
@@ -38,72 +40,107 @@ const node = (over: Partial<DocNode> = {}): DocNode => ({
 
 describe('telling the pages from the notes', () => {
   it('draws the student biggest, because everything is written into them', () => {
-    expect(sizeFor(node({ name: 'user', kind: 'document' }))).toBeGreaterThan(
-      sizeFor(node({ name: 'class-french', kind: 'document' })),
+    expect(radiusFor(node({ name: 'user', kind: 'document' }))).toBeGreaterThan(
+      radiusFor(node({ name: 'class-french', kind: 'document' })),
     );
   });
 
   it('draws a page far bigger than a note', () => {
     /*
-     * There are ten pages and four thousand notes. Sized alike, the ten are
-     * lost, and they are the only things anybody is navigating by.
+     * There are ten pages and three thousand notes. Sized alike the ten are
+     * lost, and they are the only things anybody navigates by.
      */
-    expect(sizeFor(node({ name: 'class-french', kind: 'document' }))).toBeGreaterThan(
-      sizeFor(node({ degree: 40 })) * 2,
+    expect(radiusFor(node({ name: 'class-french', kind: 'document' }))).toBeGreaterThan(
+      radiusFor(node({ degree: 40 })) * 2,
     );
   });
 
   it('draws a note more of the vault points at, larger', () => {
-    expect(sizeFor(node({ degree: 6 }))).toBeGreaterThan(sizeFor(node({ degree: 0 })));
+    expect(radiusFor(node({ degree: 6 }))).toBeGreaterThan(radiusFor(node({ degree: 0 })));
   });
 
   it('stops growing a note past the point of crowding its neighbours', () => {
-    expect(sizeFor(node({ degree: 900 }))).toBeLessThanOrEqual(
-      sizeFor(node({ description: 'Course' })),
+    expect(radiusFor(node({ degree: 900 }))).toBeLessThanOrEqual(
+      radiusFor(node({ description: 'Course' })),
     );
+  });
+
+  it('draws the smallest note big enough to see', () => {
+    // The first version came out about two pixels across on a graph a thousand
+    // wide, which is a picture of nothing.
+    expect(radiusFor(node({ degree: 0 }))).toBeGreaterThanOrEqual(2);
+  });
+
+  it('gives the renderer a volume, because that is what it sizes a sphere by', () => {
+    /*
+     * A radius handed over as a volume comes out as its cube root. That is
+     * exactly the mistake that made every node invisible.
+     */
+    expect(volumeFor(node({ degree: 0 }))).toBeCloseTo(radiusFor(node({ degree: 0 })) ** 3);
   });
 });
 
 describe('what the colours mean', () => {
+  const lit = (name: string, joined: string[] = []) => ({ name, joined: new Set(joined) });
+
+  it('leaves everything one quiet colour until something is held', () => {
+    /*
+     * Three thousand notes each shouting their category is a fruit salad you
+     * cannot see a shape in. Colour is what selecting something does.
+     */
+    expect(colourFor(node({ name: 'user', kind: 'document' }), null)).toBe(RESTING);
+    expect(colourFor(node({ description: 'File' }), null)).toBe(RESTING);
+  });
+
+  it('colours what is held and everything it touches', () => {
+    const held = lit('french-a', ['oral-presentation']);
+
+    expect(colourFor(node({ name: 'french-a', description: 'Course' }), held)).not.toBe(RESTING);
+    expect(colourFor(node({ name: 'oral-presentation' }), held)).not.toBe(RESTING);
+  });
+
+  it('leaves everything else exactly as visible as it was', () => {
+    // Dimming three thousand notes to make one legible leaves a picture of one
+    // note. They stay; they just stop saying what kind of thing they are.
+    expect(colourFor(node({ name: 'elsewhere' }), lit('french-a'))).toBe(RESTING);
+  });
+
   it('gives the student, their school and their conversations their own', () => {
     const seen = new Set(
-      ['user', 'school', 'chats'].map((name) => colourFor(node({ name, kind: 'document' }))),
+      ['user', 'school', 'chats'].map((name) =>
+        colourFor(node({ name, kind: 'document' }), lit(name)),
+      ),
     );
     expect(seen.size).toBe(3);
   });
 
   it('colours every class alike, so a class reads as a class', () => {
-    expect(colourFor(node({ name: 'class-french', kind: 'document' }))).toBe(
-      colourFor(node({ name: 'class-robotics', kind: 'document' })),
+    expect(colourFor(node({ name: 'class-french', kind: 'document' }), lit('class-french'))).toBe(
+      colourFor(node({ name: 'class-robotics', kind: 'document' }), lit('class-robotics')),
     );
   });
 
   it('tells a file the student made from one they were given', () => {
-    /*
-     * Files are the largest group in a real vault. One a teacher attached and
-     * one out of the student's own Drive are different objects: the first is
-     * what they were given, the second is what they made.
-     */
-    expect(colourFor(node({ description: 'File', source: 'drive' }))).not.toBe(
-      colourFor(node({ description: 'File', source: 'classroom' })),
+    expect(colourFor(node({ name: 'a', description: 'File', source: 'drive' }), lit('a'))).not.toBe(
+      colourFor(node({ name: 'b', description: 'File', source: 'classroom' }), lit('b')),
     );
   });
 
   it('gives what the student said themselves its own colour', () => {
-    expect(colourFor(node({ kind: 'episode', source: 'student' }))).not.toBe(
-      colourFor(node({ kind: 'episode', source: 'gmail' })),
+    expect(colourFor(node({ name: 'a', kind: 'episode', source: 'student' }), lit('a'))).not.toBe(
+      colourFor(node({ name: 'b', kind: 'episode', source: 'gmail' }), lit('b')),
     );
   });
 
   it('has a key entry for every colour it uses', () => {
-    // Six colours of dot and no way to know which is which is decoration,
-    // however true the geometry is.
+    // Ten colours of dot and no way to know which is which is decoration,
+    // however true the geometry.
     const used = new Set([
-      colourFor(node({ name: 'user', kind: 'document' })),
-      colourFor(node({ name: 'class-french', kind: 'document' })),
-      colourFor(node({ description: 'File', source: 'drive' })),
-      colourFor(node({ description: 'File', source: 'classroom' })),
-      colourFor(node({ kind: 'episode', source: 'classroom' })),
+      colourFor(node({ name: 'user', kind: 'document' }), lit('user')),
+      colourFor(node({ name: 'class-french', kind: 'document' }), lit('class-french')),
+      colourFor(node({ name: 'a', description: 'File', source: 'drive' }), lit('a')),
+      colourFor(node({ name: 'b', description: 'File', source: 'classroom' }), lit('b')),
+      colourFor(node({ name: 'c', kind: 'episode', source: 'classroom' }), lit('c')),
     ]);
     const known = new Set(KEY.map((entry) => entry.colour));
     for (const colour of used) expect(known).toContain(colour);
@@ -197,16 +234,15 @@ describe('lighting up what a thing is joined to', () => {
     expect(neighbours(edges, 'french-a')).toEqual(new Set(['class-french', 'oral-presentation']));
   });
 
-  it('lights the thing held and its neighbours, and dims the rest', () => {
+  it('lights the thing held and its neighbours, and nothing further', () => {
     const lit = litBy(edges, 'french-a');
 
-    expect(isDimmed(node({ name: 'french-a' }), lit)).toBe(false);
-    expect(isDimmed(node({ name: 'class-french' }), lit)).toBe(false);
-    expect(isDimmed(node({ name: 'user' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'french-a' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'class-french' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'user' }), lit)).toBe(false);
   });
 
-  it('leaves everything lit when nothing is held', () => {
-    // A resting graph must not look like one that has been switched off.
-    expect(isDimmed(node({ name: 'anything' }), litBy(edges, null))).toBe(false);
+  it('lights nothing when nothing is held', () => {
+    expect(isLit(node({ name: 'anything' }), litBy(edges, null))).toBe(false);
   });
 });

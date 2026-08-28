@@ -32,6 +32,16 @@ export interface DocEdge {
 /** The page everything else is written into. */
 export const CENTRE = 'user';
 
+/**
+ * What everything looks like until you touch it.
+ *
+ * A vault at rest is three and a half thousand notes, and colouring all of them
+ * at once is a fruit salad that tells you nothing -- every dot shouting its
+ * category while you are trying to see a shape. So the resting state is one
+ * quiet colour, bright enough to see, and colour is what selection *does*.
+ */
+export const RESTING = 'rgba(168,178,212,0.85)';
+
 /** The pages. */
 const PAGE_COLOURS: Record<string, string> = {
   user: '#f0abfc',
@@ -44,7 +54,7 @@ const CLASS = '#a78bfa';
  * The notes, by what they are rather than by which page they hang from.
  *
  * Brighter than the app's own palette, because these sit on near-black: a
- * thousand small points need a ground to be bright against.
+ * small point needs a ground to be bright against.
  */
 const NOTE_COLOURS: Record<string, string> = {
   Course: '#c4b5fd',
@@ -57,7 +67,8 @@ const OWN_FILE = '#a3e635';
 const GIVEN_FILE = '#fb923c';
 const SAID = '#34d399';
 
-export function colourFor(node: DocNode): string {
+/** The colour a thing has when it is what you are looking at, or next to it. */
+function ownColour(node: DocNode): string {
   if (node.kind === 'document') return PAGE_COLOURS[node.name] ?? CLASS;
   if (node.kind === 'episode') {
     // What the student said themselves is the one thing here they wrote.
@@ -66,6 +77,18 @@ export function colourFor(node: DocNode): string {
   }
   if (node.description === 'File') return node.source === 'drive' ? OWN_FILE : GIVEN_FILE;
   return NOTE_COLOURS[node.description] ?? '#8a8fae';
+}
+
+/**
+ * What to draw a node in, given what is held.
+ *
+ * Nothing held and everything is at rest, which is the state a vault spends
+ * most of its time in. Hold something and it and everything it touches say what
+ * they are; the rest stay exactly as visible as they were, because dimming
+ * three thousand notes to make one legible leaves a picture of one note.
+ */
+export function colourFor(node: DocNode, lit: Lit): string {
+  return isLit(node, lit) ? ownColour(node) : RESTING;
 }
 
 /** What the colours mean. Without it, a picture nobody can read. */
@@ -90,11 +113,22 @@ export const KEY: { colour: string; label: string }[] = [
  * alike would bury the ten. Beyond that, a note more of the vault points at is
  * drawn larger, which is the one thing the graph knows about importance.
  */
-export function sizeFor(node: DocNode): number {
-  if (node.name === CENTRE) return 90;
-  if (node.kind === 'document') return 44;
-  if (node.description === 'Course') return 26;
-  return Math.min(14, 3 + node.degree * 0.8);
+export function radiusFor(node: DocNode): number {
+  if (node.name === CENTRE) return 22;
+  if (node.kind === 'document') return 13;
+  if (node.description === 'Course') return 7;
+  return Math.min(5, 2.6 + node.degree * 0.3);
+}
+
+/**
+ * What the renderer wants, which is a volume rather than a radius.
+ *
+ * It sizes a sphere by how much space it takes up, so a radius has to be cubed
+ * on the way in. Getting this wrong is why the first version was invisible: the
+ * numbers looked reasonable and every node came out about two pixels across.
+ */
+export function volumeFor(node: DocNode): number {
+  return radiusFor(node) ** 3;
 }
 
 /**
@@ -178,19 +212,15 @@ export function neighbours(edges: readonly DocEdge[], name: string): Set<string>
  * Nothing held means everything is lit, which is what stops a resting graph
  * looking like it is switched off.
  */
-export function litBy(
-  edges: readonly DocEdge[],
-  held: string | null,
-): { name: string; joined: Set<string> } | null {
+export type Lit = { name: string; joined: Set<string> } | null;
+
+export function litBy(edges: readonly DocEdge[], held: string | null): Lit {
   return held ? { name: held, joined: neighbours(edges, held) } : null;
 }
 
-export function isDimmed(
-  node: DocNode,
-  lit: { name: string; joined: Set<string> } | null,
-): boolean {
+export function isLit(node: DocNode, lit: Lit): boolean {
   if (!lit) return false;
-  return lit.name !== node.name && !lit.joined.has(node.name);
+  return lit.name === node.name || lit.joined.has(node.name);
 }
 
 /**
@@ -202,10 +232,16 @@ export function isDimmed(
  * shells fly apart faster than the centre can hold them.
  */
 export const FORCES = {
-  /** Node repulsion. Negative attracts; this pushes apart. */
-  charge: -55,
+  /**
+   * Node repulsion. Negative pushes apart.
+   *
+   * Gentler than the library's default, because repulsion compounds: three
+   * thousand bodies all pushing produce a ball so large that every node in it
+   * is a speck, however big the node is drawn.
+   */
+  charge: -30,
   /** How long a link wants to be, in world units. */
-  linkDistance: 34,
+  linkDistance: 20,
   /** How tightly a link pulls back to that length, 0 to 1. */
-  linkStrength: 0.35,
+  linkStrength: 0.4,
 } as const;
