@@ -121,14 +121,32 @@ export function radiusFor(node: DocNode): number {
 }
 
 /**
+ * The multiplier the renderer applies after taking a cube root.
+ *
+ * Its formula, from its own source, is `cbrt(val) * nodeRelSize`. That is the
+ * only reason this constant exists: left at its default of four, every sphere
+ * came out four times the radius the forces were keeping apart, and the school
+ * settled a long way inside the student while collision reported itself
+ * satisfied. One, so a value in equals a radius out.
+ */
+export const NODE_REL_SIZE = 1;
+
+/**
  * What the renderer wants, which is a volume rather than a radius.
  *
- * It sizes a sphere by how much space it takes up, so a radius has to be cubed
- * on the way in. Getting this wrong is why the first version was invisible: the
- * numbers looked reasonable and every node came out about two pixels across.
+ * The inverse of its own sizing, so that what it draws is exactly what the
+ * forces are holding apart. Everything about the arrangement depends on those
+ * two agreeing, and they are two different pieces of arithmetic in two
+ * different libraries -- so the conversion lives here, with a test that runs
+ * the renderer's formula over it.
  */
 export function volumeFor(node: DocNode): number {
-  return radiusFor(node) ** 3;
+  return (radiusFor(node) / NODE_REL_SIZE) ** 3;
+}
+
+/** What the renderer will actually draw, by its own formula. For tests to check. */
+export function drawnRadius(node: DocNode): number {
+  return Math.cbrt(volumeFor(node)) * NODE_REL_SIZE;
 }
 
 /**

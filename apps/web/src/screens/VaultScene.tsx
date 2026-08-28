@@ -13,6 +13,7 @@ import {
   litBy,
   volumeFor,
   FORCES,
+  NODE_REL_SIZE,
   type DocEdge,
   type DocNode,
 } from '../lib/vaultmap.js';
@@ -215,7 +216,16 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
       controlType="trackball"
       nodeId="id"
       nodeLabel={((node: Sim) => labelFor(node.name)) as never}
+      /*
+       * A volume in, and the radius the forces use back out.
+       *
+       * The renderer sizes a sphere as cbrt(val) * nodeRelSize. Left at its
+       * default of four, every node was drawn four times the size collision was
+       * keeping apart -- which is why the school sat inside the student while
+       * collision reported itself satisfied.
+       */
       nodeVal={((node: Sim) => volumeFor(node)) as never}
+      nodeRelSize={NODE_REL_SIZE}
       nodeColor={paintNode as never}
       nodeOpacity={0.95}
       /*

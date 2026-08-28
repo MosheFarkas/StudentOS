@@ -14,4 +14,23 @@ declare module 'd3-force-3d' {
   }
 
   export function forceCollide(radius?: (node: never) => number): CollideForce;
+
+  /** The rest of what the physics test builds, to run the scene's own forces. */
+  interface Force {
+    (alpha: number): void;
+    strength(s: number | ((d: never) => number)): Force;
+    distance(d: number | ((link: never) => number)): Force;
+    id(fn: (node: never) => string): Force;
+  }
+
+  export function forceLink(links?: unknown[]): Force;
+  export function forceManyBody(): Force;
+
+  interface Simulation {
+    force(name: string, force: unknown): Simulation;
+    tick(n?: number): Simulation;
+    stop(): Simulation;
+  }
+
+  export function forceSimulation(nodes?: unknown[], dimensions?: number): Simulation;
 }
