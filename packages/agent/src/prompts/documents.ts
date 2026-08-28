@@ -164,6 +164,16 @@ export const VAULT_READING = loadPromptDocument('vault-reading');
 export const CLASS_DOC = loadPromptDocument('class-doc');
 
 /**
+ * How to write the page describing one person in a student's school life.
+ *
+ * The record that outlasts the course. When a class ends everything in it goes
+ * -- the room, the work, the mail -- and the teacher does not: they may teach
+ * this student again, and in five years this page may be the only thing left
+ * saying who taught them Grade 8 science.
+ */
+export const PERSON_DOC = loadPromptDocument('person-doc');
+
+/**
  * How to research a school on the open web and write down what survives.
  *
  * The only pass in this product that reads anything outside the student's own

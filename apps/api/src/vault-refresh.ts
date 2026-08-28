@@ -19,6 +19,7 @@ import {
   describeCourses,
   filterSnapshot,
   writeClassDocs,
+  writePersonDocs,
   ensureChatsDoc,
   sweepDroppedCourses,
   sweepCourseMail,
@@ -277,6 +278,24 @@ async function refreshOne(
   );
 
   /*
+   * A page per person, which is what survives a class being tidied away.
+   *
+   * Everything else about a finished course is filtered out before it reaches
+   * the vault. The people are distilled instead: a teacher outlives the year
+   * they taught, may teach this student again, and in five years this page may
+   * be the only thing left saying who taught them Grade 8 science.
+   */
+  const self = (await vault.list('entity')).find(
+    (note) =>
+      note.description === 'Person' && note.externalId?.toLowerCase() === owner.email.toLowerCase(),
+  )?.name;
+
+  const people = await writePersonDocs(
+    { llm: await ctx.llm.resolve(userId) },
+    { vault, userId, ...(self ? { self } : {}) },
+  );
+
+  /*
    * And the page for what they have said, empty until they say it.
    *
    * Made here so a vault is never missing one: the picture of a vault should
@@ -313,6 +332,7 @@ async function refreshOne(
     `${loose.removed > 0 ? `, ${loose.removed} unattached files` : ''}` +
     `${oldMail.removed > 0 ? `, ${oldMail.removed} old-class messages` : ''}` +
     `, ${classes.written} class pages (${classes.skipped} unchanged, ${classes.removed} gone)` +
+    `, ${people.written} people (${people.skipped} unchanged, ${people.removed} gone)` +
     `${about ? `, wrote user.md (${about.length} chars)` : ''}`
   );
 }

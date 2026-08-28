@@ -375,6 +375,48 @@ export async function importMail(
    * assignments went with it, and the mail stays precisely because the course
    * was removed thoroughly enough that nothing is left to sweep it with.
    */
+  const setAside = messages.filter((message) => namesCourse(message.body, refusedTitles));
+
+  /*
+   * The teachers of a class they no longer take are still their teachers.
+   *
+   * Their mail is not kept, but they are: a teacher outlives the year they
+   * taught, may teach this student again, and is most of what a vault can say
+   * about a school. A Classroom notification carries the name in the sender, so
+   * remembering the person costs nothing -- no extraction, no model call, just
+   * the note itself.
+   */
+  for (const message of setAside) {
+    const named = classroomSender(message.from, message.subject);
+    if (!named) continue;
+
+    const key = `classroom:${slugForNote(named)}`;
+    if (peopleByAddress.has(key) || peopleBySlug.has(slugForNote(named))) continue;
+
+    const note = slugForNote(named);
+    await vault.write({
+      name: note,
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: key,
+      body: `${named.trim()}, who posts to Google Classroom.`,
+    });
+    peopleByAddress.set(key, note);
+    peopleBySlug.set(note, note);
+    const surname = note.split('-').at(-1) as string;
+    bySurname.set(surname, bySurname.has(surname) ? null : note);
+    result.people += 1;
+  }
+
+  /*
+   * And nothing else about a class they no longer take.
+   *
+   * Set aside before the extraction rather than after, because each message is
+   * a model call: the mail about one dropped course on a real account runs to
+   * nearly two hundred messages, and paying to summarise them in order to
+   * delete them is paying twice for nothing.
+   */
   const pending = messages
     .filter((message) => !already.has(message.messageId))
     .filter((message) => !namesCourse(message.body, refusedTitles));

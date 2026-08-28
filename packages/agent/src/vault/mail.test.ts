@@ -105,6 +105,27 @@ describe('importing school mail', () => {
     expect(llm.chat).not.toHaveBeenCalled();
   });
 
+  it('still remembers the teacher of a class they no longer take', async () => {
+    /*
+     * A teacher outlives the year they taught, may teach this student again,
+     * and is most of what a vault can say about a school. The name is in the
+     * sender, so remembering them costs no model call.
+     */
+    const llm = llmReturning(kept());
+    await importMail({ llm } as never, {
+      vault,
+      messages: [notification('Grade 10 Math')],
+      entities: [],
+      userId: 'u1',
+      domains: ['school.example'],
+      dropped: ['Grade 10 Math'],
+    });
+
+    const people = (await vault.list('entity')).filter((n) => n.description === 'Person');
+    expect(people.map((n) => n.name)).toContain('stacey-ottley');
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
   it('matches the course even with what the school appends after it', async () => {
     // The line reads "<course> 04 - Mr. Chuprun" on a real account.
     const llm = llmReturning(kept());

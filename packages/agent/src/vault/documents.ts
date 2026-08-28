@@ -40,6 +40,15 @@ export const CHATS_DOC_NAME = 'chats';
 export const CLASS_PREFIX = 'class-';
 
 /**
+ * What a person's page name begins with.
+ *
+ * Same reason as the classes: `[[mme-rivard]]` is already the note the page was
+ * written from, and without a prefix the page would be a second note of that
+ * name in another directory.
+ */
+export const PERSON_PREFIX = 'person-';
+
+/**
  * Read on every turn, so its budget is the one that is paid for repeatedly.
  *
  * Four times the paragraph it replaces. That buys headings, a line per class
@@ -76,6 +85,14 @@ export interface DocumentToWrite {
 export function classDocName(subject: string): string {
   return `${CLASS_PREFIX}${slugForNote(subject)}`;
 }
+
+/** The document a person is written into, from the note about them. */
+export function personDocName(note: string): string {
+  return `${PERSON_PREFIX}${slugForNote(note)}`;
+}
+
+/** Opened on demand. Most people warrant a sentence, not an essay. */
+export const PERSON_DOC_LIMIT = 1200;
 
 /** The document, or null if one has never been written. */
 export async function readDocument(vault: Vault, name: string): Promise<VaultNote | null> {

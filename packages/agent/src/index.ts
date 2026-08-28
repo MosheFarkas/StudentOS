@@ -29,6 +29,8 @@ export {
   listDocuments,
   capDocument,
   classDocName,
+  personDocName,
+  PERSON_PREFIX,
   USER_DOC_NAME,
   SCHOOL_DOC_NAME,
   CHATS_DOC_NAME,
@@ -47,6 +49,7 @@ export { textFromDriveRead } from './vault/drive-text.js';
 export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
 export { writeClassDocs, type ClassDocResult } from './vault/class-doc.js';
+export { writePersonDocs, type PersonDocResult } from './vault/person-doc.js';
 export { writeSchoolDoc, academicYearEnd, type SchoolDocResult } from './vault/school-doc.js';
 export { updateChatsDoc, ensureChatsDoc, NOTHING_KEPT_YET } from './vault/chats-doc.js';
 export { readGrade, type GradeReading } from './vault/grade.js';
