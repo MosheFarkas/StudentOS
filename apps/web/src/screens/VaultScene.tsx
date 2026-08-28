@@ -7,9 +7,10 @@ import {
   importantNames,
   labelFor,
   labelHeight,
+  collideRadiusFor,
   labelled,
+  linkDistanceFor,
   litBy,
-  radiusFor,
   volumeFor,
   FORCES,
   type DocEdge,
@@ -163,21 +164,34 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
 
     const graph = instance as Engine;
     graph.d3Force('charge')?.strength?.(FORCES.charge);
-    graph.d3Force('link')?.distance?.(FORCES.linkDistance);
+
+    /*
+     * How long a link wants to be, from what is on each end of it.
+     *
+     * The rule the whole arrangement rests on: a link between two big pages has
+     * to be longer than one between two small notes. Asked for a flat distance,
+     * the pull between the student and their school was shorter than the two of
+     * them are wide, and the school settled inside the student.
+     */
+    graph
+      .d3Force('link')
+      ?.distance?.(((link: { source: DocNode; target: DocNode }) =>
+        linkDistanceFor(link.source, link.target)) as never);
     graph.d3Force('link')?.strength?.(FORCES.linkStrength);
 
     /*
-     * And a force that stops them sitting inside each other.
+     * And the rule that is not a preference: nothing inside anything else.
      *
-     * Repulsion is a soft law -- it falls off with distance and loses to a link
-     * pulling the other way, so two notes on the same assignment end up as one
-     * dot with a bulge. Collision is a hard one: a sphere may not be inside
-     * another sphere. It costs a pass over an octree each tick, which is the
-     * price of a picture where every node is its own node.
+     * Its radius is derived from the same drawn size the link distance uses, so
+     * the two forces ask for the same thing rather than pulling against each
+     * other -- which is what leaves a node settled halfway into its neighbour,
+     * whichever force happens to be stronger.
      */
     graph.d3Force(
       'collide',
-      forceCollide((node: never) => radiusFor(node as DocNode) + 1.5).strength(0.85) as never,
+      forceCollide((node: never) => collideRadiusFor(node as DocNode))
+        .strength(FORCES.collideStrength)
+        .iterations(FORCES.collideIterations) as never,
     );
 
     /*

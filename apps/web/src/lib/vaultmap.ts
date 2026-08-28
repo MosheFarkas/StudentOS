@@ -224,12 +224,45 @@ export function isLit(node: DocNode, lit: Lit): boolean {
 }
 
 /**
- * The three forces, tuned the way Obsidian tunes its own.
+ * The gap left between two nodes that are touching, in world units.
+ *
+ * Not zero: spheres that meet exactly still read as one shape, and a link
+ * between them has nowhere to be drawn.
+ */
+export const NODE_GAP = 7;
+
+/**
+ * How far apart two linked notes want to sit.
+ *
+ * Derived from what they are drawn as, which is the whole rule: a link between
+ * two big pages has to be longer than a link between two small notes, or the
+ * force pulling them together and the force keeping them apart are asking for
+ * different things and the answer is a half-swallowed sphere.
+ *
+ * A fixed distance is what put the school inside the student.
+ */
+export function linkDistanceFor(a: DocNode, b: DocNode): number {
+  return radiusFor(a) + radiusFor(b) + NODE_GAP;
+}
+
+/**
+ * How much room a node claims for itself.
+ *
+ * Half the gap each, so two touching nodes claim exactly the distance their
+ * link wants. The two forces then agree rather than fighting, which is the
+ * difference between nodes that settle apart and nodes that settle overlapping
+ * because one force is slightly stronger than the other.
+ */
+export function collideRadiusFor(node: DocNode): number {
+  return radiusFor(node) + NODE_GAP / 2;
+}
+
+/**
+ * The forces, tuned the way Obsidian tunes its own.
  *
  * Repel separates unrelated notes, link pulls related ones together like a
- * rubber band, and centre stops the whole thing drifting off. On a vault of
- * four thousand the repel has to be gentler than the default or the outer
- * shells fly apart faster than the centre can hold them.
+ * rubber band, centre stops the whole thing drifting off, and collide is the
+ * one that is not a preference: nothing may sit inside anything else.
  */
 export const FORCES = {
   /**
@@ -240,8 +273,16 @@ export const FORCES = {
    * is a speck, however big the node is drawn.
    */
   charge: -30,
-  /** How long a link wants to be, in world units. */
-  linkDistance: 20,
-  /** How tightly a link pulls back to that length, 0 to 1. */
+  /** How tightly a link pulls back to the length it wants, 0 to 1. */
   linkStrength: 0.4,
+  /**
+   * How hard collision insists, 0 to 1.
+   *
+   * All the way. Every other force here is a preference to be balanced against
+   * the others; this one is the rule that two things cannot be in the same
+   * place, and a rule obeyed most of the time is not one.
+   */
+  collideStrength: 1,
+  /** Passes per tick. More costs time and settles overlaps that one pass leaves. */
+  collideIterations: 2,
 } as const;

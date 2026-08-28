@@ -11,6 +11,9 @@ import {
   labelled,
   litBy,
   neighbours,
+  NODE_GAP,
+  collideRadiusFor,
+  linkDistanceFor,
   radiusFor,
   volumeFor,
   type DocEdge,
@@ -244,5 +247,57 @@ describe('lighting up what a thing is joined to', () => {
 
   it('lights nothing when nothing is held', () => {
     expect(isLit(node({ name: 'anything' }), litBy(edges, null))).toBe(false);
+  });
+});
+
+describe('nothing sitting inside anything else', () => {
+  const page = node({ name: 'user', kind: 'document' });
+  const small = node({ name: 'a-file', description: 'File' });
+
+  it('asks a link between two big pages to be longer than one between two notes', () => {
+    /*
+     * The rule a flat distance broke. The student is drawn at twenty-two units
+     * and their school at thirteen; a link asking for twenty puts one inside
+     * the other, whatever the collision force then tries to do about it.
+     */
+    expect(linkDistanceFor(page, page)).toBeGreaterThan(linkDistanceFor(small, small));
+  });
+
+  it('always asks for at least as much room as the two ends take up', () => {
+    const pairs: [DocNode, DocNode][] = [
+      [page, small],
+      [page, page],
+      [small, small],
+      [node({ description: 'Course' }), page],
+    ];
+    for (const [a, b] of pairs) {
+      expect(linkDistanceFor(a, b)).toBeGreaterThanOrEqual(radiusFor(a) + radiusFor(b));
+    }
+  });
+
+  it('leaves a gap, so two touching nodes are still two', () => {
+    // Spheres that meet exactly read as one shape, and the link between them
+    // has nowhere to be drawn.
+    expect(linkDistanceFor(small, small) - radiusFor(small) * 2).toBeCloseTo(NODE_GAP);
+  });
+
+  it('claims exactly the room the link asks for, so the forces agree', () => {
+    /*
+     * The two are derived from the same radii on purpose. Where they disagree,
+     * whichever is stronger wins by a margin and the result is a node settling
+     * partway inside its neighbour.
+     */
+    const pairs: [DocNode, DocNode][] = [
+      [page, small],
+      [page, page],
+      [small, small],
+    ];
+    for (const [a, b] of pairs) {
+      expect(collideRadiusFor(a) + collideRadiusFor(b)).toBeCloseTo(linkDistanceFor(a, b));
+    }
+  });
+
+  it('claims more room for a bigger node', () => {
+    expect(collideRadiusFor(page)).toBeGreaterThan(collideRadiusFor(small));
   });
 });
