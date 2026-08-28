@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { user } from '@contexto/db';
-import { Vault, buildGraph, readDocument, readUserDoc } from '@contexto/agent';
+import {
+  Vault,
+  absorptions,
+  buildGraph,
+  collapse,
+  readDocument,
+  readUserDoc,
+} from '@contexto/agent';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -99,15 +106,40 @@ export function createVaultRoutes(ctx: AppContext) {
         const root = ctx.env?.VAULT_ROOT;
         if (!root) return c.json({ nodes: [], edges: [] });
 
-        const { nodes, edges } = await buildGraph(new Vault(root, c.get('userId')));
+        const userId = c.get('userId');
+        const vault = new Vault(root, userId);
+        const drawn = await buildGraph(vault);
+
+        /*
+         * The student's own note, where their mail has made one.
+         *
+         * Their school address appears in their own inbox like anybody else's,
+         * so the vault holds a Person about the person whose vault it is. Found
+         * by their address rather than their name, because two people at one
+         * school share a name more often than an address.
+         */
+        const [owner] = await ctx.db
+          .select({ email: user.email })
+          .from(user)
+          .where(eq(user.id, userId))
+          .limit(1);
+
+        const self = owner?.email
+          ? ((await vault.list('entity')).find(
+              (note) =>
+                note.description === 'Person' &&
+                note.externalId?.toLowerCase() === owner.email.toLowerCase(),
+            )?.name ?? null)
+          : null;
+
+        const { nodes, edges } = collapse(drawn, absorptions(drawn, self));
 
         /*
          * Lean nodes, because there are thousands of them.
          *
-         * Everything a drawing needs and nothing it does not: no descriptions
-         * and no bodies. What a thing says is fetched when somebody clicks it,
-         * which happens once, rather than for every node in the vault, which
-         * happens on every load.
+         * Everything a drawing needs and nothing it does not: no bodies. What a
+         * thing says is fetched when somebody clicks it, which happens once,
+         * rather than for every node, which happens on every load.
          */
         return c.json({
           nodes: nodes.map((node) => ({

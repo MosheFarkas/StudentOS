@@ -150,10 +150,11 @@ export async function writeClassDocs(
       ),
     );
 
-    const body = capDocument(
+    const written = capDocument(
       typeof answer.content === 'string' ? answer.content : '',
       CLASS_DOC_LIMIT,
     );
+    const body = written === '' ? '' : withRooms(written, notes);
     /*
      * A blank answer must not blank a page.
      *
@@ -194,6 +195,25 @@ export async function writeClassDocs(
   }
 
   return result;
+}
+
+/**
+ * The rooms this page was written from, linked at the end of it.
+ *
+ * Written by code rather than asked for in the prompt, because asked-for is how
+ * it went missing: eight of nine pages on a real account had no link back to
+ * the Classroom room they describe, and the ninth did. That is what a model
+ * choosing looks like, and this link is not the kind of thing that should be
+ * chosen -- it is the only edge joining a page to the evidence underneath it.
+ *
+ * Appended after the budget is applied, so it cannot be the thing that gets cut.
+ */
+function withRooms(body: string, courses: VaultNote[]): string {
+  const missing = courses.filter((note) => !body.includes(`[[${note.name}]]`));
+  if (missing.length === 0) return body;
+
+  const rooms = missing.map((note) => `[[${note.name}]]`).join(' and ');
+  return `${body}\n\nWritten from ${rooms}.`;
 }
 
 /**

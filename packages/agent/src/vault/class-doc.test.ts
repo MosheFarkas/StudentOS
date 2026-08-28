@@ -228,6 +228,51 @@ describe('writing a page per class', () => {
     expect(llm.chat).not.toHaveBeenCalled();
   });
 
+  it('links the rooms it was written from, whatever the writer wrote', async () => {
+    /*
+     * Not asked for in the prompt, because asked-for is how it went missing.
+     *
+     * Eight of nine pages on a real account had no link back to the Classroom
+     * room they describe -- the ninth did, which is what a model choosing looks
+     * like. That link is the only thing joining a page to the evidence under
+     * it, so it is written by code.
+     */
+    const llm = llmSaying('# French\n\nA page with no links in it at all.');
+    await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A' })] },
+    );
+
+    expect((await readDocument(vault, 'class-french'))?.body).toContain('[[french-a]]');
+  });
+
+  it('links every room when a subject is taught in more than one', async () => {
+    const llm = llmSaying('# French');
+    await writeClassDocs(
+      { llm },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [verdict({ course: 'French A' }), verdict({ course: 'French B' })],
+      },
+    );
+
+    const body = (await readDocument(vault, 'class-french'))?.body ?? '';
+    expect(body).toContain('[[french-a]]');
+    expect(body).toContain('[[french-b]]');
+  });
+
+  it('does not link a room twice when the writer already did', async () => {
+    const llm = llmSaying('# French\n\nCovers [[french-a]].');
+    await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A' })] },
+    );
+
+    const body = (await readDocument(vault, 'class-french'))?.body ?? '';
+    expect(body.match(/\[\[french-a\]\]/g)).toHaveLength(1);
+  });
+
   it('marks a club as not a subject', async () => {
     await vault.write({
       name: 'model-un',

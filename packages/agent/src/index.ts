@@ -20,6 +20,7 @@ export { UNTRUSTED_RULE, untrustedNote } from './untrusted.js';
 export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/vault.js';
 export { renderNotes } from './vault/render.js';
 export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';
+export { absorptions, collapse, isNumbered, type Absorption } from './vault/collapse.js';
 export { searchVault } from './tools/vault.js';
 export { openVaultDocument } from './tools/documents.js';
 export {

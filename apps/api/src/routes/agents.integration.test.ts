@@ -491,11 +491,11 @@ describe('browsing the vault', () => {
     const alice = await createUser();
     const vault = new Vault(vaultRoot, alice.id);
     await vault.write({
-      name: 'chemistry',
+      name: 'chemistry-2025-2026',
       kind: 'entity',
       source: 'classroom',
       description: 'Course',
-      body: 'Chemistry.',
+      body: 'Chemistry 2025-2026.',
     });
     await vault.write({
       name: 'user',
@@ -509,7 +509,7 @@ describe('browsing the vault', () => {
       kind: 'document',
       source: 'agent',
       description: 'chemistry, as the vault has it',
-      body: '# Chemistry\n\nCovers [[chemistry]].',
+      body: '# Chemistry\n\nWritten from [[chemistry-2025-2026]].',
     });
 
     const res = await withVaults.request('/api/vault/graph', as(alice.token));
@@ -519,12 +519,118 @@ describe('browsing the vault', () => {
     };
 
     expect(body.nodes.map((node) => node.name).sort()).toEqual([
-      'chemistry',
+      'chemistry-2025-2026',
       'class-chemistry',
       'user',
     ]);
     expect(body.edges).toContainEqual({ from: 'user', to: 'class-chemistry' });
-    expect(body.edges).toContainEqual({ from: 'class-chemistry', to: 'chemistry' });
+    expect(body.edges).toContainEqual({ from: 'class-chemistry', to: 'chemistry-2025-2026' });
+  });
+
+  it('folds a club that will only ever have one room into its page', async () => {
+    /*
+     * Debating has no year in its name, so there will never be a second room
+     * for it. Drawn as its own node it is a permanent duplicate sitting beside
+     * the page describing it, and everything filed under it hangs off the copy.
+     */
+    const alice = await createUser();
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
+      name: 'debating',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'Debating.',
+    });
+    await vault.write({
+      name: 'motion-notes',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Material',
+      body: 'Motion notes.\nPart of [[debating]].',
+    });
+    await vault.write({
+      name: 'class-debating',
+      kind: 'document',
+      source: 'agent',
+      description: 'debating',
+      body: '# Debating\n\nWritten from [[debating]].',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    const body = (await res.json()) as {
+      nodes: { name: string }[];
+      edges: { from: string; to: string }[];
+    };
+
+    expect(body.nodes.map((node) => node.name)).not.toContain('debating');
+    // And what hung off the room now hangs off the page, rather than floating.
+    expect(body.edges).toContainEqual({ from: 'motion-notes', to: 'class-debating' });
+  });
+
+  it('folds the student into the page about them', async () => {
+    /*
+     * Their own school address turns up in their own inbox like anybody else's,
+     * so the vault holds a Person note about the person whose vault it is.
+     */
+    const alice = await createUser();
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
+      name: 'user',
+      kind: 'document',
+      source: 'agent',
+      description: 'Who this student is',
+      body: 'A page about them.',
+    });
+    await vault.write({
+      name: 'alice-themselves',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: alice.email,
+      body: 'Writes mail.',
+    });
+    await vault.write({
+      name: 'an-essay',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      body: 'An essay.\nShared by [[alice-themselves]].',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    const body = (await res.json()) as {
+      nodes: { name: string }[];
+      edges: { from: string; to: string }[];
+    };
+
+    expect(body.nodes.map((node) => node.name)).not.toContain('alice-themselves');
+    expect(body.edges).toContainEqual({ from: 'an-essay', to: 'user' });
+  });
+
+  it('leaves everybody else a person', async () => {
+    const alice = await createUser();
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
+      name: 'user',
+      kind: 'document',
+      source: 'agent',
+      description: 'Who this student is',
+      body: 'A page about them.',
+    });
+    await vault.write({
+      name: 'mme-rivard',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Person',
+      externalId: 'rivard@school.example',
+      body: 'Teaches French.',
+    });
+
+    const res = await withVaults.request('/api/vault/graph', as(alice.token));
+    expect(
+      ((await res.json()) as { nodes: { name: string }[] }).nodes.map((n) => n.name),
+    ).toContain('mme-rivard');
   });
 
   it('sends what a drawing needs and not what it does not', async () => {
