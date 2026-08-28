@@ -68,6 +68,15 @@ export interface ClassifiableCourse {
 
 export interface ClassifyOptions {
   courses: ClassifiableCourse[];
+  /**
+   * What the school page says about the school, where one has been written.
+   *
+   * Schools name their houses and their advisory programmes after all sorts of
+   * things, and a room called French turned out to be a house on the first real
+   * account. A researched page naming those structures is the only thing that
+   * can tell them apart from the outside.
+   */
+  school?: string;
   /** ISO date. A model has no clock, and every question here is about time. */
   today: string;
   /**
@@ -144,24 +153,35 @@ const ASK = [
   '',
   'course must be copied exactly from the list you are given.',
   '',
-  'academic is true for a taught, graded subject -- the things that appear on a report',
-  'card. Start from the name. A course named after a school subject IS that subject:',
-  'French, English, maths, history, geography, a science, design, drama, music, art,',
-  'PHE. A level or year in the name -- "French 10", "GR11 Chemistry", "Enriched English',
-  '10" -- confirms it. So does a section, a set, or a stream.',
+  'academic is true for a taught subject: a body of knowledge with a syllabus, the',
+  'kind of thing that appears on a report card. It is false for anything a student',
+  'BELONGS TO rather than studies -- a house, an advisory or homeroom, a club, a team,',
+  'a year-wide announcements room, a mentoring or wellbeing or careers programme.',
   '',
-  'academic is false only for things a student BELONGS TO rather than studies: a club, a',
-  'team, an advisory or homeroom or house group, a year-wide announcements room, a',
-  'mentoring or wellbeing or careers programme, a one-off trip, a parent or admin room.',
+  'Decide from WHAT THE COURSE SETS, not from what it is called. This is the whole of',
+  'the job and the one place it goes wrong.',
   '',
-  'Marks do not settle it on their own -- a robotics team marks work too. The name does.',
-  'A course called "French 10" with assignments on it is French, however administrative',
-  'its announcements read; it is NOT an advisory. Calling a subject an advisory is the',
-  'single most costly mistake available here, and it has been made on real data.',
+  'A taught subject sets work about its subject: texts to read, problems to solve,',
+  'experiments, essays, a language to use. Its units are topics in a discipline.',
   '',
-  "Where the name genuinely says nothing -- an acronym, a room number, a teacher's name",
-  '-- then read what is in it: a taught subject files work under units and sets work with',
-  'a brief, and a room a student merely belongs to posts announcements and sets nothing.',
+  'A room a student belongs to sets work about the student and about the group: how',
+  'they learn, how they are getting on, what the group is doing. Reminders, sign-ups,',
+  'assemblies, charity and social events, lunches, spirit days, house points, service',
+  'hours, goal-setting and reflection, study skills, learner profiles, portfolios of',
+  'their own progress. One of these among real coursework means nothing. Several, with',
+  'no body of knowledge behind them, means this is not a subject however it is named.',
+  '',
+  'A school will name a house or an advisory after anything -- a colour, a founder, a',
+  'building, a language. A room called "French" that sets a pizza lunch, a charity',
+  'budget and a learner profile is a house called French. It is still something the',
+  'student is in, and still belongs in their vault; it is not a French class, and',
+  'saying it is puts a subject on their record that they do not take.',
+  '',
+  'So the name is corroboration and never the decision.',
+  'Where the name and the contents disagree, the contents are right.',
+  '',
+  'Marks do not settle it either way: a robotics team marks work, and a house can set',
+  'a graded reflection.',
   '',
   'subject is a short lowercase slug naming the class a student would say they have:',
   '"french", "math", "history", "model-un". It must come from THIS course\'s own name --',
@@ -180,7 +200,7 @@ const ASK = [
 
 export async function classifyCourses(
   { llm }: CourseClassifierDeps,
-  { courses, today, yearEnd, userId }: ClassifyOptions,
+  { courses, today, yearEnd, school, userId }: ClassifyOptions,
 ): Promise<CourseVerdict[]> {
   if (courses.length === 0) return [];
 
@@ -215,7 +235,16 @@ export async function classifyCourses(
         {
           messages: [
             { role: 'system', content: ASK },
-            { role: 'user', content: `Today is ${today}.\n\nThe courses:\n${listed}` },
+            {
+              role: 'user',
+              content: [
+                `Today is ${today}.`,
+                school
+                  ? `\nWhat is known about the school, which may name its houses and its\nadvisory or pastoral programmes:\n\n${school}\n`
+                  : '',
+                `\nThe courses:\n${listed}`,
+              ].join('\n'),
+            },
           ],
         },
         { userId },

@@ -14,6 +14,8 @@ import {
   importMail,
   classifyCourses,
   academicYearEnd,
+  readDocument,
+  SCHOOL_DOC_NAME,
   academicYearStart,
   FALLBACK_YEAR_END,
   describeCourses,
@@ -146,6 +148,17 @@ async function refreshOne(
    * the next build uses the real date.
    */
   const yearEnd = await academicYearEnd(vault);
+
+  /*
+   * What the school says about itself, for the pass that decides what a course
+   * is.
+   *
+   * Schools name their houses and their pastoral programmes after anything --
+   * a colour, a founder, a language. A room called French on this account turned
+   * out to be a house, and a researched page naming those structures is the only
+   * thing that can tell one from a French class from the outside.
+   */
+  const school = (await readDocument(vault, SCHOOL_DOC_NAME))?.body;
   const yearStart = academicYearStart(today, yearEnd ?? FALLBACK_YEAR_END);
 
   const verdicts = await classifyCourses(
@@ -154,6 +167,7 @@ async function refreshOne(
       courses: describeCourses(snapshot, today),
       today,
       ...(yearEnd ? { yearEnd } : {}),
+      ...(school ? { school } : {}),
       userId,
     },
   );

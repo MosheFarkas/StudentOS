@@ -247,6 +247,26 @@ describe('deciding which courses belong in a vault', () => {
     expect(late[0]?.keep).toBe(true);
   });
 
+  it('shows the classifier what the school says about itself', async () => {
+    /*
+     * A school names its houses after anything -- a colour, a founder, a
+     * language. A researched page naming them is the only thing that can tell a
+     * house called French from a French class, from the outside.
+     */
+    const llm = saying({ course: 'French 11', academic: false, subject: 'french', year: null });
+    await classifyCourses(
+      { llm },
+      {
+        courses: [{ id: 'c-1', name: 'French 11' }],
+        today: TODAY,
+        school: 'The school runs a house system. The houses are French, Curtis and Grant.',
+        userId: 'u-1',
+      },
+    );
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain('houses are French');
+  });
+
   it('asks about every course in one call, so they are judged against each other', async () => {
     const llm = saying(
       { course: 'French A', academic: true, subject: 'french', year: '2026-2027' },
@@ -938,5 +958,50 @@ describe('sweeping out the mail about a class they no longer take', () => {
   it('takes nothing when every course is kept', async () => {
     await notified('a-notification', 'Grade 10 Math');
     expect(await sweepCourseMail(vault, [{ ...dropped[0]!, keep: true }])).toEqual({ removed: 0 });
+  });
+});
+
+describe('what the classifier is told to weigh', () => {
+  /*
+   * A room called French, on a real account, that set a pizza lunch, a charity
+   * budget, a learner profile and ATL skills. It was classified as a French
+   * class because the prompt said to start from the name -- so a subject the
+   * student does not take went onto their record.
+   */
+  const brief = async (): Promise<string> => {
+    const llm = saying();
+    await classifyCourses(
+      { llm },
+      { courses: [{ id: 'c-1', name: 'French 11' }], today: TODAY, userId: 'u-1' },
+    );
+    return JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+  };
+
+  it('tells it to decide from what the course sets', async () => {
+    expect(await brief()).toMatch(/decide from what the course sets/i);
+  });
+
+  it('tells it the name is corroboration and never the decision', async () => {
+    const said = await brief();
+    expect(said).toMatch(/the name is corroboration and never the decision/i);
+    expect(said).toMatch(/where the name and the contents disagree, the contents are right/i);
+  });
+
+  it('names what a room a student merely belongs to actually sets', async () => {
+    // The giveaway is work about the student and the group rather than about a
+    // body of knowledge.
+    const said = await brief();
+    for (const marker of ['assemblies', 'charity', 'house points', 'learner profile']) {
+      expect(said.toLowerCase()).toContain(marker);
+    }
+  });
+
+  it('says plainly that a house may be named after a subject', async () => {
+    expect(await brief()).toMatch(/a house called French/i);
+  });
+
+  it('still says such a room belongs in the vault', async () => {
+    // It is something the student is in. What it is not is a subject.
+    expect(await brief()).toMatch(/still belongs in their vault/i);
   });
 });
