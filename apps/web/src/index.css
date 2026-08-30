@@ -1450,14 +1450,21 @@ a.button {
   color: rgba(200, 208, 232, 0.7);
 }
 
+/* The way out.
+   A button here is the app's own button, and the app's own button carries a
+   white surface -- so this set light text on white and the word "Leave" was
+   present, focusable, and impossible to read. The colour of the ground has to
+   be said too, on both states: the base hover washes it back to near-white. */
 .vault-inside-bar .ghost {
   flex: none;
-  border-color: rgba(148, 163, 184, 0.4);
+  background: rgba(232, 236, 255, 0.07);
+  border-color: rgba(148, 163, 184, 0.45);
   color: #e8ecff;
 }
 
-.vault-inside-bar .ghost:hover {
-  border-color: var(--violet);
+.vault-inside-bar .ghost:hover:not(:disabled) {
+  background: rgba(232, 236, 255, 0.16);
+  border-color: var(--lavender);
   color: #fff;
 }
 
