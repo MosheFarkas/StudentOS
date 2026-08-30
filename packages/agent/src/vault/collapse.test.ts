@@ -64,12 +64,15 @@ describe('deciding what folds into what', () => {
       course('debating'),
       course('2025-2026-robotics'),
       node('lucas-liu', { description: 'Person' }),
+      node('mme-rivard', { description: 'Person' }),
+      page('person-mme-rivard'),
     ],
     edges: [
       { from: 'user', to: 'class-debating' },
       { from: 'user', to: 'class-robotics' },
       { from: 'class-debating', to: 'debating' },
       { from: 'class-robotics', to: '2025-2026-robotics' },
+      { from: 'person-mme-rivard', to: 'mme-rivard' },
     ],
     ...over,
   });
@@ -95,12 +98,37 @@ describe('deciding what folds into what', () => {
     expect(absorptions(graph()).map((a) => a.from)).not.toContain('lucas-liu');
   });
 
-  it('folds no other person in, however many notes point at them', () => {
-    // A teacher is a person in this vault and stays one.
-    const withTeacher = graph({
-      nodes: [...graph().nodes, node('mme-rivard', { description: 'Person' })],
+  it('folds a person into the page written about them', () => {
+    /*
+     * The note and the page are one teacher. Every person in a vault has both
+     * -- the page is written from the note -- so drawn apart this is the same
+     * duplicate hundreds of times over, and the picture says a school has twice
+     * as many people in it as it does.
+     */
+    expect(absorptions(graph())).toContainEqual({
+      from: 'mme-rivard',
+      into: 'person-mme-rivard',
     });
-    expect(absorptions(withTeacher, 'lucas-liu').map((a) => a.from)).not.toContain('mme-rivard');
+  });
+
+  it('leaves a person alone when nothing has been written about them', () => {
+    // A page is written on the build after the person is first seen, so between
+    // the two there is a note and no page, and it is the only thing to draw.
+    const noPage = graph({ nodes: graph().nodes.filter((n) => n.name !== 'person-mme-rivard') });
+    expect(absorptions(noPage).map((a) => a.from)).not.toContain('mme-rivard');
+  });
+
+  it("pairs a person with their own page and nobody else's", () => {
+    /*
+     * By name, not by the link. A page about one teacher names the others it
+     * mentions, and following those would fold half a staffroom into whoever
+     * was written about first.
+     */
+    const named = graph({
+      nodes: [...graph().nodes, node('m-dupont', { description: 'Person' })],
+      edges: [...graph().edges, { from: 'person-mme-rivard', to: 'm-dupont' }],
+    });
+    expect(absorptions(named).map((a) => a.from)).not.toContain('m-dupont');
   });
 
   it('folds nothing into a page that does not exist', () => {

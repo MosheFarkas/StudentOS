@@ -67,8 +67,30 @@ const OWN_FILE = '#a3e635';
 const GIVEN_FILE = '#fb923c';
 const SAID = '#34d399';
 
+/**
+ * What a person's page is named for: the note it was written from.
+ *
+ * A vault has ten pages and one of these per person it knows, which is
+ * hundreds. So a person's page is a note in this picture, whatever the vault
+ * files it as -- drawn as pages they were hundreds of thirteen-unit purple
+ * spheres, indistinguishable from the classes, inflating the ball they sit in
+ * past the point where any of it could be read.
+ */
+const PERSON_PAGE = /^person-/;
+
+/** Somebody: the note about them, or the page written from that note. */
+function isPerson(node: DocNode): boolean {
+  return node.description === 'Person' || PERSON_PAGE.test(node.name);
+}
+
+/** A page proper -- one of the ten a student navigates by, not a person. */
+function isPage(node: DocNode): boolean {
+  return node.kind === 'document' && !isPerson(node);
+}
+
 /** The colour a thing has when it is what you are looking at, or next to it. */
 function ownColour(node: DocNode): string {
+  if (isPerson(node)) return NOTE_COLOURS.Person as string;
   if (node.kind === 'document') return PAGE_COLOURS[node.name] ?? CLASS;
   if (node.kind === 'episode') {
     // What the student said themselves is the one thing here they wrote.
@@ -115,7 +137,7 @@ export const KEY: { colour: string; label: string }[] = [
  */
 export function radiusFor(node: DocNode): number {
   if (node.name === CENTRE) return 22;
-  if (node.kind === 'document') return 13;
+  if (isPage(node)) return 13;
   if (node.description === 'Course') return 7;
   return Math.min(5, 2.6 + node.degree * 0.3);
 }
@@ -159,14 +181,20 @@ export function drawnRadius(node: DocNode): number {
  */
 export function labelHeight(node: DocNode): number {
   if (node.name === CENTRE) return 26;
-  if (node.kind === 'document') return 18;
+  if (isPage(node)) return 18;
   if (node.description === 'Course') return 12;
   return 8;
 }
 
-/** "class-french" is the filename; "French" is what a student calls it. */
+/**
+ * "class-french" is the filename; "French" is what a student calls it.
+ *
+ * The person prefix goes the same way. A page has to be called something other
+ * than the note it was written from or a wikilink would reach either, but that
+ * is a filing problem, and "person mme rivard" is not anybody's name.
+ */
 export function labelFor(name: string): string {
-  return name.replace(/^class-/, '').replaceAll('-', ' ');
+  return name.replace(/^(?:class|person)-/, '').replaceAll('-', ' ');
 }
 
 /**
@@ -196,7 +224,7 @@ export function importantNames(nodes: readonly DocNode[], most = NAMES_SHOWN): S
   const rest: DocNode[] = [];
 
   for (const node of nodes) {
-    if (node.kind === 'document' || node.description === 'Course') names.add(node.name);
+    if (isPage(node) || node.description === 'Course') names.add(node.name);
     else rest.push(node);
   }
 
@@ -279,7 +307,7 @@ export function collideRadiusFor(node: DocNode): number {
  * The forces, tuned the way Obsidian tunes its own.
  *
  * Repel separates unrelated notes, link pulls related ones together like a
- * rubber band, centre stops the whole thing drifting off, and collide is the
+ * rubber band, the middle holds the whole thing together, and collide is the
  * one that is not a preference: nothing may sit inside anything else.
  */
 export const FORCES = {
@@ -288,11 +316,34 @@ export const FORCES = {
    *
    * Gentler than the library's default, because repulsion compounds: three
    * thousand bodies all pushing produce a ball so large that every node in it
-   * is a speck, however big the node is drawn.
+   * is a speck, however big the node is drawn. Gentler again now that the
+   * middle pulls back, which is what decides how big the ball is -- this only
+   * has to keep unrelated notes off each other.
    */
-  charge: -30,
+  charge: -18,
   /** How tightly a link pulls back to the length it wants, 0 to 1. */
   linkStrength: 0.4,
+  /**
+   * How hard the middle pulls everything home, 0 to 1.
+   *
+   * The force this file always claimed to have and never did. What the renderer
+   * registers as its centre is a translation -- it moves the whole arrangement
+   * so its average lands on the origin, and pulls on nothing. So the only thing
+   * setting the size of the ball was repulsion against nothing at all, and a
+   * ball that is only pushed outwards has no size it settles at: it expands for
+   * as long as the simulation is allowed to run, and stops because the
+   * simulation cooled rather than because it was finished.
+   *
+   * On a real vault that came out about four thousand units across against notes
+   * three units wide, which is a picture where the whole thing framed on screen
+   * draws every note at half a pixel. Eight hundred notes joined to nothing are
+   * what makes it so: with nothing linking them inward, repulsion is the only
+   * thing they feel.
+   *
+   * A pull towards the middle proportional to how far out a thing is gives
+   * repulsion something to settle against, and a ball with a size of its own.
+   */
+  gravity: 0.09,
   /**
    * How hard collision insists, 0 to 1.
    *

@@ -68,6 +68,25 @@ describe('telling the pages from the notes', () => {
     );
   });
 
+  it('draws a page about a person as a note, because there are hundreds of them', () => {
+    /*
+     * A vault has ten pages and one of these per person it knows. Filed as a
+     * page they came out as hundreds of thirteen-unit spheres, the same size
+     * and colour as the classes, and they were most of how big the ball was.
+     */
+    const person = node({
+      name: 'person-mme-rivard',
+      kind: 'document',
+      description: 'Mme Rivard, as the vault has them',
+      degree: 4,
+    });
+
+    expect(radiusFor(person)).toBeLessThan(
+      radiusFor(node({ name: 'class-french', kind: 'document' })),
+    );
+    expect(radiusFor(person)).toBe(radiusFor(node({ description: 'Person', degree: 4 })));
+  });
+
   it('draws the smallest note big enough to see', () => {
     // The first version came out about two pixels across on a graph a thousand
     // wide, which is a picture of nothing.
@@ -123,6 +142,17 @@ describe('what the colours mean', () => {
     );
   });
 
+  it('colours a person the same whether it is their note or their page', () => {
+    // They are one person. Two colours for the note and the page written from
+    // it says a vault holds two of everybody.
+    expect(
+      colourFor(
+        node({ name: 'person-mme-rivard', kind: 'document', description: 'Mme Rivard, as had' }),
+        lit('person-mme-rivard'),
+      ),
+    ).toBe(colourFor(node({ name: 'mme-rivard', description: 'Person' }), lit('mme-rivard')));
+  });
+
   it('tells a file the student made from one they were given', () => {
     expect(colourFor(node({ name: 'a', description: 'File', source: 'drive' }), lit('a'))).not.toBe(
       colourFor(node({ name: 'b', description: 'File', source: 'classroom' }), lit('b')),
@@ -155,6 +185,12 @@ describe('naming things the way a student would', () => {
     expect(labelFor('class-french')).toBe('french');
   });
 
+  it('drops the prefix a page about a person carries too', () => {
+    // The page has to be named something other than the note it was written
+    // from, but "person mme rivard" is not anybody's name.
+    expect(labelFor('person-mme-rivard')).toBe('mme rivard');
+  });
+
   it('reads a slug as words', () => {
     expect(labelFor('cold-war-essay')).toBe('cold war essay');
   });
@@ -170,6 +206,21 @@ describe('naming things the way a student would', () => {
     expect(names.has('class-french')).toBe(true);
     expect(names.has('french-a')).toBe(true);
     expect(names.has('a-file')).toBe(false);
+  });
+
+  it('does not name every person just because a page was written about them', () => {
+    /*
+     * The landmarks are named because there are ten of them. There are hundreds
+     * of people, and naming all of them fills the picture with a wall of text
+     * before the notes that matter get a look in.
+     */
+    const names = importantNames([
+      node({ name: 'class-french', kind: 'document' }),
+      node({ name: 'person-mme-rivard', kind: 'document', description: 'X, as had', degree: 0 }),
+    ]);
+
+    expect(names.has('class-french')).toBe(true);
+    expect(names.has('person-mme-rivard')).toBe(false);
   });
 
   it('names the notes the rest of the vault points at most', () => {

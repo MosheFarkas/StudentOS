@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
-import { forceCollide } from 'd3-force-3d';
+import { forceCollide, forceRadial } from 'd3-force-3d';
 import { CanvasTexture, Sprite, SpriteMaterial } from 'three';
 import {
   colourFor,
@@ -29,7 +29,9 @@ import {
  * The arrangement is the simulation's, not ours. A vault has no natural
  * coordinates: what a note is near is what it links to, and the only shape that
  * says so is the one the links settle into. Obsidian's graph does this for the
- * same reason, with the same three forces.
+ * same reason, with the same three forces -- repel, link, and a middle that
+ * holds it together -- and a fourth here that Obsidian has no need of, because
+ * it draws flat circles and this draws spheres that can swallow one another.
  */
 
 /** What the simulation is handed. It writes positions onto these. */
@@ -146,25 +148,44 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
    * On a ball of three thousand, a click on the far side is otherwise a click
    * into fog: the thing lights up somewhere behind everything else and you have
    * to go and find it.
+   *
+   * A hundred and twenty units out along the same ray, which is about a
+   * handful of notes across at the spacing the forces now settle into. It was
+   * two hundred and twenty when they settled half again as far apart; a
+   * distance measured in world units has to move when the world does, or
+   * clicking a note stops framing the note and starts framing its district.
    */
   const focus = useCallback(
     (node: unknown) => {
       const at = node as Sim;
       onHold(at.name);
       const { x = 0, y = 0, z = 0 } = at;
-      const away = 1 + 220 / Math.max(1, Math.hypot(x, y, z));
+      const away = 1 + 120 / Math.max(1, Math.hypot(x, y, z));
       engine.current?.cameraPosition({ x: x * away, y: y * away, z: z * away }, at, 900);
     },
     [onHold],
   );
 
-  /** The three forces, and a camera that starts with the whole thing in view. */
+  /** The forces, and a camera that starts with the whole thing in view. */
   const start = useCallback((instance: unknown) => {
     engine.current = instance as Engine | null;
     if (!instance) return;
 
     const graph = instance as Engine;
     graph.d3Force('charge')?.strength?.(FORCES.charge);
+
+    /*
+     * And the pull towards the middle, which the renderer does not have.
+     *
+     * What it registers as its centre is d3's own, which translates the whole
+     * arrangement so its average sits on the origin and pulls on no node at
+     * all. Repulsion therefore had nothing to settle against: the ball simply
+     * grew for as long as the simulation ran, and the eight hundred notes
+     * joined to nothing -- with no link to bring them back -- went furthest.
+     *
+     * Radius zero, so it is a pull home rather than towards a shell.
+     */
+    graph.d3Force('gravity', forceRadial(0).strength(FORCES.gravity));
 
     /*
      * How long a link wants to be, from what is on each end of it.

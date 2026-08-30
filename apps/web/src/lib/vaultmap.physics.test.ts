@@ -1,4 +1,4 @@
-import { forceCollide, forceLink, forceManyBody, forceSimulation } from 'd3-force-3d';
+import { forceCollide, forceLink, forceManyBody, forceRadial, forceSimulation } from 'd3-force-3d';
 import { describe, expect, it } from 'vitest';
 import {
   collideRadiusFor,
@@ -39,6 +39,7 @@ function settle(nodes: Placed[], edges: DocEdge[], ticks = 500): Map<string, Pla
 
   const simulation = forceSimulation(nodes as never, 3)
     .force('charge', forceManyBody().strength(FORCES.charge))
+    .force('gravity', forceRadial(0).strength(FORCES.gravity))
     .force(
       'link',
       forceLink(links as never)

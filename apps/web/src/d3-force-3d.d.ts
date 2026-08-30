@@ -25,6 +25,8 @@ declare module 'd3-force-3d' {
 
   export function forceLink(links?: unknown[]): Force;
   export function forceManyBody(): Force;
+  /** Radius zero, which makes it a pull towards the middle rather than a shell. */
+  export function forceRadial(radius: number): Force;
 
   interface Simulation {
     force(name: string, force: unknown): Simulation;
