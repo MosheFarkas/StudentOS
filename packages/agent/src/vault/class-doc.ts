@@ -135,8 +135,15 @@ export async function writeClassDocs(
      * Names and descriptions rather than whole bodies: a body changes when a
      * file is re-read and says the same thing, and rewriting the page for that
      * is what this exists to avoid.
+     *
+     * The verdict is part of it, because the verdict is half of what the page
+     * says. When a room called French 11 stopped being read as a taught
+     * subject, none of its notes had changed -- so a hash over the notes alone
+     * skipped the page, and it went on calling itself a subject and being
+     * listed among the student's subjects, with the classifier already
+     * disagreeing.
      */
-    const hash = fingerprint([...notes, ...cluster]);
+    const hash = fingerprint([...notes, ...cluster], academic);
     const existing = await readDocument(vault, name);
     if (existing?.sourceHash === hash) {
       result.skipped += 1;
@@ -242,11 +249,11 @@ function titleOf(note: VaultNote): string {
   return first.replace(/,\s*on Google Classroom\.?\s*$/i, '').trim();
 }
 
-function fingerprint(notes: VaultNote[]): string {
-  const parts = notes
-    .map((note) => `${note.name}:${note.description}`)
-    .sort()
-    .join('\n');
+function fingerprint(notes: VaultNote[], academic: boolean): string {
+  const parts = [
+    `academic:${academic}`,
+    ...notes.map((note) => `${note.name}:${note.description}`).sort(),
+  ].join('\n');
   return createHash('sha256').update(parts).digest('hex').slice(0, 16);
 }
 

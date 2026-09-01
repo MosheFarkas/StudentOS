@@ -228,6 +228,55 @@ describe('writing a page per class', () => {
     expect(llm.chat).not.toHaveBeenCalled();
   });
 
+  it('rewrites a page when the classification changed but its notes did not', async () => {
+    /*
+     * The page says what the class is, and half of that is the verdict rather
+     * than the notes. A room called French 11 turned out to be a house; the
+     * classifier was corrected and agreed, and the page went on calling itself
+     * a taught subject -- and the student went on having French listed among
+     * their subjects -- because none of its coursework had changed and the
+     * cache was keyed on the coursework alone.
+     */
+    const first = llmSaying('# French\n\nA taught subject.');
+    await writeClassDocs(
+      { llm: first },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [verdict({ course: 'French A', academic: true })],
+      },
+    );
+
+    const second = llmSaying('# French\n\nA house, not a subject.');
+    const result = await writeClassDocs(
+      { llm: second },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [verdict({ course: 'French A', academic: false })],
+      },
+    );
+
+    expect(result.written).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect((await readDocument(vault, 'class-french'))?.body).toContain('not a subject');
+  });
+
+  it('still skips a page when neither the notes nor the verdict changed', async () => {
+    const llm = llmSaying('# French');
+    await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A' })] },
+    );
+    const again = await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A' })] },
+    );
+
+    expect(again.skipped).toBe(1);
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+  });
+
   it('writes nothing for a course the classifier never answered for', async () => {
     /*
      * A verdict with no subject is the absence of a verdict, not one. Naming a
