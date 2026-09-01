@@ -35,7 +35,42 @@ const llmReturning = (content: string) => ({
   })),
 });
 
-const saying = (...courses: Record<string, unknown>[]) => llmReturning(JSON.stringify({ courses }));
+/**
+ * A model that answers about a course by the number it was listed under.
+ *
+ * The real one is shown a numbered list and replies with numbers, because
+ * asking it to copy back "2025/2026 - 10 Science and Technology - 04 (ST and
+ * STE)" exactly is a coin toss that was lost on a real account. Tests still say
+ * which course they mean by name -- `course: 7` is a test nobody can read -- so
+ * this reads the list it was given and substitutes the number, exactly as the
+ * model it stands in for has to.
+ */
+const saying = (...courses: Record<string, unknown>[]) => ({
+  chat: vi.fn(async (request: { messages: { content?: unknown }[] }, _c?: unknown) => {
+    const asked = String(request.messages.at(-1)?.content ?? '');
+    const numberOf = (name: string): number | string => {
+      const line = asked
+        .split('\n')
+        .find((row) => row.trimEnd().endsWith(`. ${name}`) && /^\s*\d+\. /.test(row));
+      // Left as the name when the course was not in the list, so a test can
+      // still put an answer in front of the code that nothing asked for.
+      return line ? Number(line.trim().split('.')[0]) : name;
+    };
+
+    return {
+      content: JSON.stringify({
+        courses: courses.map((course) =>
+          typeof course.course === 'string'
+            ? { ...course, course: numberOf(course.course) }
+            : course,
+        ),
+      }),
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
+      finishReason: 'stop' as const,
+    };
+  }),
+});
 
 const TODAY = '2026-08-26';
 const opts = (courses: ClassifiableCourse[]) => ({
@@ -137,13 +172,18 @@ describe('deciding which courses belong in a vault', () => {
     expect(verdicts.map((v) => v.subject)).toEqual(['french', 'french']);
   });
 
-  it('keeps everything when the model answers with nothing usable', async () => {
+  it('holds a course, unjudged, when the model answers with nothing usable', async () => {
     /*
-     * Fails open, deliberately.
+     * Fails open on the data and closed on the claim.
      *
      * A classifier that returns garbage and is believed empties a student's
-     * vault. Keeping a course that should have gone costs a stale document;
-     * dropping one that should have stayed costs the year.
+     * vault, so the course and everything under it stay: dropping a course that
+     * should have stayed costs the year, and keeping one costs a stale page.
+     *
+     * But it used to be kept as `academic: true` under its own name as a
+     * subject, and that is a claim, not caution. On a real account it put last
+     * year's science back on a student's record as a current subject with a
+     * page named after its raw title. Silence knows nothing and now says so.
      */
     const llm = llmReturning('I am sorry, I cannot help with that.');
 
@@ -153,8 +193,67 @@ describe('deciding which courses belong in a vault', () => {
     );
 
     expect(verdicts).toEqual([
-      { course: 'Grade 10 Math', academic: true, subject: 'grade-10-math', year: null, keep: true },
+      { course: 'Grade 10 Math', academic: false, subject: null, year: null, keep: true },
     ]);
+  });
+
+  it('asks again about a course that went unanswered', async () => {
+    /*
+     * A gap is a failure, not a verdict. Seventeen answers for eighteen
+     * courses is what reinstated last year's science, and the cheapest thing
+     * that fixes it is asking about the missing one on its own.
+     */
+    const llm = saying({ course: 'Debating', academic: false, subject: 'debating', year: null });
+
+    await classifyCourses(
+      { llm },
+      opts([
+        { id: 'c-1', name: 'Debating' },
+        { id: 'c-2', name: 'Grade 10 Math' },
+      ]),
+    );
+
+    expect(llm.chat).toHaveBeenCalledTimes(2);
+    const second = String(
+      (llm.chat.mock.calls[1]?.[0].messages.at(-1) as { content: string }).content,
+    );
+    expect(second).toContain('Grade 10 Math');
+    expect(second).not.toContain('Debating');
+  });
+
+  it('does not ask again when every course was answered', async () => {
+    const llm = saying({ course: 'Debating', academic: false, subject: 'debating', year: null });
+    await classifyCourses({ llm }, opts([{ id: 'c-1', name: 'Debating' }]));
+
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+  });
+
+  it('identifies a course by number, so a name it cannot copy still lands', async () => {
+    /*
+     * The course that broke it, exactly as the school wrote it. Slashes,
+     * double hyphens, a bracketed acronym -- the hardest name on the roster to
+     * echo back verbatim, and the one that failed.
+     */
+    const name = '2025/2026 - 10 Science and Technology - 04 (ST and STE)';
+    const llm = saying({ course: name, academic: true, subject: 'science', year: '2025-2026' });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([{ id: 'c-1', name, lastActivity: '2026-06-16T13:00:00.000Z' }]),
+    );
+
+    expect(verdicts[0]?.subject).toBe('science');
+    expect(verdicts[0]?.keep).toBe(false);
+  });
+
+  it('never answers for a course it was not asked about', async () => {
+    // A number outside the list is not an answer to any question asked here.
+    const llm = llmReturning(
+      JSON.stringify({ courses: [{ course: 99, academic: true, subject: 'x' }] }),
+    );
+
+    const verdicts = await classifyCourses({ llm }, opts([{ id: 'c-1', name: 'Debating' }]));
+    expect(verdicts[0]?.subject).toBeNull();
   });
 
   it('keeps a course the model forgot to mention', async () => {

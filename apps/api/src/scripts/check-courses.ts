@@ -75,9 +75,10 @@ async function main(): Promise<void> {
   for (const verdict of verdicts) {
     const about = described.find((course) => course.name === verdict.course);
     console.log(
-      `${verdict.keep ? 'KEEP ' : 'DROP '} ${verdict.course.padEnd(width)}  ` +
-        `${verdict.academic ? 'subject   ' : 'not-taught'}  ` +
-        `${verdict.subject.padEnd(16)}  ${verdict.year ?? '----'}  ` +
+      `${verdict.subject === null ? 'HELD ' : verdict.keep ? 'KEEP ' : 'DROP '} ` +
+        `${verdict.course.padEnd(width)}  ` +
+        `${verdict.subject === null ? 'UNANSWERED' : verdict.academic ? 'subject   ' : 'not-taught'}  ` +
+        `${(verdict.subject ?? '----').padEnd(16)}  ${verdict.year ?? '----'}  ` +
         `${about?.workCount ?? 0} pieces of work, ${about?.graded ? 'marked' : 'unmarked'}` +
         `${about?.lastActivity ? `, last ${about.lastActivity}` : ', undated'}` +
         `${about?.courseState === 'ARCHIVED' ? ', archived' : ''}`,
@@ -86,6 +87,16 @@ async function main(): Promise<void> {
 
   const dropped = verdicts.filter((v) => !v.keep);
   console.log(`\n${dropped.length} of ${verdicts.length} would be dropped. Nothing was changed.`);
+
+  // Loudly, because a course going unanswered is what silently reinstated last
+  // year's science as a current subject.
+  const held = verdicts.filter((v) => v.subject === null);
+  if (held.length > 0) {
+    console.log(
+      `\n${held.length} went UNANSWERED even after asking again, and are held as they ` +
+        `are:\n${held.map((v) => `  - ${v.course}`).join('\n')}`,
+    );
+  }
 }
 
 await main();

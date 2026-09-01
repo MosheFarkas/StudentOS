@@ -172,6 +172,22 @@ async function refreshOne(
     },
   );
   const dropped = verdicts.filter((verdict) => !verdict.keep);
+
+  /*
+   * A course the classifier never answered for is worth saying out loud.
+   *
+   * Silence used to be indistinguishable from a verdict, and the build that
+   * reinstated last year's science as a current subject looked exactly like
+   * every other build in this log.
+   */
+  const held = verdicts.filter((verdict) => verdict.subject === null);
+  if (held.length > 0) {
+    console.warn(
+      `[vault] ${held.length} of ${verdicts.length} courses went unanswered by the ` +
+        `classifier and are held unjudged: ${held.map((v) => v.course).join(', ')}`,
+    );
+  }
+
   const classroom = await importClassroom(vault, filterSnapshot(snapshot, verdicts));
 
   /*

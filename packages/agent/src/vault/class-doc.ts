@@ -95,6 +95,11 @@ export async function writeClassDocs(
   /** subject -> the course notes it merges. */
   const subjects = new Map<string, { notes: VaultNote[]; academic: boolean }>();
   for (const verdict of kept) {
+    // A course the classifier never answered for has no subject to file it
+    // under, and guessing one is what wrote a page named after a raw course
+    // title. It waits for a build that gets an answer.
+    if (verdict.subject === null) continue;
+
     const found = notesFor(verdict.course);
     if (found.length === 0) continue;
 
@@ -186,8 +191,16 @@ export async function writeClassDocs(
    * Not when there were no verdicts at all, though. That is Classroom being
    * briefly unreachable, not a student dropping every subject they take, and
    * the two look identical from here -- so the one that deletes nothing wins.
+   *
+   * Nor when nothing was judged. A build where the classifier answered for no
+   * course at all leaves every verdict without a subject, and clearing the
+   * pages on that would empty a student's vault because one call failed.
+   *
+   * Judged and dropped is a different thing entirely, and still removes: that
+   * is a student who has finished a subject, which is the case this exists for.
    */
   if (verdicts.length === 0) return result;
+  if (verdicts.every((verdict) => verdict.subject === null)) return result;
 
   for (const document of await listDocuments(vault)) {
     if (!document.name.startsWith('class-') || wanted.has(document.name)) continue;

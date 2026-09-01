@@ -228,6 +228,53 @@ describe('writing a page per class', () => {
     expect(llm.chat).not.toHaveBeenCalled();
   });
 
+  it('writes nothing for a course the classifier never answered for', async () => {
+    /*
+     * A verdict with no subject is the absence of a verdict, not one. Naming a
+     * page from the course's own raw title is what put
+     * `class-2025-2026-10-science-and-technology-04-st-and-ste` in a real vault
+     * -- last year's science, reinstated as a current subject because one
+     * course went unanswered in an eighteen-course list.
+     */
+    const llm = llmSaying('# French');
+
+    const result = await writeClassDocs(
+      { llm },
+      { vault, userId: 'u-1', verdicts: [verdict({ course: 'French A', subject: null })] },
+    );
+
+    expect(result.written).toBe(0);
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
+  it('does not clear every page on a build that judged nothing', async () => {
+    /*
+     * One failed call must not empty a student's vault. A build where no course
+     * came back judged looks identical to a student who dropped every subject
+     * they take, and only one of the two readings is recoverable.
+     */
+    await writeClassDocs(
+      { llm: llmSaying('# French') },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [verdict({ course: 'French A' })],
+      },
+    );
+
+    const result = await writeClassDocs(
+      { llm: llmSaying('# French') },
+      {
+        vault,
+        userId: 'u-1',
+        verdicts: [verdict({ course: 'French A', subject: null })],
+      },
+    );
+
+    expect(result.removed).toBe(0);
+    expect(await readDocument(vault, 'class-french')).not.toBeNull();
+  });
+
   it('links the rooms it was written from, whatever the writer wrote', async () => {
     /*
      * Not asked for in the prompt, because asked-for is how it went missing.

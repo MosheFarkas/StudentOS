@@ -97,7 +97,15 @@ export interface CourseVerdict {
   /** A taught, graded class, as opposed to a club, advisory or house group. */
   academic: boolean;
   /** The document this course is written into. Two rooms of a subject share one. */
-  subject: string;
+  /**
+   * The class a student would say they have, as a slug: several rooms of one
+   * subject share it.
+   *
+   * Null when the classifier never answered for this course. That is not a
+   * verdict but the absence of one, and it means the course is held as it is:
+   * no page is written for it and nothing claims to know what it is.
+   */
+  subject: string | null;
   /** The academic year it belongs to, as `2025-2026`, where its name says so. */
   year: string | null;
   keep: boolean;
@@ -134,7 +142,8 @@ const verdicts = z.object({
   courses: z
     .array(
       z.object({
-        course: z.string(),
+        // Coerced, because a model asked for a number will sometimes quote it.
+        course: z.coerce.number().int(),
         academic: z.boolean(),
         subject: z.string(),
         year: z.string().nullish(),
@@ -149,9 +158,10 @@ const ASK = [
   'what tells you that "Grade 11 Advisory" is not a subject the way its neighbours are.',
   '',
   'Reply with JSON only, no prose around it:',
-  '{"courses": [{"course": string, "academic": boolean, "subject": string, "year": string | null}]}',
+  '{"courses": [{"course": number, "academic": boolean, "subject": string, "year": string | null}]}',
   '',
-  'course must be copied exactly from the list you are given.',
+  'course is the NUMBER the course is listed under, not its name. Never copy the name',
+  'into it. Answer for every number in the list, including any you are unsure about.',
   '',
   'academic is true for a taught subject: a body of knowledge with a syllabus, the',
   'kind of thing that appears on a report card. It is false for anything a student',
@@ -205,77 +215,109 @@ export async function classifyCourses(
   if (courses.length === 0) return [];
 
   /*
-   * Wrapped, because every word of it is a teacher's.
+   * Every course is addressed by the number it is listed under, never by name.
    *
-   * Course names, briefs, handouts and announcements come straight off
-   * Classroom. An announcement asserting that a course is a club -- or that all
-   * of them are finished -- would otherwise arrive in the same voice as the
-   * question being asked about it. The blast cap on the sweep stops the worst
-   * outcome; this stops the attempt from reading as an instruction at all.
+   * The names belong to teachers, and one of them was "2025/2026 - 10 Science
+   * and Technology - 04 (ST and STE)". Asking a model to copy that back exactly
+   * and then matching on the string is a coin toss, and the toss was lost on a
+   * real account: the answer came back for seventeen of eighteen courses, the
+   * missing one fell through to the branch below, and last year's science was
+   * reinstated as a current subject with a page named after its own raw title.
+   *
+   * A number cannot be misspelt, cannot carry an accent or an emoji, and does
+   * not change when the name is defanged on the way in.
    */
-  const listed = [
-    '<untrusted>',
-    untrustedNote('The courses below are described in their teachers’ own words.'),
-    '',
-    courses.map(describe).join('\n\n'),
-    '</untrusted>',
-  ].join('\n');
+  const numbered = new Map(courses.map((course, index) => [index + 1, course]));
 
-  let answered: z.infer<typeof verdicts>['courses'] = [];
-  try {
+  const answered = new Map<number, z.infer<typeof verdicts>['courses'][number]>();
+
+  /** Ask about some of the courses, keeping the numbers they are listed under. */
+  const ask = async (asking: readonly number[]): Promise<void> => {
     /*
-     * Retried before it is allowed to fail open.
+     * Wrapped, because every word of it is a teacher's.
      *
-     * Failing open on a rate limit means keeping every course this build, which
-     * is safe and also wrong -- and on an account whose files are being read at
-     * the same time, a 429 is the likeliest error there is.
+     * Course names, briefs, handouts and announcements come straight off
+     * Classroom. An announcement asserting that a course is a club -- or that
+     * all of them are finished -- would otherwise arrive in the same voice as
+     * the question being asked about it. The blast cap on the sweep stops the
+     * worst outcome; this stops the attempt from reading as an instruction at
+     * all.
      */
-    const response = await retrying(() =>
-      llm.chat(
-        {
-          messages: [
-            { role: 'system', content: ASK },
-            {
-              role: 'user',
-              content: [
-                `Today is ${today}.`,
-                school
-                  ? `\nWhat is known about the school, which may name its houses and its\nadvisory or pastoral programmes:\n\n${school}\n`
-                  : '',
-                `\nThe courses:\n${listed}`,
-              ].join('\n'),
-            },
-          ],
-        },
-        { userId },
-      ),
-    );
-    answered = parse(response.content)?.courses ?? [];
-  } catch {
-    // Fails open, leaving `answered` empty: see the note at the top of this
-    // file. Every course then falls through to the "not mentioned" branch and
-    // is kept.
-  }
+    const listed = [
+      '<untrusted>',
+      untrustedNote('The courses below are described in their teachers’ own words.'),
+      '',
+      asking.map((n) => describe(numbered.get(n) as ClassifiableCourse, n)).join('\n\n'),
+      '</untrusted>',
+    ].join('\n');
 
-  const byName = new Map(answered.map((verdict) => [verdict.course, verdict]));
+    try {
+      /*
+       * Retried before it is allowed to fail open.
+       *
+       * Failing open on a rate limit means every course going unjudged this
+       * build, which is safe and also wrong -- and on an account whose files
+       * are being read at the same time, a 429 is the likeliest error there is.
+       */
+      const response = await retrying(() =>
+        llm.chat(
+          {
+            messages: [
+              { role: 'system', content: ASK },
+              {
+                role: 'user',
+                content: [
+                  `Today is ${today}.`,
+                  school
+                    ? `\nWhat is known about the school, which may name its houses and its\nadvisory or pastoral programmes:\n\n${school}\n`
+                    : '',
+                  `\nThe courses:\n${listed}`,
+                ].join('\n'),
+              },
+            ],
+          },
+          { userId },
+        ),
+      );
 
-  return courses.map((course) => {
-    const said = byName.get(course.name);
+      for (const said of parse(response.content)?.courses ?? []) {
+        // A number for a course that was not asked about is not an answer to
+        // any question here.
+        if (numbered.has(said.course)) answered.set(said.course, said);
+      }
+    } catch {
+      // Leaves those courses unanswered: see the note on the limbo branch below.
+    }
+  };
+
+  await ask([...numbered.keys()]);
+
+  /*
+   * Anything unanswered is asked again, on its own.
+   *
+   * A gap is a failure rather than a verdict, and a shorter list is the most
+   * likely thing to fix it -- a long answer that stopped early, or a course
+   * skipped in the middle of one. Once: a second silence is a real one.
+   */
+  const missing = [...numbered.keys()].filter((n) => !answered.has(n));
+  if (missing.length > 0) await ask(missing);
+
+  return courses.map((course, index) => {
+    const said = answered.get(index + 1);
+
     /*
-     * A course the model did not mention is kept, not dropped.
+     * A course still unanswered is held, not decided.
      *
-     * A truncated answer, a name it failed to copy back, a list longer than it
-     * was willing to enumerate -- every one of those is silence, and silence
-     * must never read as "delete this".
+     * Silence knows nothing, so it must not assert the expensive claim. It used
+     * to return `academic: true` with the course's own name as its subject,
+     * which put a subject the student does not take onto their record and gave
+     * it a page. Now the course and its notes stay exactly where they are --
+     * losing a real class to a failed call is the worse mistake -- but no
+     * subject is claimed, so nothing writes a page for it and nothing sweeps
+     * it away. The next build decides it properly.
      */
     if (!said) {
-      return {
-        course: course.name,
-        academic: true,
-        subject: slugForNote(course.name),
-        year: null,
-        keep: true,
-      };
+      return { course: course.name, academic: false, subject: null, year: null, keep: true };
     }
 
     const year = said.year ?? null;
@@ -301,14 +343,13 @@ export async function classifyCourses(
     };
   });
 }
-
 /** Angle brackets folded, so nothing a school typed can close the wrapper. */
 function defang(text: string): string {
   return text.replaceAll('<', '‹').replaceAll('>', '›');
 }
 
 /** One course, as much of it as fits, for the classifier to read. */
-function describe(course: ClassifiableCourse): string {
+function describe(course: ClassifiableCourse, listedAs: number): string {
   const some = (label: string, items: string[] | undefined, total?: number): string[] => {
     if (!items || items.length === 0) return [];
     const more = total !== undefined && total > items.length ? ` (${total} in all)` : '';
@@ -316,7 +357,7 @@ function describe(course: ClassifiableCourse): string {
   };
 
   return [
-    `- ${defang(course.name)}`,
+    `${listedAs}. ${defang(course.name)}`,
     ...(course.section ? [`  Section: ${defang(course.section)}`] : []),
     ...(course.courseState === 'ARCHIVED' ? ['  The school has archived this one.'] : []),
     ...(course.lastActivity ? [`  Last dated activity: ${course.lastActivity}`] : []),
