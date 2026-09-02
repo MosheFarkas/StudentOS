@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { createDatabase, agents, session, user, type Database } from '@contexto/db';
+import { createDatabase, account, agents, session, user, type Database } from '@contexto/db';
 
 /**
  * Integration-test harness.
@@ -74,6 +74,27 @@ export async function createUser(): Promise<TestUser> {
   });
 
   return { id, email, token };
+}
+
+/**
+ * Give a user a Google grant with these scopes, as signing in would have.
+ *
+ * The tokens are placeholders. A test that needs Google to answer stubs the
+ * auth's getAccessToken, because a real refresh would dial Google.
+ */
+export async function grantGoogle(userId: string, scopes: readonly string[]): Promise<void> {
+  const database = await testDb();
+  const now = new Date();
+  await database.insert(account).values({
+    id: randomUUID(),
+    accountId: `google:${userId}`,
+    providerId: 'google',
+    userId,
+    scope: scopes.join(' '),
+    refreshToken: 'stale',
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 export async function createAgent(userId: string, name = 'Test Agent') {

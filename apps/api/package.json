@@ -14,7 +14,8 @@
     "recover-courses": "tsx src/scripts/recover-courses.ts",
     "build-vault": "tsx src/scripts/build-vault.ts",
     "research-school": "tsx src/scripts/research-school.ts",
-    "check-courses": "tsx src/scripts/check-courses.ts"
+    "check-courses": "tsx src/scripts/check-courses.ts",
+    "vault-readiness": "tsx src/scripts/vault-readiness.ts"
   },
   "dependencies": {
     "@contexto/agent": "workspace:*",

@@ -44,3 +44,6 @@ async function main(): Promise<void> {
 }
 
 await main();
+// The context keeps a database pool alive, and a build refused at the gate has
+// nothing left to wait for -- without this it sat idle until somebody killed it.
+process.exit(0);

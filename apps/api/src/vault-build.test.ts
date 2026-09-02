@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildProgress,
   buildRunning,
+  checkReadiness,
+  grantedScopes,
   reportProgress,
   startBuild,
+  unreadyReason,
   vaultReadiness,
 } from './vault-build.js';
 
@@ -29,9 +32,26 @@ describe('whether a vault can be built', () => {
     expect(missing.join(' ')).toMatch(/classroom/i);
   });
 
-  it('is ready with Classroom alone', () => {
-    // Mail and files make it richer. Courses make it exist.
-    expect(vaultReadiness([CLASSROOM, COURSEWORK], 'lyliu@wearelcc.ca').ready).toBe(true);
+  it('is not ready with Classroom alone', () => {
+    /*
+     * A vault of coursework alone used to count. It does not any more: a
+     * student whose mail or files are missing gets a vault that looks finished
+     * and is not, and nobody notices until the agent cannot answer something.
+     * Everything needed has to be consented before anything is built.
+     */
+    const { ready, missing } = vaultReadiness([CLASSROOM, COURSEWORK], 'lyliu@wearelcc.ca');
+    expect(ready).toBe(false);
+    expect(missing).toEqual(['Gmail', 'Drive']);
+  });
+
+  it('is ready once Classroom, Gmail and a whole Drive are all consented', () => {
+    const { ready, missing } = vaultReadiness([CLASSROOM, GMAIL, DRIVE_ALL], 'lyliu@wearelcc.ca');
+    expect(ready).toBe(true);
+    expect(missing).toEqual([]);
+  });
+
+  it('is ready on a personal address with Classroom and Drive, since mail cannot apply', () => {
+    expect(vaultReadiness([CLASSROOM, DRIVE_ALL], 'someone@gmail.com').ready).toBe(true);
   });
 
   it('says what is missing rather than only that something is', () => {
@@ -68,6 +88,78 @@ describe('whether a vault can be built', () => {
     expect(ready).toBe(false);
     expect(missing.length).toBeGreaterThan(0);
     expect(new Set(missing).size).toBe(missing.length);
+  });
+
+  it('reads the stored scope string however Google spaced it', () => {
+    expect(grantedScopes(`${CLASSROOM} ${GMAIL},${DRIVE_ALL}`)).toEqual([
+      CLASSROOM,
+      GMAIL,
+      DRIVE_ALL,
+    ]);
+    expect(grantedScopes(null)).toEqual([]);
+    expect(grantedScopes('  ')).toEqual([]);
+  });
+});
+
+/**
+ * Consent on paper is not access.
+ *
+ * Two testers had every scope stored and a refresh token Google had stopped
+ * honouring -- the app is unpublished, so its tokens die after seven days. The
+ * build asked Google, got nothing back, and wrote an empty vault with a
+ * summary that read like a student with no school. So readiness has to try
+ * minting a token, and say "sign in again" when that fails, which is a
+ * different fix from "grant Drive".
+ */
+describe('whether Google still honours the consent', () => {
+  const everything = [CLASSROOM, GMAIL, DRIVE_ALL];
+
+  it('does not bother Google when a scope is missing anyway', async () => {
+    let minted = 0;
+    const readiness = await checkReadiness([CLASSROOM, GMAIL], 'lyliu@wearelcc.ca', async () => {
+      minted += 1;
+      return 'ya29.token';
+    });
+    expect(readiness.ready).toBe(false);
+    expect(readiness.expired).toBe(false);
+    expect(readiness.missing).toEqual(['Drive']);
+    expect(minted).toBe(0);
+  });
+
+  it('is expired when everything is consented and Google refuses a token', async () => {
+    const readiness = await checkReadiness(everything, 'lyliu@wearelcc.ca', async () => null);
+    expect(readiness.ready).toBe(false);
+    expect(readiness.expired).toBe(true);
+    expect(readiness.missing).toEqual([]);
+  });
+
+  it('is ready when everything is consented and a token still comes back', async () => {
+    const readiness = await checkReadiness(
+      everything,
+      'lyliu@wearelcc.ca',
+      async () => 'ya29.token',
+    );
+    expect(readiness.ready).toBe(true);
+    expect(readiness.expired).toBe(false);
+  });
+});
+
+describe('saying why a vault will not be built', () => {
+  it('tells an expired student to sign in again', () => {
+    expect(unreadyReason({ ready: false, missing: [], expired: true })).toMatch(/sign in again/i);
+  });
+
+  it('names what has not been consented', () => {
+    expect(unreadyReason({ ready: false, missing: ['Gmail', 'Drive'], expired: false })).toBe(
+      'Gmail and Drive not consented',
+    );
+    expect(unreadyReason({ ready: false, missing: ['Drive'], expired: false })).toBe(
+      'Drive not consented',
+    );
+  });
+
+  it('has nothing to say about a student who is ready', () => {
+    expect(unreadyReason({ ready: true, missing: [], expired: false })).toBe('');
   });
 });
 

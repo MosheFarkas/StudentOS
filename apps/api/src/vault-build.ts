@@ -15,20 +15,31 @@ const GMAIL_MODIFY = 'gmail.modify';
 const DRIVE_ALL = 'drive.readonly';
 
 export interface Readiness {
-  /** Whether there is enough connected to build anything at all. */
+  /** Whether everything a build needs is consented and still usable. */
   ready: boolean;
   /** What is missing, in the words the settings page uses for it. */
   missing: string[];
+  /**
+   * Consented on paper, refused in practice: Google no longer honours the
+   * refresh token, so the student has to sign in again. An unpublished app
+   * gets seven-day tokens, which is how two testers with every scope stored
+   * came to have empty vaults built for them without a word of warning.
+   */
+  expired: boolean;
+}
+
+/** The stored scope string, as the list Google actually granted. */
+export function grantedScopes(scope: string | null | undefined): string[] {
+  return (scope ?? '').split(/[\s,]+/).filter(Boolean);
 }
 
 /**
- * What a vault can be built from, given what the student has connected.
+ * What a vault can be built from, given what the student has consented.
  *
- * Classroom is the only requirement: courses are what everything else hangs
- * off, and without them there is nothing for an email or a file to be about.
- * Mail and Drive are reported as missing rather than blocking, because a vault
- * of coursework alone is worth having and worth saying is thinner than it
- * could be.
+ * All of it, or nothing is built. Classroom is where the courses come from,
+ * mail is where the people and the announcements come from, and Drive is
+ * where the work itself is. A vault missing any of them looks finished and is
+ * not, and nobody notices until the agent cannot answer something it should.
  */
 export function vaultReadiness(scopes: readonly string[], email: string): Readiness {
   const has = (needle: string) => scopes.some((scope) => scope.includes(needle));
@@ -51,7 +62,38 @@ export function vaultReadiness(scopes: readonly string[], email: string): Readin
    */
   if (!has(DRIVE_ALL)) missing.push('Drive');
 
-  return { ready: !missing.includes('Classroom'), missing };
+  return { ready: missing.length === 0, missing, expired: false };
+}
+
+/**
+ * Readiness that also asks Google.
+ *
+ * `mint` should try for an access token the way the build will, resolving
+ * null when Google refuses. It is only tried once every scope is there: a
+ * student who has not consented to Drive is not ready whatever Google says,
+ * and asking would be a network call to learn nothing.
+ */
+export async function checkReadiness(
+  scopes: readonly string[],
+  email: string,
+  mint: () => Promise<string | null>,
+): Promise<Readiness> {
+  const onPaper = vaultReadiness(scopes, email);
+  if (!onPaper.ready) return onPaper;
+  if (!(await mint())) return { ready: false, missing: [], expired: true };
+  return onPaper;
+}
+
+/** Why a vault will not be built, for a log line or a script. Empty when it will. */
+export function unreadyReason(readiness: Readiness): string {
+  if (readiness.expired) return 'Google access expired, sign in again';
+  if (readiness.missing.length === 0) return '';
+  const missing = readiness.missing;
+  const list =
+    missing.length === 1
+      ? missing[0]
+      : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+  return `${list} not consented`;
 }
 
 /**

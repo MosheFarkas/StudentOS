@@ -32,7 +32,13 @@ import {
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
 import type { AppContext } from './context.js';
-import { reportProgress, type BuildPhase } from './vault-build.js';
+import {
+  checkReadiness,
+  grantedScopes,
+  reportProgress,
+  unreadyReason,
+  type BuildPhase,
+} from './vault-build.js';
 
 /**
  * Keeping ContextoVault current.
@@ -114,13 +120,25 @@ async function refreshOne(
   if (!owner) return 'no owner';
 
   const grant = await getGoogleGrant(ctx.db, userId);
-  if (!grant.scope) return 'google not connected';
+  const google = new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope);
 
-  const toolContext: ToolContext = {
-    userId,
-    agentId,
-    google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
-  };
+  /*
+   * Everything consented and still honoured, or nothing is built.
+   *
+   * Here because this is the one path every build takes -- the button, the
+   * timer and the script. A build that went ahead on a dead token wrote an
+   * empty vault and a summary that read like a student with no school.
+   */
+  const readiness = await checkReadiness(grantedScopes(grant.scope), owner.email, () =>
+    google.getAccessToken('classroom'),
+  );
+  if (!readiness.ready) {
+    const why = unreadyReason(readiness);
+    console.warn(`[vault] ${userId} not built: ${why}`);
+    return `not ready: ${why}`;
+  }
+
+  const toolContext: ToolContext = { userId, agentId, google };
 
   const vault = new Vault(ctx.env.VAULT_ROOT as string, userId);
 

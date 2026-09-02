@@ -12,9 +12,30 @@ import {
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
-import { getGoogleGrant } from '../google/connections.js';
-import { buildProgress, buildRunning, startBuild, vaultReadiness } from '../vault-build.js';
+import { BetterAuthGoogleTokenProvider, getGoogleGrant } from '../google/connections.js';
+import {
+  buildProgress,
+  buildRunning,
+  checkReadiness,
+  grantedScopes,
+  startBuild,
+  type Readiness,
+} from '../vault-build.js';
 import { refreshVaultFor } from '../vault-refresh.js';
+
+/**
+ * Whether this student's vault can be built: everything consented, and Google
+ * still honouring it. The same question the build asks itself, so what the
+ * page shows is what pressing the button would do.
+ */
+async function readinessOf(ctx: AppContext, userId: string): Promise<Readiness> {
+  const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
+  const grant = await getGoogleGrant(ctx.db, userId);
+  const google = new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope);
+  return checkReadiness(grantedScopes(grant.scope), owner?.email ?? '', () =>
+    google.getAccessToken('classroom'),
+  );
+}
 
 /**
  * The student's vault, as something they own rather than something an agent has.
@@ -31,12 +52,7 @@ export function createVaultRoutes(ctx: AppContext) {
     new Hono<{ Variables: AuthVariables }>()
       .get('/', auth, async (c) => {
         const userId = c.get('userId');
-        const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
-        const grant = await getGoogleGrant(ctx.db, userId);
-        const readiness = vaultReadiness(
-          (grant.scope ?? '').split(/[\s,]+/).filter(Boolean),
-          owner?.email ?? '',
-        );
+        const readiness = await readinessOf(ctx, userId);
 
         const root = ctx.env?.VAULT_ROOT;
         if (!root) {
@@ -233,12 +249,7 @@ export function createVaultRoutes(ctx: AppContext) {
        */
       .post('/build', auth, async (c) => {
         const userId = c.get('userId');
-        const [owner] = await ctx.db.select().from(user).where(eq(user.id, userId)).limit(1);
-        const grant = await getGoogleGrant(ctx.db, userId);
-        const readiness = vaultReadiness(
-          (grant.scope ?? '').split(/[\s,]+/).filter(Boolean),
-          owner?.email ?? '',
-        );
+        const readiness = await readinessOf(ctx, userId);
 
         if (!readiness.ready) {
           return c.json({ started: false, reason: 'not-connected', ...readiness }, 400);
