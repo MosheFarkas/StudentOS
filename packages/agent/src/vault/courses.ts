@@ -330,16 +330,32 @@ export async function classifyCourses(
      * whatever the school did with the archive button. Only where nothing is
      * dated do the weaker signals get a say.
      */
+    const begun = academicYearStart(today, ends);
     const over = course.lastActivity
-      ? course.lastActivity < academicYearStart(today, ends)
+      ? course.lastActivity < begun
       : course.courseState === 'ARCHIVED' || hasEnded(year, today, ends);
+
+    /*
+     * Older than last year, which nothing survives.
+     *
+     * A subject is over the moment its year ends. A club is not -- the same
+     * room runs for years -- but a vault built for a Grade 11 listed a Grade 7
+     * house and a robotics team from three years back as things they do now.
+     * Last year is as far back as anything is kept, subject or not. Judged on
+     * the same evidence as above, and on none of it a course is left alone:
+     * deleting on no evidence is the worse mistake.
+     */
+    const lastYearBegan = yearBefore(begun);
+    const older = course.lastActivity
+      ? course.lastActivity < lastYearBegan
+      : endedBy(year, lastYearBegan, ends);
 
     return {
       course: course.name,
       academic: said.academic,
       subject: slugForNote(said.subject),
       year,
-      keep: !(said.academic && over),
+      keep: !(said.academic && over) && !older,
     };
   });
 }
@@ -389,13 +405,28 @@ export function academicYearStart(today: string, yearEnd: string): string {
  * in -- and asks whether the school's own year-end has passed since.
  */
 function hasEnded(year: string | null, today: string, yearEnd: string): boolean {
-  if (!year) return false;
+  const ends = yearEndsOn(year, yearEnd);
+  return ends !== null && today >= ends;
+}
+
+/** Whether a stated academic year was already over when the given year began. */
+function endedBy(year: string | null, began: string, yearEnd: string): boolean {
+  const ends = yearEndsOn(year, yearEnd);
+  return ends !== null && ends <= began;
+}
+
+/** The date a stated academic year ends on, or null where nothing states one. */
+function yearEndsOn(year: string | null, yearEnd: string): string | null {
+  if (!year) return null;
 
   const years = year.match(/\d{4}/g);
   const ends = years?.[years.length - 1];
-  if (!ends) return false;
+  return ends ? `${ends}-${yearEnd}` : null;
+}
 
-  return today >= `${ends}-${yearEnd}`;
+/** The same date one year earlier: when the year before began. */
+function yearBefore(date: string): string {
+  return `${Number(date.slice(0, 4)) - 1}${date.slice(4)}`;
 }
 
 function parse(content: unknown): z.infer<typeof verdicts> | null {

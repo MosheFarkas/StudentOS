@@ -98,24 +98,105 @@ describe('deciding which courses belong in a vault', () => {
     expect(verdicts[0]?.keep).toBe(false);
   });
 
-  it('keeps a club however long it has been archived', async () => {
+  it('keeps a club from last year, archived or not', async () => {
     /*
      * The failure this pass exists to avoid.
      *
-     * Model UN, house groups and advisory rooms run for years and are archived
-     * like anything else. Judging them by age deletes the half of a student's
-     * school life that is not a subject.
+     * Model UN, house groups and advisory rooms are archived like anything
+     * else at the end of a year. Judging them like a subject deletes the half
+     * of a student's school life that is not one.
      */
     const llm = saying({
       course: 'Model UN',
       academic: false,
       subject: 'model-un',
-      year: '2024-2025',
+      year: '2025-2026',
     });
 
     const verdicts = await classifyCourses(
       { llm },
       opts([{ id: 'c-1', name: 'Model UN', courseState: 'ARCHIVED' }]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(true);
+  });
+
+  it('drops a club whose last activity was before last year began', async () => {
+    /*
+     * Not a subject, so the year-end rule leaves it alone -- and a vault built
+     * for a Grade 11 came out listing a Grade 7 house and a robotics team from
+     * three years back as things they do. Last year is as far back as anything
+     * survives, subject or not.
+     */
+    const llm = saying({
+      course: 'Robotics 2022/2023',
+      academic: false,
+      subject: 'robotics',
+      year: '2022-2023',
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([
+        {
+          id: 'c-1',
+          name: 'Robotics 2022/2023',
+          courseState: 'ARCHIVED',
+          lastActivity: '2023-05-11',
+        },
+      ]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(false);
+  });
+
+  it('drops a club its own name puts two years back, when nothing in it is dated', async () => {
+    const llm = saying({
+      course: 'Heward 7 2022/23',
+      academic: false,
+      subject: 'heward',
+      year: '2022-2023',
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([{ id: 'c-1', name: 'Heward 7 2022/23', courseState: 'ARCHIVED' }]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(false);
+  });
+
+  it('keeps a club that was active last year, whatever its name says', async () => {
+    // A room made years ago and still in use is judged by its activity.
+    const llm = saying({
+      course: 'IT Club 2021-22',
+      academic: false,
+      subject: 'it-club',
+      year: '2021-2022',
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([
+        { id: 'c-1', name: 'IT Club 2021-22', courseState: 'ACTIVE', lastActivity: '2025-10-03' },
+      ]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(true);
+  });
+
+  it('leaves an archived club alone when nothing says how old it is', async () => {
+    // No date and no year is no evidence. Deleting on none is the worse mistake.
+    const llm = saying({
+      course: 'Chess Club',
+      academic: false,
+      subject: 'chess-club',
+      year: null,
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([{ id: 'c-1', name: 'Chess Club', courseState: 'ARCHIVED' }]),
     );
 
     expect(verdicts[0]?.keep).toBe(true);
