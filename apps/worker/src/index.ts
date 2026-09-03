@@ -24,6 +24,7 @@ import {
   updateChatsDoc,
   writeUserDoc,
 } from '@contexto/agent';
+import { groupByStudent } from './grouping.js';
 
 /**
  * Everything the jobs share, built once.
@@ -121,18 +122,8 @@ const jobs: Job[] = [
       const stale = await ctx.profiles.stale(BATCH_SIZE, QUIET_FOR);
       if (stale.length === 0) return;
 
-      /*
-       * Grouped by student, because the page is theirs.
-       *
-       * Staleness is tracked per agent -- that is where the watermark lives --
-       * but there is one page per student. Two of their agents going quiet in
-       * the same pass would otherwise race to rewrite the same file, and one of
-       * the two rewrites would be thrown away.
-       */
-      const byStudent = new Map<string, string[]>();
-      for (const { agentId, userId } of stale) {
-        byStudent.set(userId, [...(byStudent.get(userId) ?? []), agentId]);
-      }
+      // Grouped by student, because the page is theirs. See groupByStudent.
+      const byStudent = groupByStudent(stale);
 
       let changed = 0;
       let recorded = 0;
