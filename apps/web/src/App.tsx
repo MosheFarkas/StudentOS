@@ -142,7 +142,7 @@ export function App() {
             <Chat key={route.agentId} agentId={route.agentId} />
           )}
 
-          {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'new' })} />}
+          {route.name === 'settings' && <Settings />}
 
           {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
 

@@ -14,7 +14,7 @@ import { TelegramConnection } from './TelegramConnection.js';
  * server-side and only ever comes back as a label and last four characters --
  * see packages/llm/src/vault.ts.
  */
-export function Settings({ onBack }: { onBack: () => void }) {
+export function Settings() {
   const [usage, setUsage] = useState<UsageStatus | null>(null);
 
   /*
@@ -36,10 +36,11 @@ export function Settings({ onBack }: { onBack: () => void }) {
 
   return (
     <>
+      {/*
+        No way back here either, for the reason the conversation has none:
+        the rail is on screen with every chat on it and New at the top.
+      */}
       <div className="chat-header">
-        <button className="quiet" onClick={onBack}>
-          ← Agents
-        </button>
         <strong>Settings</strong>
       </div>
 
