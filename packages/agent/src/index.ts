@@ -18,6 +18,12 @@ export { PostgresProfileStore } from './memory/profile-store.js';
 
 export { UNTRUSTED_RULE, untrustedNote } from './untrusted.js';
 export { Vault, type VaultNote, type NoteKind, type NoteSource } from './vault/vault.js';
+export {
+  UPLOAD_LIMIT_BYTES,
+  importUpload,
+  type UploadRefusal,
+  type UploadResult,
+} from './vault/upload.js';
 export { renderNotes } from './vault/render.js';
 export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';
 export { absorptions, collapse, isNumbered, type Absorption } from './vault/collapse.js';

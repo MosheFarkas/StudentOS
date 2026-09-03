@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { user } from '@contexto/db';
 import { addCredentialSchema, ContextoError, type UsageStatus } from '@contexto/shared';
+import { UPLOAD_LIMIT_BYTES, Vault, importUpload } from '@contexto/agent';
+import type { UploadRefusal } from '@contexto/agent';
 import { currentWindowEnd, currentWindowStart } from '@contexto/llm';
 import type { AppContext } from '../context.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -77,6 +79,52 @@ export function createRoutes(ctx: AppContext) {
         },
       )
 
+      /**
+       * A file from the student's own machine.
+       *
+       * It lands in the vault rather than on a message, so it outlives the
+       * conversation it was attached to and every later chat can read it. The
+       * turn needs no plumbing for it: the message names what was attached and
+       * the agent opens it by name, exactly as it opens anything else there.
+       *
+       * Nothing is stored but the text. The bytes are read, extracted from and
+       * dropped -- there is no file store to secure, back up or bill for, and
+       * the thing worth keeping was never the PDF.
+       */
+      .post('/uploads', auth, async (c) => {
+        if (!ctx.env?.VAULT_ROOT) {
+          throw new ContextoError(
+            'validation_failed',
+            'This deployment has no vault to upload into.',
+          );
+        }
+
+        const body = await c.req.parseBody();
+        const file = body['file'];
+        if (!(file instanceof File)) {
+          throw new ContextoError('validation_failed', 'No file was attached.');
+        }
+
+        /*
+         * Checked before the body is read into memory as well as inside
+         * importUpload. The inner check is the one that is correct; this one
+         * is the one that is cheap.
+         */
+        if (file.size > UPLOAD_LIMIT_BYTES) {
+          throw new ContextoError('validation_failed', REFUSALS['too-large']);
+        }
+
+        const vault = new Vault(ctx.env.VAULT_ROOT, c.get('userId'));
+        const result = await importUpload(vault, {
+          filename: file.name,
+          mimeType: file.type,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        });
+
+        if (!result.ok) throw new ContextoError('validation_failed', REFUSALS[result.reason]);
+        return c.json({ name: result.name, filename: file.name });
+      })
+
       .route('/agents', createAgentRoutes(ctx))
       .route('/google', createGoogleRoutes(ctx))
       .route('/vault', createVaultRoutes(ctx))
@@ -143,3 +191,21 @@ export function createRoutes(ctx: AppContext) {
 }
 
 export type AppRoutes = ReturnType<typeof createRoutes>;
+
+/**
+ * Why a file was turned away, in words a student can act on.
+ *
+ * Kept beside the route rather than in the vault module: what the extractor
+ * reports is a fact about the file, and what to say about it is a fact about
+ * this product. "no-text-layer" is the one that earns its own sentence -- a
+ * scanned worksheet is not a broken file, and telling a student it failed
+ * would send them looking for a fault that is not there.
+ */
+const REFUSALS: Record<UploadRefusal, string> = {
+  'too-large': 'That file is too big. The limit is 10MB.',
+  'unsupported-type': 'That kind of file cannot be read yet -- PDFs and text files can.',
+  empty: 'There was no text in that file.',
+  'no-text-layer':
+    'That PDF looks like a scan -- pictures of text rather than text. Reading those needs OCR, which is not built yet.',
+  unreadable: 'That PDF could not be opened. It may be password-protected or damaged.',
+};

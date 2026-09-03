@@ -2079,3 +2079,66 @@ a.button {
     transition: none;
   }
 }
+
+/* ---------- attaching a file ---------- */
+
+.attach {
+  position: relative;
+  display: flex;
+}
+
+/*
+ * Opens upward. The composer sits low on the screen and a menu dropping from
+ * it would open off the bottom of the window on a short viewport.
+ */
+.attach-menu {
+  position: absolute;
+  bottom: calc(100% + 0.4rem);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 14rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.attach-menu button {
+  text-align: left;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.88rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.attach-menu button:hover {
+  background: var(--wash);
+}
+
+.attach-status {
+  font-size: 0.82rem;
+}
+
+/*
+ * Where a file came from, in the chip's own colour. An uploaded file lives in
+ * the vault for good and a Drive file is only borrowed for the turn, which is
+ * a difference worth being able to see at a glance.
+ */
+.file-chip.from-upload {
+  border-color: rgba(80, 16, 208, 0.35);
+  background: rgba(80, 16, 208, 0.06);
+  color: var(--violet-dark);
+}
+
+.file-chip.from-drive {
+  border-color: rgba(47, 155, 188, 0.4);
+  background: rgba(47, 155, 188, 0.08);
+  color: #1d6f88;
+}

@@ -177,12 +177,70 @@ describe('the new-chat screen', () => {
     expect(container.querySelector('.newchat-greeting')?.textContent).toBe(first);
   });
 
-  it('offers the attach button', async () => {
-    await act(async () => {
-      root.render(<NewChat name="Lucas" />);
+  describe('attaching a file', () => {
+    async function show() {
+      await act(async () => {
+        root.render(<NewChat name="Lucas" />);
+      });
+      await settle();
+    }
+
+    const openMenu = async () => {
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('.composer-attach')?.click();
+      });
+    };
+
+    it('offers the attach button', async () => {
+      await show();
+      expect(container.querySelector('.composer-attach')).not.toBeNull();
     });
-    await settle();
-    expect(container.querySelector('.composer-attach')).not.toBeNull();
+
+    it('keeps the menu shut until the button is pressed', async () => {
+      await show();
+      expect(container.querySelector('.attach-menu')).toBeNull();
+    });
+
+    it('offers uploading from this computer', async () => {
+      await show();
+      await openMenu();
+      expect(text('.attach-menu button')).toContain('Upload from this computer');
+    });
+
+    /*
+     * The failure this whole feature started from. The button used to disable
+     * itself when the Drive picker had no keys, which meant a deployment
+     * without them had no way to attach anything at all -- including files
+     * that never go near Drive.
+     */
+    it('still offers uploading where the Drive picker is not configured', async () => {
+      // No VITE_GOOGLE_* in the test environment, so pickerConfigured() is false.
+      await show();
+      expect(container.querySelector<HTMLButtonElement>('.composer-attach')?.disabled).toBe(false);
+      await openMenu();
+      expect(text('.attach-menu button')).toEqual(['Upload from this computer']);
+    });
+
+    it('gives the file dialog something it will accept', async () => {
+      await show();
+      const input = container.querySelector('input[type=file]');
+      expect(input).not.toBeNull();
+      expect(input?.getAttribute('accept')).toContain('.pdf');
+      // Several at once: a student attaching a term's handouts should not
+      // have to open the dialog six times.
+      expect(input?.hasAttribute('multiple')).toBe(true);
+    });
+
+    it('shuts the menu when Escape is pressed', async () => {
+      await show();
+      await openMenu();
+      expect(container.querySelector('.attach-menu')).not.toBeNull();
+
+      await act(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      });
+      expect(container.querySelector('.attach-menu')).toBeNull();
+    });
   });
 
   describe('starting a chat', () => {
