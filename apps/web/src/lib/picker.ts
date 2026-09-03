@@ -103,6 +103,26 @@ function loadScript(src: string): Promise<void> {
   return promise;
 }
 
+/**
+ * Load Google's libraries before anyone asks for them.
+ *
+ * The token request opens a popup, and a browser only allows that while it
+ * still believes it is acting on the click that started it. Fetching a script
+ * first spends that belief: by the time requestAccessToken runs, the gesture
+ * is stale and the popup is blocked -- which surfaces as the button doing
+ * nothing at all, because GIS reports a blocked popup the same way it reports
+ * one the student closed.
+ *
+ * Called when the composer mounts, so the click that follows finds both
+ * scripts already in the page. Failure is silent on purpose: this is a
+ * prefetch, and the real attempt reports its own errors.
+ */
+export function warmPicker(): void {
+  if (!pickerConfigured()) return;
+  void loadScript(GSI_SRC).catch(() => {});
+  void loadScript(GAPI_SRC).catch(() => {});
+}
+
 /** Request a drive.file-only access token, without re-prompting if granted. */
 async function requestDriveToken(): Promise<string> {
   await loadScript(GSI_SRC);
@@ -117,7 +137,23 @@ async function requestDriveToken(): Promise<string> {
         if (response.access_token) resolve(response.access_token);
         else reject(new Error(response.error ?? 'Google did not return a token.'));
       },
-      error_callback: () => reject(new Error('Google sign-in was closed.')),
+      /*
+       * Say which failure it was.
+       *
+       * GIS reports a blocked popup and a closed one through the same
+       * callback, and calling both "closed" sends a student looking for a
+       * window they never saw. The type it hands over tells them apart.
+       */
+      error_callback: (error) => {
+        const type = (error as { type?: string } | undefined)?.type;
+        reject(
+          new Error(
+            type === 'popup_failed_to_open'
+              ? 'Your browser blocked the Google window. Allow pop-ups for this site and try again.'
+              : 'The Google window was closed before a file was chosen.',
+          ),
+        );
+      },
     });
 
     // Empty prompt: silent when the student has already granted drive.file,

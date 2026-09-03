@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api.js';
 import { chatTitle } from '../lib/chatTitle.js';
 import { handOff } from '../lib/handoff.js';
-import { pickDriveFiles, pickerConfigured } from '../lib/picker.js';
+import { pickDriveFiles, pickerConfigured, warmPicker } from '../lib/picker.js';
 import type { PickerDoc } from '../lib/picker.js';
 import { pickGreeting } from '../lib/greeting.js';
 import { navigate } from '../lib/router.js';
@@ -27,6 +27,13 @@ export function NewChat({ name }: Props) {
   const [files, setFiles] = useState<PickerDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+
+  /*
+   * Fetch Google's libraries now, so the click that opens the picker does not
+   * have to wait for them. See warmPicker: the wait is what gets the popup
+   * blocked.
+   */
+  useEffect(warmPicker, []);
 
   /**
    * Start the chat.
