@@ -3,8 +3,8 @@ import { parseRoute, routeToPath } from './router.js';
 
 describe('parseRoute', () => {
   it('maps the three real screens', () => {
-    expect(parseRoute('/')).toEqual({ name: 'agents' });
-    expect(parseRoute('/agents')).toEqual({ name: 'agents' });
+    expect(parseRoute('/')).toEqual({ name: 'new' });
+    expect(parseRoute('/agents')).toEqual({ name: 'new' });
     expect(parseRoute('/settings')).toEqual({ name: 'settings' });
     expect(parseRoute('/agents/abc123')).toEqual({ name: 'chat', agentId: 'abc123' });
   });
@@ -28,7 +28,7 @@ describe('parseRoute', () => {
 
   it('round-trips through routeToPath', () => {
     for (const route of [
-      { name: 'agents' } as const,
+      { name: 'new' } as const,
       { name: 'settings' } as const,
       { name: 'chat', agentId: 'abc123' } as const,
     ]) {

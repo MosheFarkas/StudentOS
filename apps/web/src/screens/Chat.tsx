@@ -4,6 +4,7 @@ import { useAgentSession } from '../lib/useAgentSession.js';
 import type { Agent, AgentActivity, Message } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { sameConversation } from '../lib/conversation.js';
+import { takeHandoff } from '../lib/handoff.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
@@ -66,6 +67,18 @@ export function Chat({ agentId, onBack }: Props) {
         setPending(body.pending);
         setActivity(body.activity);
       }
+
+      /*
+       * The message that started this chat, if it was started from the
+       * new-chat screen.
+       *
+       * Sent here rather than there so the student watches the conversation
+       * while the turn runs. It waits for the history above deliberately:
+       * loading it calls setMessages with the server's list, which would wipe
+       * the message this puts on screen optimistically.
+       */
+      const first = takeHandoff(agentId);
+      if (first) void deliver(first);
     })();
   }, [agentId]);
 
@@ -159,6 +172,17 @@ export function Chat({ agentId, onBack }: Props) {
     if (!content || sending) return;
 
     setDraft('');
+    await deliver(content);
+  }
+
+  /**
+   * Say something and wait for the reply.
+   *
+   * Split from the submit handler because the first message of a chat does not
+   * come from the composer -- it is handed over by the screen the chat was
+   * started on, and has to travel the same path once it arrives.
+   */
+  async function deliver(content: string) {
     setSending(true);
     setError(null);
 
@@ -194,6 +218,7 @@ export function Chat({ agentId, onBack }: Props) {
       ]);
     } catch (cause) {
       setMessages((prev) => prev.filter((m) => m.id !== pending.id));
+      // Back into the box, so it can be sent again rather than retyped.
       setDraft(content);
       setError(cause instanceof Error ? cause.message : 'Unknown error');
     } finally {

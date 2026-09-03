@@ -8,14 +8,14 @@ import { useEffect, useState } from 'react';
  * dependency here would be more code to reason about, not less.
  *
  * What routing actually buys, and why it was worth doing: a refresh no longer
- * throws the student back to the agent list mid-conversation, the browser back
+ * throws the student back to a blank chat mid-conversation, the browser back
  * button works, and a chat has a URL that can be reopened. On a phone, where
  * this is mostly used, back is a system gesture rather than a button on the
  * page -- so before this, the natural way out of a chat left the app entirely.
  */
 
 export type Route =
-  | { name: 'agents' }
+  | { name: 'new' }
   | { name: 'chat'; agentId: string }
   | { name: 'settings' }
   | { name: 'link'; requestId: string }
@@ -24,7 +24,7 @@ export type Route =
 export function parseRoute(pathname: string): Route {
   const segments = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
 
-  if (segments.length === 0) return { name: 'agents' };
+  if (segments.length === 0) return { name: 'new' };
   if (segments[0] === 'settings' && segments.length === 1) return { name: 'settings' };
 
   // Opened by the desktop app in the student's browser, so this arrives from
@@ -34,7 +34,7 @@ export function parseRoute(pathname: string): Route {
   }
 
   if (segments[0] === 'agents') {
-    if (segments.length === 1) return { name: 'agents' };
+    if (segments.length === 1) return { name: 'new' };
     /*
      * Decoded, because routeToPath encodes. Ids are UUIDs today so nothing
      * needs escaping, but a router whose parse does not invert its own format
@@ -62,7 +62,7 @@ function safeDecode(value: string): string {
 
 export function routeToPath(route: Route): string {
   switch (route.name) {
-    case 'agents':
+    case 'new':
       return '/';
     case 'chat':
       return `/agents/${encodeURIComponent(route.agentId)}`;

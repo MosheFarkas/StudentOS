@@ -60,7 +60,7 @@ export function LinkDevice({ requestId }: { requestId: string }) {
           Requests last ten minutes. Run <code>link</code> in the desktop app again to get a new
           one.
         </p>
-        <button onClick={() => navigate({ name: 'agents' })}>Back to agents</button>
+        <button onClick={() => navigate({ name: 'new' })}>Back to your chats</button>
       </div>
     );
   }
@@ -91,7 +91,7 @@ export function LinkDevice({ requestId }: { requestId: string }) {
         <button className="primary" disabled={busy} onClick={() => void approve(state.deviceName)}>
           {busy ? 'Linking…' : 'Approve'}
         </button>
-        <button disabled={busy} onClick={() => navigate({ name: 'agents' })}>
+        <button disabled={busy} onClick={() => navigate({ name: 'new' })}>
           Cancel
         </button>
       </div>

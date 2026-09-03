@@ -23,7 +23,7 @@ interface TokenResponse {
   access_token?: string;
   error?: string;
 }
-interface PickerDoc {
+export interface PickerDoc {
   id: string;
   name?: string;
   mimeType?: string;

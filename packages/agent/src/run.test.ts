@@ -417,6 +417,37 @@ describe('the assembled system prompt', () => {
     expect(await systemPrompt()).toContain(RESPONDING.body);
   });
 
+  /** The same prompt, for an agent created with the given purpose. */
+  async function promptForPurpose(purpose: string): Promise<string> {
+    const seen: { role: string; content: string }[] = [];
+    await runAgentTurn(capturing(seen), {
+      userId: 'u1',
+      agentId: 'a1',
+      purpose,
+      message: 'go',
+      timezone: 'Europe/London',
+    } as never);
+    return seen.find((m) => m.role === 'system')?.content ?? '';
+  }
+
+  it('states the purpose when the student wrote one', async () => {
+    expect(await promptForPurpose('keep me on top of chemistry')).toContain(
+      'Your purpose, in their words: keep me on top of chemistry',
+    );
+  });
+
+  /*
+   * A chat started from a message has no purpose behind it, and the label
+   * printed with nothing after it is worse than its absence: it tells the
+   * model an answer belongs here and that it is empty, which reads as a
+   * student who wants nothing.
+   */
+  it('says nothing about purpose when there is none', async () => {
+    for (const blank of ['', '   ', '\n']) {
+      expect(await promptForPurpose(blank)).not.toContain('Your purpose');
+    }
+  });
+
   /*
    * The property the whole prompt layout exists to protect.
    *

@@ -1563,3 +1563,519 @@ a.button {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ---------- chat shell ---------- */
+
+/*
+ * The two-column frame.
+ *
+ * The rail is a fixed width and the main column takes what is left --
+ * minmax(0, 1fr) rather than 1fr, because a long unbroken line inside a chat
+ * would otherwise widen the column instead of wrapping, and push the rail off
+ * the screen.
+ */
+.app {
+  --rail: 260px;
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  min-height: 100dvh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem 0.6rem 0.6rem;
+  border-right: 1px solid var(--line);
+  background: var(--wash);
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: flex-end;
+  gap: 3.3px;
+  background: none;
+  border: 0;
+  padding: 0.4rem 0.5rem 1rem;
+  cursor: pointer;
+}
+
+/*
+ * The wordmark beside the mark, at the proportions the two were cut from. The
+ * ratios are the header's -- mark 25.6 to wordmark 16.2, so 0.633 -- held at
+ * the larger size the rail wants, which is what keeps the lockup looking like
+ * the one image it was cut from.
+ */
+.sidebar-wordmark {
+  height: 19px;
+  width: auto;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.sidebar-new,
+.sidebar-chat {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.44rem 0.55rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.sidebar-new:hover,
+.sidebar-chat:hover {
+  background: rgba(80, 16, 208, 0.07);
+}
+
+.sidebar-new.is-current,
+.sidebar-chat.is-current {
+  background: rgba(80, 16, 208, 0.11);
+}
+
+.sidebar-new svg {
+  flex: none;
+  color: var(--ink-soft);
+}
+
+/*
+ * The list of chats, and the only thing in the rail allowed to scroll. A
+ * student with three hundred chats must not push their own name off the
+ * bottom.
+ */
+.sidebar-chats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.9rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * One line, clipped. Titles are generated and some of them will be long; a
+ * title that wraps to three lines turns the list into paragraphs.
+ */
+.sidebar-chat {
+  display: block;
+  font-weight: 400;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-chat.is-current {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ---------- the account footer ---------- */
+
+.sidebar-account {
+  position: relative;
+  margin-top: 0.4rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+
+.account-button {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.account-button:hover {
+  background: rgba(80, 16, 208, 0.07);
+}
+
+.account-initial {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue), var(--violet));
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Opens upward: it is the last thing in the rail, so there is no room below. */
+.account-menu {
+  position: absolute;
+  bottom: calc(100% + 0.3rem);
+  left: 0.25rem;
+  right: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.account-menu button {
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.88rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.account-menu button:hover {
+  background: var(--wash);
+}
+
+/* ---------- the main column ---------- */
+
+.app-main {
+  max-width: none;
+  width: 100%;
+  padding: 1.25rem 1.5rem 2rem;
+  min-width: 0;
+}
+
+/*
+ * The chat screens keep the reading width they had; only the new-chat screen
+ * uses the full column, because it centres itself inside it.
+ */
+.app-main > *:not(.newchat):not(.nav-toggle) {
+  width: 100%;
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+.app-main.is-new {
+  display: grid;
+  place-items: center;
+}
+
+/* ---------- new chat ---------- */
+
+.newchat {
+  width: 100%;
+  max-width: 46rem;
+  /*
+   * Lifted off the true centre. An input box sitting on the exact vertical
+   * middle reads as low, because the greeting above it is part of the shape
+   * the eye is centring.
+   */
+  margin-bottom: 6vh;
+}
+
+.newchat-greeting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-family: var(--serif);
+  font-size: 1.85rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+/*
+ * The glow.
+ *
+ * Painted by a blurred copy of the card sitting behind it, because a
+ * box-shadow takes one colour and this takes four. It blooms once on entry
+ * and settles to something quiet -- a glow that keeps pulsing while you write
+ * is a glow you end up covering with your hand.
+ */
+.composer-glow {
+  position: relative;
+}
+
+.composer-glow::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--radius-lg) + 6px);
+  background: linear-gradient(
+    105deg,
+    #22c8e0 0%,
+    var(--blue) 38%,
+    var(--violet) 68%,
+    var(--lavender) 100%
+  );
+  filter: blur(17px);
+  opacity: 0;
+  z-index: 0;
+  animation: composer-bloom 2200ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards;
+}
+
+@keyframes composer-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.965);
+  }
+  32% {
+    opacity: 0.9;
+    transform: scale(1.035);
+  }
+  100% {
+    opacity: 0.34;
+    transform: scale(1);
+  }
+}
+
+.newchat-composer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 0.9rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.newchat-input {
+  font: inherit;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: var(--ink);
+  padding: 0.1rem 0.15rem;
+  min-height: 2.6rem;
+  max-height: 14rem;
+  /* Grows with what is typed where the browser supports it, scrolls where not. */
+  field-sizing: content;
+}
+
+.newchat-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.newchat-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Pushed to the far end, so the row reads as "add something" then "go". */
+.composer-send {
+  margin-left: auto;
+  padding: 0.34rem 0.9rem;
+  font-size: 0.87rem;
+}
+
+.composer-attach {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0;
+}
+
+.composer-attach:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--violet);
+  border-color: var(--line-strong);
+}
+
+.composer-attach:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.newchat-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 16rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--wash);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-chip button {
+  border: 0;
+  background: none;
+  padding: 0 0.15rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.file-chip button:hover {
+  color: var(--danger);
+}
+
+.newchat-error {
+  margin-top: 0.6rem;
+  text-align: center;
+}
+
+/* ---------- the rail as a drawer ---------- */
+
+/*
+ * Hidden at desktop widths, where the rail is simply there. Both the toggle
+ * and the scrim exist at every width and are given size only below the
+ * breakpoint, so nothing has to be conditionally rendered.
+ */
+.nav-toggle,
+.nav-scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 268px;
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+  }
+
+  body.nav-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(10, 16, 69, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+
+  body.nav-open .nav-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .nav-toggle {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+  }
+
+  /* Three bars from one element: the box edges above and below the middle. */
+  .nav-toggle span,
+  .nav-toggle span::before,
+  .nav-toggle span::after {
+    display: block;
+    width: 15px;
+    height: 1.5px;
+    border-radius: 1px;
+    background: var(--ink-soft);
+  }
+
+  .nav-toggle span {
+    position: relative;
+  }
+
+  .nav-toggle span::before,
+  .nav-toggle span::after {
+    content: '';
+    position: absolute;
+    left: 0;
+  }
+
+  .nav-toggle span::before {
+    top: -5px;
+  }
+  .nav-toggle span::after {
+    top: 5px;
+  }
+
+  .app-main {
+    padding: 1rem 1rem 2rem;
+  }
+
+  .newchat-greeting {
+    font-size: 1.45rem;
+  }
+}
+
+/*
+ * The bloom is decoration, and decoration is the first thing to go. The glow
+ * still exists at its resting strength -- what is dropped is the movement,
+ * not the colour.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .composer-glow::before {
+    animation: none;
+    opacity: 0.34;
+  }
+
+  .sidebar {
+    transition: none;
+  }
+}

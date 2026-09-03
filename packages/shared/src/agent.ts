@@ -33,9 +33,18 @@ export const updateProfileSchema = z.object({
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
+/**
+ * Starting a chat.
+ *
+ * `purpose` is optional, and that is a product change rather than a loosened
+ * validator. It used to be the first thing a student wrote -- you described
+ * what you wanted before you could talk to anything. A chat starts from a
+ * message now, so most agents are created without one, and the system prompt
+ * asks for a purpose only when there is one to give (see buildSystemPrompt).
+ */
 export const createAgentSchema = z.object({
   name: z.string().min(1).max(80),
-  purpose: z.string().min(1).max(2000),
+  purpose: z.string().max(2000).default(''),
 });
 export type CreateAgentInput = z.infer<typeof createAgentSchema>;
 

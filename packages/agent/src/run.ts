@@ -317,7 +317,16 @@ export function buildSystemPrompt(
   /*
    * Tier 2 -- per agent. Stable for one student across a whole conversation.
    */
-  const perAgent = [`Your purpose, in their words: ${purpose}`];
+  /*
+   * Only when they wrote one.
+   *
+   * A chat started from a message has no purpose behind it, and the line
+   * printed anyway -- "Your purpose, in their words:" followed by nothing --
+   * is worse than its absence: it tells the model there is supposed to be an
+   * answer here and that it is empty, which reads as a student who wants
+   * nothing.
+   */
+  const perAgent = purpose.trim() ? [`Your purpose, in their words: ${purpose}`] : [];
 
   /*
    * Who this student is, and what else there is to open.
