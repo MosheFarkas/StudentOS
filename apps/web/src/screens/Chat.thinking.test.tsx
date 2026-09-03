@@ -136,7 +136,7 @@ beforeEach(async () => {
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root.render(<Chat agentId="a1" onBack={() => {}} />);
+    root.render(<Chat agentId="a1" />);
   });
   await settle();
 });

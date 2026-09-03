@@ -14,10 +14,9 @@ import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
 
 interface Props {
   agentId: string;
-  onBack: () => void;
 }
 
-export function Chat({ agentId, onBack }: Props) {
+export function Chat({ agentId }: Props) {
   /*
    * Loaded here rather than handed down, because the id now comes from the
    * URL. That is what lets a student reopen a conversation from a link, or
@@ -227,26 +226,20 @@ export function Chat({ agentId, onBack }: Props) {
   }
 
   if (missing) {
-    return (
-      <>
-        <div className="chat-header">
-          <button className="quiet" onClick={onBack}>
-            ← Agents
-          </button>
-        </div>
-        <p className="muted">That agent doesn&apos;t exist, or isn&apos;t yours.</p>
-      </>
-    );
+    return <p className="muted">That chat doesn&apos;t exist, or isn&apos;t yours.</p>;
   }
 
   if (!agent) return <p className="muted">Loading…</p>;
 
   return (
     <>
+      {/*
+        No way back, deliberately. The rail is always there with every chat on
+        it and New at the top, so a button here would be a second way to do
+        what is already one click away -- and it pointed at an agent list that
+        no longer exists.
+      */}
       <div className="chat-header">
-        <button className="quiet" onClick={onBack}>
-          ← Agents
-        </button>
         <strong>{agent.name}</strong>
       </div>
 
@@ -305,7 +298,13 @@ export function Chat({ agentId, onBack }: Props) {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Message ${agent.name}`}
+              /*
+               * Not the chat's name. It used to be an agent the student had
+               * named -- "Message Study buddy" -- and a title taken from the
+               * first thing they said reads as nonsense in its place:
+               * "Message What is due friday".
+               */
+              placeholder="Message ContextoAgent"
               disabled={sending}
             />
             <button className="primary" type="submit" disabled={sending || !draft.trim()}>

@@ -90,7 +90,7 @@ afterEach(() => {
 
 async function open(agentId = 'a1') {
   await act(async () => {
-    root.render(<Chat agentId={agentId} onBack={() => {}} />);
+    root.render(<Chat agentId={agentId} />);
   });
   await settle();
 }

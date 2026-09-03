@@ -139,11 +139,7 @@ export function App() {
              * half-typed message followed you into a different agent. A
              * conversation is not a repaint of another one.
              */
-            <Chat
-              key={route.agentId}
-              agentId={route.agentId}
-              onBack={() => navigate({ name: 'new' })}
-            />
+            <Chat key={route.agentId} agentId={route.agentId} />
           )}
 
           {route.name === 'settings' && <Settings onBack={() => navigate({ name: 'new' })} />}
