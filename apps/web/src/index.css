@@ -741,8 +741,8 @@ hr {
 
 /* The mark that closes a reply, on its own line under the last paragraph. */
 .message.assistant .logo-mark {
-  margin-top: 1.15rem;
-  opacity: 0.85;
+  margin-top: 1.4rem;
+  opacity: 0.9;
 }
 
 /*
@@ -808,12 +808,19 @@ hr {
   position: sticky;
   bottom: 3.4rem;
   z-index: 5;
-  height: 2.6rem;
-  margin: 0 -0.75rem -2.6rem;
+  height: 6.5rem;
+  margin: 0 -0.75rem -6.5rem;
   pointer-events: none;
-  backdrop-filter: blur(6px);
-  mask-image: linear-gradient(to bottom, transparent, #000 70%);
-  background: linear-gradient(to bottom, transparent, var(--page));
+  backdrop-filter: blur(7px);
+  /*
+   * A long ramp rather than a short one. The mask decides how much of the band
+   * is doing anything, and at 70% the blur arrived almost fully formed -- a
+   * soft edge with a hard start, which reads as a bar with a smudge above it.
+   * Beginning the ramp near the top gives the transcript room to go gradually
+   * out of focus as it slides under.
+   */
+  mask-image: linear-gradient(to bottom, transparent, #000 92%);
+  background: linear-gradient(to bottom, transparent 12%, var(--page) 96%);
 }
 
 /*

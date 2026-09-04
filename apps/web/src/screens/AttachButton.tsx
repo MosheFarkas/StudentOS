@@ -90,7 +90,16 @@ export function AttachButton({ onAttached, onError, disabled }: Props) {
         type="file"
         multiple
         hidden
-        accept=".pdf,.txt,.md,.markdown,.csv,.json,application/pdf,text/plain,text/markdown,text/csv"
+        /*
+         * No accept list, deliberately.
+         *
+         * An accept attribute makes the system dialog open filtered -- macOS
+         * shows "Custom Files" and hides everything else until the student
+         * finds the dropdown and changes it. Since what can actually be read
+         * is decided by looking inside the file rather than at its extension,
+         * a filter here would only be a worse guess made earlier, and the
+         * server's refusal says far more than a greyed-out filename does.
+         */
         onChange={(event) => {
           setOpen(false);
           void take(event.target.files);

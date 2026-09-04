@@ -203,7 +203,12 @@ export type AppRoutes = ReturnType<typeof createRoutes>;
  */
 const REFUSALS: Record<UploadRefusal, string> = {
   'too-large': 'That file is too big. The limit is 10MB.',
-  'unsupported-type': 'That kind of file cannot be read yet -- PDFs and text files can.',
+  'unsupported-type':
+    'There is no text in that file to read. PDFs and anything text-based work; a program, an archive or a media file does not.',
+  image:
+    'Reading images is not built yet -- a photo or a screenshot has no text to pull out without OCR. A PDF or a text file works.',
+  'packed-document':
+    'Word, Pages and slide decks cannot be opened yet. Exporting it as a PDF works today, and so does pasting the text straight into the chat.',
   empty: 'There was no text in that file.',
   'no-text-layer':
     'That PDF looks like a scan -- pictures of text rather than text. Reading those needs OCR, which is not built yet.',

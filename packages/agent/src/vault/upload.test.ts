@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Vault } from './vault.js';
-import { UPLOAD_LIMIT_BYTES, classifyUpload, importUpload, uploadNoteName } from './upload.js';
+import {
+  UPLOAD_LIMIT_BYTES,
+  classifyUpload,
+  importUpload,
+  looksLikeText,
+  uploadNoteName,
+} from './upload.js';
 
 /**
  * Files a student hands over from their own machine.
@@ -42,12 +48,41 @@ describe('deciding what an upload is', () => {
     }
   });
 
-  it('refuses what it cannot read rather than attaching an empty note', () => {
+  it('names an image as an image, so the refusal can say why', () => {
+    // "Unsupported" is true and useless. A photograph has real content and
+    // none of it is text, which is a different sentence to a student.
     expect(classifyUpload({ filename: 'photo.jpg', mimeType: 'image/jpeg', size: 10 })).toEqual({
-      refusal: 'unsupported-type',
+      refusal: 'image',
     });
-    expect(classifyUpload({ filename: 'sheet.xlsx', mimeType: '', size: 10 })).toEqual({
-      refusal: 'unsupported-type',
+    expect(classifyUpload({ filename: 'shot.HEIC', mimeType: '', size: 10 })).toEqual({
+      refusal: 'image',
+    });
+  });
+
+  it('names a packed document, which is readable but not yet', () => {
+    for (const filename of ['essay.docx', 'deck.pptx', 'marks.xlsx', 'notes.pages']) {
+      expect(classifyUpload({ filename, mimeType: '', size: 10 })).toEqual({
+        refusal: 'packed-document',
+      });
+    }
+  });
+
+  it('takes any text/* the browser offers, whatever the extension', () => {
+    expect(classifyUpload({ filename: 'notes.log', mimeType: 'text/plain', size: 10 })).toEqual({
+      kind: 'text',
+    });
+    expect(classifyUpload({ filename: 'page.html', mimeType: 'text/html', size: 10 })).toEqual({
+      kind: 'text',
+    });
+  });
+
+  it('looks inside anything it does not recognise rather than refusing it', () => {
+    // The extension is a guess. A file with none at all may still be readable.
+    expect(classifyUpload({ filename: 'timetable', mimeType: '', size: 10 })).toEqual({
+      kind: 'sniff',
+    });
+    expect(classifyUpload({ filename: 'main.py', mimeType: '', size: 10 })).toEqual({
+      kind: 'sniff',
     });
   });
 
@@ -182,12 +217,47 @@ describe('importing an upload into the vault', () => {
     expect(await vault.count('entity')).toBe(0);
   });
 
-  it('refuses a type it cannot read, writing nothing', async () => {
+  it('refuses an image, writing nothing', async () => {
     const vault = await emptyVault();
     const result = await importUpload(vault, {
       filename: 'photo.jpg',
       mimeType: 'image/jpeg',
       bytes: bytes('\xff\xd8\xff'),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'image' });
+    expect(await vault.count('entity')).toBe(0);
+  });
+
+  it('reads a file with no extension and no type, if it is text', async () => {
+    const vault = await emptyVault();
+    const result = await importUpload(vault, {
+      filename: 'timetable',
+      mimeType: '',
+      bytes: bytes('Period 1 Biology\nPeriod 2 Maths\n'),
+    });
+
+    expect(result).toEqual({ ok: true, name: 'timetable' });
+    expect((await vault.read('entity', 'timetable'))?.body).toContain('Period 2 Maths');
+  });
+
+  it('reads source code, which is text however unusual the extension', async () => {
+    const vault = await emptyVault();
+    const result = await importUpload(vault, {
+      filename: 'solution.py',
+      mimeType: '',
+      bytes: bytes('def answer():\n    return 42\n'),
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses binary that arrived with no type to give it away', async () => {
+    const vault = await emptyVault();
+    const result = await importUpload(vault, {
+      filename: 'mystery.bin',
+      mimeType: '',
+      bytes: new Uint8Array([0, 1, 2, 3, 0, 255, 254, 0, 7]),
     });
 
     expect(result).toEqual({ ok: false, reason: 'unsupported-type' });
@@ -219,5 +289,38 @@ describe('importing an upload into the vault', () => {
     expect(entities.length).toBe(1);
     const written = await readFile(join(vault.directory, 'entities', entities[0]!), 'utf8');
     expect(written).toContain('Should stay inside.');
+  });
+});
+
+describe('telling text from bytes by looking', () => {
+  const utf8 = (text: string) => new TextEncoder().encode(text);
+
+  it('accepts ordinary prose', () => {
+    expect(looksLikeText(utf8('Unit 1 is due on the 14th of October.'))).toBe(true);
+  });
+
+  it('accepts accents and emoji, which are text', () => {
+    expect(looksLikeText(utf8('Révision de français 📚'))).toBe(true);
+  });
+
+  it('accepts tabs and newlines, which every text file has', () => {
+    expect(looksLikeText(utf8('a\tb\r\nc\n'))).toBe(true);
+  });
+
+  it('rejects bytes that are not valid UTF-8', () => {
+    expect(looksLikeText(new Uint8Array([0xff, 0xfe, 0xff, 0xfe]))).toBe(false);
+  });
+
+  it('rejects a run of NUL bytes, which no text file contains', () => {
+    expect(looksLikeText(new Uint8Array([0, 0, 0, 0, 65, 66, 67]))).toBe(false);
+  });
+
+  it('rejects nothing at all', () => {
+    expect(looksLikeText(utf8('   \n  '))).toBe(false);
+  });
+
+  it('forgives the odd stray control character in a real document', () => {
+    // A form feed from something once printed should not cost the whole file.
+    expect(looksLikeText(utf8(`${'Real text. '.repeat(60)}\f`))).toBe(true);
   });
 });

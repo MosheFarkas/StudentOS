@@ -1,34 +1,33 @@
 /**
  * What the new-chat screen says at the top.
  *
- * A single fixed greeting is the kind of thing a student stops reading after
- * the second day. One drawn at random reads as noise instead -- "Still up?" at
- * nine in the morning is worse than saying nothing. So the pool is narrowed by
- * the clock first, and only then is one of them picked.
+ * One line, drawn from a written list rather than composed. Two rules shape
+ * how it is chosen.
  *
- * Two things narrow it. The band of the day is the obvious one. The weekday is
- * the less obvious one, and it is deliberately partial: Monday, Friday and
- * Sunday evening are the three a student actually feels, and the rest of the
- * week gets nothing day-specific because there is nothing true to say about a
- * Wednesday.
+ * It holds still for three hours. A greeting that changes on every render
+ * reads as noise, and one that changes on every reload invites reloading to
+ * see the next one -- so the choice is derived from which three-hour window
+ * the clock is in, which means it survives a refresh and needs nothing stored.
  *
- * Pure on purpose, matching thinkingPhrases next door: the clock arrives as an
- * argument and the randomness is injectable, so what a given moment can say is
- * something a test can pin down rather than something you have to wait until
- * 2am to see.
+ * And a few lines are pinned to when they make sense. Most are not: the list
+ * is mostly things that read fine at any hour. But "Rise and shine" at
+ * midnight and "Still up?" at nine in the morning are worse than dull, so the
+ * handful that describe a time of day only appear in it.
  */
 
 /** The four times of day worth telling apart. */
 export const BANDS = ['morning', 'afternoon', 'evening', 'night'] as const;
 export type Band = (typeof BANDS)[number];
 
+/** How long one greeting lasts. */
+export const WINDOW_MS = 3 * 60 * 60 * 1000;
+
 /**
  * Which band a moment falls in.
  *
  * The boundaries are set by how the hours feel rather than by dividing
  * twenty-four by four. Night runs to 5am and not to midnight, because 1am is
- * not morning to anyone who is awake for it -- and the student most likely to
- * be reading this at 1am is the one it should sound different for.
+ * not morning to anyone who is awake for it.
  */
 export function bandFor(now: Date): Band {
   const hour = now.getHours();
@@ -38,106 +37,182 @@ export function bandFor(now: Date): Band {
   return 'night';
 }
 
-/**
- * A greeting, and whether it needs a name to be written.
- *
- * The name is not always known -- an account may have none, and the sidebar
- * would rather say nothing than say "Hi ,". Lines that want one are kept
- * separate rather than falling back to a blank, so the pool stays honest.
- */
 interface Line {
-  /** `{name}` is substituted, and marks the line as needing one. */
   text: string;
+  /** The bands this line makes sense in. Absent means all of them. */
+  when?: readonly Band[];
+  /** Saturday and Sunday only. */
+  weekend?: true;
+  /** `[day]` means tomorrow here, not today. */
+  tomorrow?: true;
 }
 
-const BY_BAND: Record<Band, Line[]> = {
-  morning: [
-    { text: 'Morning. What are we starting with?' },
-    { text: 'Morning, {name}. Where do we begin?' },
-    { text: 'Early start. What is first?' },
-    { text: 'Good morning. What needs doing?' },
-  ],
-  afternoon: [
-    { text: 'What are we working on?' },
-    { text: 'Afternoon, {name}. Picking up where you left off?' },
-    { text: 'Afternoon. What is on the list?' },
-    { text: 'Back at it. What do you need?' },
-  ],
-  evening: [
-    { text: 'Evening, how are things?' },
-    { text: 'Evening, {name}. What is left?' },
-    { text: 'Evening. Anything still open?' },
-    { text: 'How did today go?' },
-  ],
-  night: [
-    { text: 'Still up?' },
-    { text: 'Late one. What is due?' },
-    { text: 'It is late, {name}. What can I take off you?' },
-    { text: 'Burning the midnight oil?' },
-  ],
-};
+const EARLY = ['morning'] as const;
+const LATE = ['evening', 'night'] as const;
+const NIGHT = ['night'] as const;
+const DAYTIME = ['morning', 'afternoon'] as const;
 
 /**
- * The days that get a line of their own, and when.
+ * The list, as written.
  *
- * Keyed by weekday as `Date.getDay` reports it, and narrowed further by band
- * where the day only means something at one end of it: Sunday is unremarkable
- * at 10am and quite specific at 8pm.
+ * Order is not meaningful -- the choice is a hash, not a walk -- but the
+ * grouping is kept so a line is easy to find and change.
  */
-const BY_DAY: { day: number; bands: readonly Band[]; lines: Line[] }[] = [
-  {
-    day: 1,
-    bands: ['morning', 'afternoon'],
-    lines: [
-      { text: 'Monday. Shall we line up the week?' },
-      { text: 'Monday again. Where do we start?' },
-    ],
-  },
-  {
-    day: 5,
-    bands: ['afternoon', 'evening'],
-    lines: [
-      { text: 'Friday. What is left before the weekend?' },
-      { text: 'Friday, {name}. Anything you want off your plate?' },
-    ],
-  },
-  {
-    day: 0,
-    bands: ['evening', 'night'],
-    lines: [
-      { text: 'Sunday night. Want to get ahead of the week?' },
-      { text: 'Sunday. What does tomorrow look like?' },
-    ],
-  },
+const LINES: Line[] = [
+  { text: '[name] fr fr?' },
+  { text: "Ok [name] we're so back." },
+  { text: "[name], it's giving productive." },
+  { text: 'Bro [name] is back.' },
+  { text: '[name] you a real one for showing up.' },
+  { text: "[name], let's cook" },
+  { text: 'Lowkey missed you, [name].' },
+  { text: 'Not [name] pulling up again.' },
+  { text: '[name], W [time_of_day]?' },
+  { text: 'Rizzler [name] has entered.' },
+  { text: '[name], aight bet I gotchu.' },
+  { text: "We yappin', [name]?" },
+  { text: '[name] is him fr.' },
+  { text: 'Chat, [name] is here.' },
+
+  { text: 'Good [time_of_day], [name].' },
+  { text: '[time_of_day], [name].' },
+  { text: 'Late [time_of_day], [name]?', when: LATE },
+  { text: 'Early [time_of_day], [name]?', when: EARLY },
+  { text: 'Rise and shine, [name].', when: EARLY },
+  { text: 'Burning the midnight oil, [name]?', when: NIGHT },
+  { text: 'Up early, [name]?', when: EARLY },
+  { text: 'Still up, [name]?', when: NIGHT },
+
+  { text: 'Happy [day], [name].' },
+  { text: '[day] again, [name]?' },
+  { text: 'Happy [day], [name]!' },
+  { text: 'Almost [day], [name].', tomorrow: true },
+  { text: '[day] check-in, [name]?' },
+  { text: 'Weekend mode, [name]?', weekend: true },
+  { text: '[day] scaries, [name]?', when: LATE },
+
+  { text: 'Welcome back, [name].' },
+  { text: 'Good to see you, [name].' },
+  { text: '[name]! Long time no chat.' },
+  { text: 'Back again, [name]?' },
+  { text: 'Missed you, [name].' },
+  { text: 'Picking up where we left off, [name]?' },
+  { text: 'Round [number], [name]?' },
+
+  { text: 'Hey, [name].' },
+  { text: "Hey [name], what's up?" },
+  { text: 'Yo, [name].' },
+  { text: 'Hi [name]!' },
+  { text: 'Hiya, [name].' },
+  { text: "What's good, [name]?" },
+  { text: "[name], what's the move?" },
+  { text: 'Ready to roll, [name]?' },
+  { text: 'Hi [name], ready when you are.' },
+  { text: '[name].' },
+  { text: 'Hello, [name].' },
+  { text: 'Good to have you, [name].' },
+  { text: 'Here we go, [name].' },
+  { text: 'All set, [name]?' },
+
+  { text: 'Cozy night in, [name]?', when: LATE },
+  { text: 'Long [day], [name]?', when: LATE },
+  { text: 'Coffee first, [name]?', when: EARLY },
+  { text: 'Big day ahead, [name]?', when: EARLY },
+  { text: 'Winding down, [name]?', when: LATE },
+  { text: 'Heads down today, [name]?', when: DAYTIME },
+  { text: "[name], what've you got today?", when: DAYTIME },
+
+  { text: 'Look who’s back, [name].' },
+  { text: 'Speak of the devil, [name].' },
+  { text: '[name] returns.' },
+  { text: 'Knock knock, [name].' },
+  { text: 'Plot twist, [name] is here.' },
+  { text: '[name] —' },
+  { text: 'Hey.' },
+  { text: '[name], hi.' },
+  { text: 'Right on time, [name].' },
+  { text: 'Good timing, [name].' },
 ];
 
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 /**
- * Every greeting that suits this moment, name written in.
+ * The name to greet them by.
  *
- * The day-specific lines are added to the band's rather than replacing them,
- * so a Monday morning can still say something that is merely about mornings.
- * A student opening this five times on one Monday should not get the same
- * sentence five times.
+ * The first word of whatever the account carries. Google hands over a full
+ * name, and "Hey, Lucas Liu." is how a dentist's receptionist says it.
  */
-export function greetingsFor(now: Date, name?: string): string[] {
-  const band = bandFor(now);
-  const day = now.getDay();
-
-  const lines = [
-    ...BY_BAND[band],
-    ...BY_DAY.filter((entry) => entry.day === day && entry.bands.includes(band)).flatMap(
-      (entry) => entry.lines,
-    ),
-  ];
-
-  const trimmed = name?.trim();
-  return lines
-    .filter((line) => trimmed || !line.text.includes('{name}'))
-    .map((line) => line.text.replace('{name}', trimmed ?? ''));
+export function firstName(full: string): string {
+  return full.trim().split(/\s+/)[0] ?? '';
 }
 
-/** One of them, at random. */
-export function pickGreeting(now: Date, name?: string, random: () => number = Math.random): string {
-  const pool = greetingsFor(now, name);
-  return pool[Math.min(pool.length - 1, Math.floor(random() * pool.length))] ?? pool[0] ?? '';
+/**
+ * The start of the three-hour window a moment belongs to.
+ *
+ * Everything else is derived from this rather than from the moment itself,
+ * which is what keeps a greeting still. Aligned to local midnight, not to the
+ * epoch, so the windows fall on 3am, 6am, 9am rather than wherever a timezone
+ * offset happens to put them.
+ */
+export function windowStart(now: Date): Date {
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const since = now.getTime() - midnight.getTime();
+  return new Date(midnight.getTime() + Math.floor(since / WINDOW_MS) * WINDOW_MS);
+}
+
+/**
+ * Every greeting that suits this window, written out in full.
+ *
+ * A line whose placeholder cannot be filled is dropped rather than filled with
+ * a blank: without a name, "Hey, ." is worse than any of the alternatives, and
+ * `[number]` has nothing behind it unless a caller supplies one.
+ */
+export function greetingsFor(now: Date, name?: string, round?: number): string[] {
+  const at = windowStart(now);
+  const band = bandFor(at);
+  const day = at.getDay();
+  const weekend = day === 0 || day === 6;
+  const person = name ? firstName(name) : '';
+
+  return LINES.filter((line) => {
+    if (line.when && !line.when.includes(band)) return false;
+    if (line.weekend && !weekend) return false;
+    if (!person && line.text.includes('[name]')) return false;
+    if (round === undefined && line.text.includes('[number]')) return false;
+    return true;
+  }).map((line) =>
+    line.text
+      .replaceAll('[name]', person)
+      .replaceAll('[time_of_day]', band)
+      .replaceAll('[day]', DAYS[line.tomorrow ? (day + 1) % 7 : day] ?? '')
+      .replaceAll('[number]', String(round ?? '')),
+  );
+}
+
+/**
+ * The one to show, held still for three hours.
+ *
+ * Derived from the window rather than drawn at random, so a refresh does not
+ * reroll it. The name is mixed in so two students on the same screen at the
+ * same moment are not greeted identically -- and so a student who changes
+ * nothing still gets a different line from their friend.
+ */
+export function pickGreeting(now: Date, name?: string, round?: number): string {
+  const pool = greetingsFor(now, name, round);
+  if (pool.length === 0) return '';
+  const seed = hash(`${windowStart(now).getTime()}:${name ?? ''}`);
+  return pool[seed % pool.length] ?? pool[0] ?? '';
+}
+
+/**
+ * A small non-cryptographic hash (FNV-1a), so the choice is stable across
+ * reloads, machines and browsers -- Math.random would be none of those.
+ */
+function hash(text: string): number {
+  let value = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    value ^= text.charCodeAt(i);
+    value = Math.imul(value, 16777619);
+  }
+  return value >>> 0;
 }

@@ -440,11 +440,18 @@ describe('the new-chat screen', () => {
       expect(text('.attach-menu button')).toEqual(['Upload from this computer']);
     });
 
-    it('gives the file dialog something it will accept', async () => {
+    it('opens the file dialog on everything, not on a filter', async () => {
+      /*
+       * No accept attribute, deliberately. One makes macOS open the dialog on
+       * "Custom Files" with everything else greyed out until the student finds
+       * the dropdown -- and since what can be read is decided by looking
+       * inside the file rather than at its extension, the filter would only be
+       * a worse guess made earlier.
+       */
       await show();
       const input = container.querySelector('input[type=file]');
       expect(input).not.toBeNull();
-      expect(input?.getAttribute('accept')).toContain('.pdf');
+      expect(input?.hasAttribute('accept')).toBe(false);
       // Several at once: a student attaching a term's handouts should not
       // have to open the dialog six times.
       expect(input?.hasAttribute('multiple')).toBe(true);

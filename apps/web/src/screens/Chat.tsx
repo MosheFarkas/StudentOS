@@ -305,7 +305,7 @@ export function Chat({ agentId }: Props) {
                       where an answer stops, and two replies in a row would
                       otherwise read as one long one.
                     */}
-                    <LogoMark size={19} working={false} />
+                    <LogoMark size={26} working={false} />
                   </>
                 ) : (
                   message.content

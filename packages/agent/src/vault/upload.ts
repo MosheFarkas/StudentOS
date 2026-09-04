@@ -33,7 +33,11 @@ export type UploadRefusal =
   | 'empty'
   /** A PDF that is images of text: real content, no text layer, needs OCR. */
   | 'no-text-layer'
-  | 'unreadable';
+  | 'unreadable'
+  /** A photograph or a screenshot. Real content, and none of it is text. */
+  | 'image'
+  /** A zip-based office document -- .docx and friends. Needs an unpacker. */
+  | 'packed-document';
 
 export type UploadResult = { ok: true; name: string } | { ok: false; reason: UploadRefusal };
 
@@ -44,18 +48,56 @@ export interface IncomingFile {
   bytes: Uint8Array;
 }
 
-type Classification = { kind: 'pdf' | 'text' } | { refusal: UploadRefusal };
+/**
+ * `sniff` means "decide by looking inside".
+ *
+ * The extension is a guess about a file, and a poor one: a syllabus saved as
+ * .text, a timetable exported as .tsv and a source file with no extension at
+ * all are every bit as readable as a .txt. So anything not recognised on sight
+ * is opened and judged on what is in it.
+ */
+type Classification = { kind: 'pdf' | 'text' | 'sniff' } | { refusal: UploadRefusal };
 
-const TEXT_TYPES = ['text/plain', 'text/markdown', 'text/csv', 'application/json'];
-const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.csv', '.json'];
+/** Recognised on sight, so the common cases never reach the sniffer. */
+const TEXT_PREFIX = 'text/';
+const TEXT_TYPES = ['application/json', 'application/xml', 'application/javascript'];
+const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.xml', '.rtf'];
+
+/** Real content, none of it text. Worth its own sentence to a student. */
+const IMAGE_EXTENSIONS = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.heic',
+  '.heif',
+  '.bmp',
+  '.tiff',
+  '.svg',
+];
+
+/** Zip containers with XML inside. Readable, but only with an unpacker. */
+const PACKED_EXTENSIONS = [
+  '.docx',
+  '.pptx',
+  '.xlsx',
+  '.odt',
+  '.odp',
+  '.ods',
+  '.pages',
+  '.key',
+  '.numbers',
+];
 
 /**
- * What this file is, decided before any of it is read.
+ * What this file is, as far as its name and type can say.
  *
  * Size is checked here rather than after extraction so a 200MB file costs a
  * rejection rather than a parse. The type is taken from the browser when it
  * sent one and from the extension when it did not, because a drag-and-drop
- * from some file managers arrives with an empty type.
+ * from some file managers arrives with an empty type -- and when neither
+ * settles it, the answer is `sniff` and the bytes decide.
  */
 export function classifyUpload(file: {
   filename: string;
@@ -67,13 +109,51 @@ export function classifyUpload(file: {
 
   const name = file.filename.toLowerCase();
   const type = file.mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+  const ends = (list: string[]) => list.some((ext) => name.endsWith(ext));
 
   if (type === 'application/pdf' || name.endsWith('.pdf')) return { kind: 'pdf' };
-  if (TEXT_TYPES.includes(type) || TEXT_EXTENSIONS.some((ext) => name.endsWith(ext))) {
+  if (type.startsWith('image/') || ends(IMAGE_EXTENSIONS)) return { refusal: 'image' };
+  if (ends(PACKED_EXTENSIONS)) return { refusal: 'packed-document' };
+  if (type.startsWith(TEXT_PREFIX) || TEXT_TYPES.includes(type) || ends(TEXT_EXTENSIONS)) {
     return { kind: 'text' };
   }
 
-  return { refusal: 'unsupported-type' };
+  return { kind: 'sniff' };
+}
+
+/**
+ * Whether these bytes are text a person could read.
+ *
+ * Decoded strictly first: UTF-8 that fails to decode is binary, and that one
+ * check removes most of what should never have been sent. What survives is
+ * judged on control characters, because a file can decode cleanly and still be
+ * a stream of bytes -- a NUL byte in particular appears in no text file and in
+ * most binary ones.
+ *
+ * The threshold is deliberately loose rather than zero. Real text files carry
+ * the odd stray control character -- a form feed in something printed, a
+ * vertical tab in an export -- and refusing a whole syllabus over one byte
+ * would be the wrong way to be strict.
+ */
+export function looksLikeText(bytes: Uint8Array): boolean {
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return false;
+  }
+
+  if (text.trim() === '') return false;
+
+  let control = 0;
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    // Tab, newline and carriage return are text; the rest of C0 is not.
+    if (code === 9 || code === 10 || code === 13) continue;
+    if (code < 32 || code === 127) control += 1;
+  }
+
+  return control / text.length < 0.01;
 }
 
 /**
@@ -93,11 +173,20 @@ export function uploadNoteName(filename: string): string {
 }
 
 /** Read the file's text, or say why there is none to read. */
-async function textOf(file: IncomingFile, kind: 'pdf' | 'text'): Promise<UploadResult | string> {
-  if (kind === 'text') return new TextDecoder().decode(file.bytes);
+async function textOf(
+  file: IncomingFile,
+  kind: 'pdf' | 'text' | 'sniff',
+): Promise<UploadResult | string> {
+  if (kind === 'pdf') {
+    const extracted = await extractPdfText(file.bytes);
+    return extracted.ok ? extracted.text : { ok: false, reason: extracted.reason };
+  }
 
-  const extracted = await extractPdfText(file.bytes);
-  return extracted.ok ? extracted.text : { ok: false, reason: extracted.reason };
+  if (kind === 'sniff' && !looksLikeText(file.bytes)) {
+    return { ok: false, reason: 'unsupported-type' };
+  }
+
+  return new TextDecoder().decode(file.bytes);
 }
 
 /**

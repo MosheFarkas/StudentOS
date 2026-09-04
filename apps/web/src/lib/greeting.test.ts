@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { BANDS, bandFor, greetingsFor, pickGreeting } from './greeting.js';
+import {
+  BANDS,
+  WINDOW_MS,
+  bandFor,
+  firstName,
+  greetingsFor,
+  pickGreeting,
+  windowStart,
+} from './greeting.js';
 import type { Band } from './greeting.js';
 
-/** Predictable stand-in for Math.random: hands back the given values in turn. */
-const rolls = (...values: number[]) => {
-  let i = 0;
-  return () => values[Math.min(i++, values.length - 1)] ?? 0;
-};
-
 /**
- * A date at a given weekday and hour, local time.
- *
  * 2026-01-04 was a Sunday, so adding the weekday index lands on the day meant
- * without any arithmetic at the call site. Local rather than UTC on purpose:
- * the greeting is about the clock on the student's wall.
+ * without arithmetic at the call site. Local rather than UTC on purpose: the
+ * greeting is about the clock on the student's wall.
  */
-const at = (weekday: number, hour: number) => new Date(2026, 0, 4 + weekday, hour, 0, 0);
+const at = (weekday: number, hour: number, minute = 0) =>
+  new Date(2026, 0, 4 + weekday, hour, minute, 0);
 
 describe('reading the band off the clock', () => {
   it('splits the day into morning, afternoon, evening and night', () => {
@@ -25,7 +26,7 @@ describe('reading the band off the clock', () => {
     expect(bandFor(at(3, 2))).toBe('night');
   });
 
-  it('puts every hour of the clock in exactly one band', () => {
+  it('puts every hour in exactly one band, and uses all four', () => {
     const seen = new Set<Band>();
     for (let hour = 0; hour < 24; hour += 1) {
       const band = bandFor(at(3, hour));
@@ -36,103 +37,143 @@ describe('reading the band off the clock', () => {
   });
 
   it('treats the small hours as night rather than morning', () => {
-    // 1am is not "morning" to anyone who is awake for it.
     expect(bandFor(at(3, 1))).toBe('night');
     expect(bandFor(at(3, 4))).toBe('night');
     expect(bandFor(at(3, 5))).toBe('morning');
   });
 });
 
-describe('the greetings that suit a moment', () => {
-  it('offers something for every hour of every day', () => {
-    for (let weekday = 0; weekday < 7; weekday += 1) {
-      for (let hour = 0; hour < 24; hour += 1) {
-        expect(greetingsFor(at(weekday, hour)).length).toBeGreaterThan(0);
-      }
-    }
+describe('the name they are greeted by', () => {
+  it('is the first word of it', () => {
+    // Google hands over a full name, and "Hey, Lucas Liu." is how a dentist's
+    // receptionist says it.
+    expect(firstName('Lucas Liu')).toBe('Lucas');
+    expect(firstName('  Lucas  Liu ')).toBe('Lucas');
+    expect(firstName('Lucas')).toBe('Lucas');
   });
 
-  it('never leaves a name placeholder unfilled', () => {
-    for (let weekday = 0; weekday < 7; weekday += 1) {
-      for (let hour = 0; hour < 24; hour += 1) {
-        for (const greeting of greetingsFor(at(weekday, hour), 'Lucas')) {
-          expect(greeting).not.toContain('{');
-          expect(greeting).not.toContain('undefined');
-          expect(greeting.trim()).toBe(greeting);
-          expect(greeting.length).toBeGreaterThan(0);
-        }
-      }
-    }
-  });
-
-  it('drops the greetings that need a name when there is not one', () => {
-    // Without a name those lines cannot be written, so they must not be
-    // offered -- an empty gap where a name belongs reads as a bug.
-    for (let weekday = 0; weekday < 7; weekday += 1) {
-      for (let hour = 0; hour < 24; hour += 1) {
-        for (const greeting of greetingsFor(at(weekday, hour))) {
-          expect(greeting).not.toContain('{');
-          expect(greeting).not.toContain('  ');
-        }
-      }
-    }
-  });
-
-  it('writes the name in when there is one', () => {
-    const withName = greetingsFor(at(3, 9), 'Lucas');
-    expect(withName.some((line) => line.includes('Lucas'))).toBe(true);
-  });
-
-  it('says something different at 2am than at 2pm', () => {
-    const night = greetingsFor(at(3, 2));
-    const afternoon = greetingsFor(at(3, 14));
-    expect(night).not.toEqual(afternoon);
-    expect(night.some((line) => afternoon.includes(line))).toBe(false);
-  });
-
-  it('knows what day it is on the days that feel different', () => {
-    // Monday, Friday and Sunday evening are the three a student actually
-    // feels. The rest of the week is just the time of day.
-    expect(greetingsFor(at(1, 9)).some((line) => /monday/i.test(line))).toBe(true);
-    expect(greetingsFor(at(5, 15)).some((line) => /friday/i.test(line))).toBe(true);
-    expect(greetingsFor(at(0, 19)).some((line) => /sunday/i.test(line))).toBe(true);
-  });
-
-  it('does not name a weekday on a day that is unremarkable', () => {
-    for (const greeting of greetingsFor(at(3, 14))) {
-      expect(greeting).not.toMatch(/monday|friday|sunday|saturday/i);
-    }
-  });
-
-  it('keeps the day-specific lines to their own day', () => {
-    // A Monday line on a Wednesday is worse than no line at all.
-    expect(greetingsFor(at(3, 9)).some((line) => /monday/i.test(line))).toBe(false);
-    expect(greetingsFor(at(2, 15)).some((line) => /friday/i.test(line))).toBe(false);
+  it('survives a name that is only spaces', () => {
+    expect(firstName('   ')).toBe('');
   });
 });
 
-describe('choosing one', () => {
-  it('returns one of the greetings that suit the moment', () => {
-    const now = at(3, 9);
-    const pool = greetingsFor(now, 'Lucas');
-    expect(pool).toContain(pickGreeting(now, 'Lucas', rolls(0)));
-    expect(pool).toContain(pickGreeting(now, 'Lucas', rolls(0.999)));
+describe('holding a greeting still', () => {
+  it('says the same thing all the way through a three-hour window', () => {
+    const first = pickGreeting(at(3, 9, 1), 'Lucas');
+    for (const minute of [2, 30, 59, 119, 179]) {
+      expect(pickGreeting(at(3, 9, minute), 'Lucas')).toBe(first);
+    }
   });
 
-  it('reaches every greeting in the pool, not just the first', () => {
-    const now = at(3, 9);
-    const pool = greetingsFor(now);
-    const reached = new Set(
-      pool.map((_, i) => pickGreeting(now, undefined, rolls(i / pool.length))),
-    );
-    expect(reached.size).toBe(pool.length);
+  it('survives a reload, because nothing is stored', () => {
+    // Two independent calls at different instants in one window agree.
+    expect(pickGreeting(at(3, 13, 5), 'Lucas')).toBe(pickGreeting(at(3, 14, 55), 'Lucas'));
   });
 
-  it('always says something, whatever the clock says', () => {
+  it('aligns windows to local midnight rather than the epoch', () => {
+    expect(windowStart(at(3, 0, 10)).getHours()).toBe(0);
+    expect(windowStart(at(3, 4, 59)).getHours()).toBe(3);
+    expect(windowStart(at(3, 9, 1)).getHours()).toBe(9);
+    expect(windowStart(at(3, 23, 59)).getHours()).toBe(21);
+  });
+
+  it('is not the same line for ever', () => {
+    // Across a day's worth of windows the choice actually moves.
+    const seen = new Set<string>();
+    for (let hour = 0; hour < 24; hour += 3) seen.add(pickGreeting(at(3, hour), 'Lucas'));
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it('does not greet two students identically at the same moment', () => {
+    const moment = at(3, 9);
+    expect(pickGreeting(moment, 'Lucas')).not.toBe(pickGreeting(moment, 'Priya'));
+  });
+
+  it('moves on at the window boundary', () => {
+    const before = windowStart(at(3, 9, 30));
+    const after = new Date(before.getTime() + WINDOW_MS);
+    expect(windowStart(after).getTime()).toBe(after.getTime());
+  });
+});
+
+describe('what a greeting says', () => {
+  it('never leaves a placeholder unfilled, at any hour of any day', () => {
     for (let weekday = 0; weekday < 7; weekday += 1) {
       for (let hour = 0; hour < 24; hour += 1) {
-        expect(pickGreeting(at(weekday, hour), 'Lucas', rolls(0.5))).toBeTruthy();
+        for (const line of greetingsFor(at(weekday, hour), 'Lucas Liu', 3)) {
+          expect(line).not.toMatch(/\[[a-z_]+\]/);
+          expect(line).not.toContain('undefined');
+          expect(line.trim()).toBe(line);
+          expect(line.length).toBeGreaterThan(0);
+        }
       }
     }
+  });
+
+  it('uses the first name only', () => {
+    const lines = greetingsFor(at(3, 9), 'Lucas Liu');
+    expect(lines.some((line) => line.includes('Lucas'))).toBe(true);
+    expect(lines.some((line) => line.includes('Liu'))).toBe(false);
+  });
+
+  it('drops the lines that need a name when there is none', () => {
+    for (const line of greetingsFor(at(3, 9))) {
+      expect(line).not.toMatch(/\[[a-z_]+\]/);
+      expect(line).not.toMatch(/\s,|,\s*$/);
+    }
+  });
+
+  it('drops the round-number line unless a number is given', () => {
+    // Inventing "Round 5?" for someone's second visit would be a lie the
+    // greeting has no way to make true.
+    expect(greetingsFor(at(3, 9), 'Lucas').some((l) => /^Round /.test(l))).toBe(false);
+    expect(greetingsFor(at(3, 9), 'Lucas', 4)).toContain('Round 4, Lucas?');
+  });
+
+  it('offers something at every hour of every day', () => {
+    for (let weekday = 0; weekday < 7; weekday += 1) {
+      for (let hour = 0; hour < 24; hour += 1) {
+        expect(greetingsFor(at(weekday, hour), 'Lucas').length).toBeGreaterThan(0);
+        expect(pickGreeting(at(weekday, hour), 'Lucas')).toBeTruthy();
+      }
+    }
+  });
+});
+
+describe('the lines that are pinned to a time', () => {
+  const linesAt = (weekday: number, hour: number) => greetingsFor(at(weekday, hour), 'Lucas');
+
+  it('says rise and shine in the morning and never at night', () => {
+    expect(linesAt(3, 7)).toContain('Rise and shine, Lucas.');
+    expect(linesAt(3, 23)).not.toContain('Rise and shine, Lucas.');
+  });
+
+  it('asks if you are still up only at night', () => {
+    expect(linesAt(3, 1)).toContain('Still up, Lucas?');
+    expect(linesAt(3, 9)).not.toContain('Still up, Lucas?');
+  });
+
+  it('offers weekend mode only at the weekend', () => {
+    expect(linesAt(6, 11)).toContain('Weekend mode, Lucas?');
+    expect(linesAt(3, 11)).not.toContain('Weekend mode, Lucas?');
+  });
+
+  it('names tomorrow when the line is about tomorrow', () => {
+    // Wednesday, so "Almost" means Thursday.
+    expect(linesAt(3, 14)).toContain('Almost Thursday, Lucas.');
+  });
+
+  it('names today everywhere else', () => {
+    expect(linesAt(3, 14)).toContain('Happy Wednesday, Lucas.');
+  });
+
+  it('wraps the weekday around the end of the week', () => {
+    // Saturday's tomorrow is Sunday, not an eighth day.
+    expect(linesAt(6, 14)).toContain('Almost Sunday, Lucas.');
+  });
+
+  it('writes the time of day into the lines that ask for it', () => {
+    expect(linesAt(3, 14)).toContain('Good afternoon, Lucas.');
+    expect(linesAt(3, 8)).toContain('Good morning, Lucas.');
   });
 });
