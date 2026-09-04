@@ -177,6 +177,26 @@ export function toResponsesInput(messages: ChatMessage[]): {
       continue;
     }
 
+    /*
+     * A user message carrying pictures becomes a list of parts rather than a
+     * string. The text still goes first: it is the question, and the images
+     * are what it is about.
+     */
+    if (message.images && message.images.length > 0) {
+      input.push({
+        role: 'user',
+        content: [
+          { type: 'input_text', text: message.content },
+          ...message.images.map((url) => ({
+            type: 'input_image' as const,
+            image_url: url,
+            detail: 'auto' as const,
+          })),
+        ],
+      });
+      continue;
+    }
+
     input.push({ role: 'user', content: message.content });
   }
 

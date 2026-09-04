@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
+import type { LlmProvider } from '@contexto/llm';
 import { extractPdfText } from '../tools/pdf.js';
+import { describeImage, isReadableImage } from './image-doc.js';
+import { extractOfficeText, officeKindFor } from './office.js';
 import { slugForNote } from './slug.js';
 import type { Vault } from './vault.js';
 
@@ -34,10 +37,12 @@ export type UploadRefusal =
   /** A PDF that is images of text: real content, no text layer, needs OCR. */
   | 'no-text-layer'
   | 'unreadable'
-  /** A photograph or a screenshot. Real content, and none of it is text. */
-  | 'image'
-  /** A zip-based office document -- .docx and friends. Needs an unpacker. */
-  | 'packed-document';
+  /** A format no model will look at -- HEIC above all, which iPhones default to. */
+  | 'image-format'
+  /** Vision is not configured on this deployment, so pictures cannot be read. */
+  | 'no-vision'
+  /** A document that opened but held no words at all. */
+  | 'nothing-in-it';
 
 export type UploadResult = { ok: true; name: string } | { ok: false; reason: UploadRefusal };
 
@@ -56,7 +61,10 @@ export interface IncomingFile {
  * all are every bit as readable as a .txt. So anything not recognised on sight
  * is opened and judged on what is in it.
  */
-type Classification = { kind: 'pdf' | 'text' | 'sniff' } | { refusal: UploadRefusal };
+type Classification =
+  | { kind: 'pdf' | 'text' | 'sniff' | 'image' }
+  | { kind: 'office'; office: ReturnType<typeof officeKindFor> }
+  | { refusal: UploadRefusal };
 
 /** Recognised on sight, so the common cases never reach the sniffer. */
 const TEXT_PREFIX = 'text/';
@@ -77,18 +85,14 @@ const IMAGE_EXTENSIONS = [
   '.svg',
 ];
 
-/** Zip containers with XML inside. Readable, but only with an unpacker. */
-const PACKED_EXTENSIONS = [
-  '.docx',
-  '.pptx',
-  '.xlsx',
-  '.odt',
-  '.odp',
-  '.ods',
-  '.pages',
-  '.key',
-  '.numbers',
-];
+/**
+ * Apple's own formats, which are zips but not the ones office.ts reads.
+ *
+ * Kept separate from the office list so the refusal can say the useful thing
+ * -- Pages and Keynote export to Word, PowerPoint and PDF from the share menu
+ * -- rather than a flat "cannot read this".
+ */
+const APPLE_EXTENSIONS = ['.pages', '.key', '.numbers'];
 
 /**
  * What this file is, as far as its name and type can say.
@@ -112,8 +116,16 @@ export function classifyUpload(file: {
   const ends = (list: string[]) => list.some((ext) => name.endsWith(ext));
 
   if (type === 'application/pdf' || name.endsWith('.pdf')) return { kind: 'pdf' };
-  if (type.startsWith('image/') || ends(IMAGE_EXTENSIONS)) return { refusal: 'image' };
-  if (ends(PACKED_EXTENSIONS)) return { refusal: 'packed-document' };
+
+  if (type.startsWith('image/') || ends(IMAGE_EXTENSIONS)) {
+    return isReadableImage(file.mimeType, file.filename)
+      ? { kind: 'image' }
+      : { refusal: 'image-format' };
+  }
+
+  const office = officeKindFor(file.filename, file.mimeType);
+  if (office) return { kind: 'office', office };
+  if (ends(APPLE_EXTENSIONS)) return { refusal: 'unsupported-type' };
   if (type.startsWith(TEXT_PREFIX) || TEXT_TYPES.includes(type) || ends(TEXT_EXTENSIONS)) {
     return { kind: 'text' };
   }
@@ -172,17 +184,40 @@ export function uploadNoteName(filename: string): string {
   return slugForNote(filename.replace(/\.[^./\\]+$/, ''));
 }
 
+/**
+ * What the reader needs beyond the file itself.
+ *
+ * Only pictures need anything: turning one into words takes a model, and a
+ * deployment without one should refuse them clearly rather than fail oddly.
+ */
+export interface UploadDeps {
+  llm?: Pick<LlmProvider, 'chat'>;
+  userId?: string;
+}
+
 /** Read the file's text, or say why there is none to read. */
 async function textOf(
   file: IncomingFile,
-  kind: 'pdf' | 'text' | 'sniff',
+  classified: Exclude<Classification, { refusal: UploadRefusal }>,
+  deps: UploadDeps,
 ): Promise<UploadResult | string> {
-  if (kind === 'pdf') {
+  if (classified.kind === 'pdf') {
     const extracted = await extractPdfText(file.bytes);
     return extracted.ok ? extracted.text : { ok: false, reason: extracted.reason };
   }
 
-  if (kind === 'sniff' && !looksLikeText(file.bytes)) {
+  if (classified.kind === 'office') {
+    const text = classified.office && extractOfficeText(file.bytes, classified.office);
+    return text ?? { ok: false, reason: 'nothing-in-it' };
+  }
+
+  if (classified.kind === 'image') {
+    if (!deps.llm || !deps.userId) return { ok: false, reason: 'no-vision' };
+    const described = await describeImage(deps.llm, file, deps.userId);
+    return described ?? { ok: false, reason: 'nothing-in-it' };
+  }
+
+  if (classified.kind === 'sniff' && !looksLikeText(file.bytes)) {
     return { ok: false, reason: 'unsupported-type' };
   }
 
@@ -196,7 +231,11 @@ async function textOf(
  * than a refusal: it is indistinguishable from a document that genuinely says
  * nothing, and the agent would go on citing it.
  */
-export async function importUpload(vault: Vault, file: IncomingFile): Promise<UploadResult> {
+export async function importUpload(
+  vault: Vault,
+  file: IncomingFile,
+  deps: UploadDeps = {},
+): Promise<UploadResult> {
   const classified = classifyUpload({
     filename: file.filename,
     mimeType: file.mimeType,
@@ -204,7 +243,7 @@ export async function importUpload(vault: Vault, file: IncomingFile): Promise<Up
   });
   if ('refusal' in classified) return { ok: false, reason: classified.refusal };
 
-  const text = await textOf(file, classified.kind);
+  const text = await textOf(file, classified, deps);
   if (typeof text !== 'string') return text;
 
   const body = text.trim();
@@ -216,7 +255,10 @@ export async function importUpload(vault: Vault, file: IncomingFile): Promise<Up
     kind: 'entity',
     // The source that already means "the student put this here themselves".
     source: 'student',
-    description: `Uploaded by the student: ${file.filename}`,
+    description:
+      classified.kind === 'image'
+        ? `Read from a picture the student uploaded: ${file.filename}`
+        : `Uploaded by the student: ${file.filename}`,
     /*
      * A fingerprint of the bytes, not of the name.
      *

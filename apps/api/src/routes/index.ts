@@ -114,12 +114,26 @@ export function createRoutes(ctx: AppContext) {
           throw new ContextoError('validation_failed', REFUSALS['too-large']);
         }
 
-        const vault = new Vault(ctx.env.VAULT_ROOT, c.get('userId'));
-        const result = await importUpload(vault, {
-          filename: file.name,
-          mimeType: file.type,
-          bytes: new Uint8Array(await file.arrayBuffer()),
-        });
+        const userId = c.get('userId');
+        const vault = new Vault(ctx.env.VAULT_ROOT, userId);
+
+        /*
+         * A model, for the pictures.
+         *
+         * Resolved per student so the reading is billed to whoever's key or
+         * quota it belongs to, exactly as a turn is. Only images need it, and
+         * importUpload refuses them clearly when it is absent rather than
+         * failing somewhere further down.
+         */
+        const result = await importUpload(
+          vault,
+          {
+            filename: file.name,
+            mimeType: file.type,
+            bytes: new Uint8Array(await file.arrayBuffer()),
+          },
+          { llm: await ctx.llm.resolve(userId), userId },
+        );
 
         if (!result.ok) throw new ContextoError('validation_failed', REFUSALS[result.reason]);
         return c.json({ name: result.name, filename: file.name });
@@ -204,13 +218,13 @@ export type AppRoutes = ReturnType<typeof createRoutes>;
 const REFUSALS: Record<UploadRefusal, string> = {
   'too-large': 'That file is too big. The limit is 10MB.',
   'unsupported-type':
-    'There is no text in that file to read. PDFs and anything text-based work; a program, an archive or a media file does not.',
-  image:
-    'Reading images is not built yet -- a photo or a screenshot has no text to pull out without OCR. A PDF or a text file works.',
-  'packed-document':
-    'Word, Pages and slide decks cannot be opened yet. Exporting it as a PDF works today, and so does pasting the text straight into the chat.',
+    'There is no text in that file to read. Documents, slides, spreadsheets, PDFs, images and anything text-based work; a program or an archive does not.',
   empty: 'There was no text in that file.',
+  'nothing-in-it': 'That opened, but there was nothing readable inside it.',
   'no-text-layer':
-    'That PDF looks like a scan -- pictures of text rather than text. Reading those needs OCR, which is not built yet.',
+    'That PDF looks like a scan -- pictures of text rather than text. Send the pictures themselves and they can be read, or export the PDF again with a text layer.',
   unreadable: 'That PDF could not be opened. It may be password-protected or damaged.',
+  'image-format':
+    'That picture is in a format that cannot be read -- HEIC, which iPhones use by default, is the usual one. A screenshot of it works, or set the camera to "Most Compatible" to shoot JPEG.',
+  'no-vision': 'Reading pictures is not switched on for this deployment.',
 };

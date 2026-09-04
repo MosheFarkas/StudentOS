@@ -29,6 +29,19 @@ export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  /**
+   * Pictures attached to a user message, as data URLs.
+   *
+   * Only meaningful on `role: 'user'`. A provider without vision ignores them
+   * rather than failing, so a caller can always attach one and the worst case
+   * is a model that answers from the words alone.
+   *
+   * Data URLs rather than links because the images this carries are files a
+   * student just handed over -- they exist nowhere a model could fetch them
+   * from, and putting them somewhere fetchable would mean hosting a student's
+   * homework at a public address.
+   */
+  images?: string[];
   /** Set on `role: 'tool'` messages to pair a result with its call. */
   toolCallId?: string;
   /**

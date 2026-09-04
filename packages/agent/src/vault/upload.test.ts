@@ -2,6 +2,7 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { strToU8, zipSync } from 'fflate';
 import { Vault } from './vault.js';
 import {
   UPLOAD_LIMIT_BYTES,
@@ -48,23 +49,41 @@ describe('deciding what an upload is', () => {
     }
   });
 
-  it('names an image as an image, so the refusal can say why', () => {
-    // "Unsupported" is true and useless. A photograph has real content and
-    // none of it is text, which is a different sentence to a student.
+  it('takes a picture it can have read', () => {
     expect(classifyUpload({ filename: 'photo.jpg', mimeType: 'image/jpeg', size: 10 })).toEqual({
-      refusal: 'image',
+      kind: 'image',
     });
-    expect(classifyUpload({ filename: 'shot.HEIC', mimeType: '', size: 10 })).toEqual({
-      refusal: 'image',
+    expect(classifyUpload({ filename: 'board.PNG', mimeType: '', size: 10 })).toEqual({
+      kind: 'image',
     });
   });
 
-  it('names a packed document, which is readable but not yet', () => {
-    for (const filename of ['essay.docx', 'deck.pptx', 'marks.xlsx', 'notes.pages']) {
+  it('turns away a picture in a format no model will look at', () => {
+    // HEIC is what an iPhone shoots by default, so this is the common case
+    // rather than the exotic one, and the advice differs from "unsupported".
+    expect(classifyUpload({ filename: 'shot.HEIC', mimeType: '', size: 10 })).toEqual({
+      refusal: 'image-format',
+    });
+  });
+
+  it('takes documents, decks and spreadsheets', () => {
+    for (const [filename, office] of [
+      ['essay.docx', 'docx'],
+      ['deck.pptx', 'pptx'],
+      ['marks.xlsx', 'xlsx'],
+      ['notes.odt', 'odf'],
+    ] as const) {
       expect(classifyUpload({ filename, mimeType: '', size: 10 })).toEqual({
-        refusal: 'packed-document',
+        kind: 'office',
+        office,
       });
     }
+  });
+
+  it('turns away Apple’s own formats, which need exporting first', () => {
+    expect(classifyUpload({ filename: 'essay.pages', mimeType: '', size: 10 })).toEqual({
+      refusal: 'unsupported-type',
+    });
   });
 
   it('takes any text/* the browser offers, whatever the extension', () => {
@@ -217,18 +236,6 @@ describe('importing an upload into the vault', () => {
     expect(await vault.count('entity')).toBe(0);
   });
 
-  it('refuses an image, writing nothing', async () => {
-    const vault = await emptyVault();
-    const result = await importUpload(vault, {
-      filename: 'photo.jpg',
-      mimeType: 'image/jpeg',
-      bytes: bytes('\xff\xd8\xff'),
-    });
-
-    expect(result).toEqual({ ok: false, reason: 'image' });
-    expect(await vault.count('entity')).toBe(0);
-  });
-
   it('reads a file with no extension and no type, if it is text', async () => {
     const vault = await emptyVault();
     const result = await importUpload(vault, {
@@ -322,5 +329,100 @@ describe('telling text from bytes by looking', () => {
   it('forgives the odd stray control character in a real document', () => {
     // A form feed from something once printed should not cost the whole file.
     expect(looksLikeText(utf8(`${'Real text. '.repeat(60)}\f`))).toBe(true);
+  });
+});
+
+describe('reading a document someone wrote in Word', () => {
+  it('puts its words in the vault', async () => {
+    const vault = await emptyVault();
+    const bytes = zipSync({
+      'word/document.xml': strToU8(
+        '<w:body><w:p><w:r><w:t>Unit 1 is due on Friday.</w:t></w:r></w:p></w:body>',
+      ),
+    });
+
+    const result = await importUpload(vault, {
+      filename: 'Biology Syllabus.docx',
+      mimeType: '',
+      bytes,
+    });
+
+    expect(result).toEqual({ ok: true, name: 'biology-syllabus' });
+    expect((await vault.read('entity', 'biology-syllabus'))?.body).toContain('due on Friday');
+  });
+
+  it('refuses one that opened but held nothing', async () => {
+    const vault = await emptyVault();
+    const result = await importUpload(vault, {
+      filename: 'blank.docx',
+      mimeType: '',
+      bytes: zipSync({ 'word/document.xml': strToU8('<w:body><w:p/></w:body>') }),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'nothing-in-it' });
+    expect(await vault.count('entity')).toBe(0);
+  });
+});
+
+describe('reading a picture', () => {
+  /** A model that transcribes whatever it is shown, and records the request. */
+  const reader = (says: string) => {
+    const seen: { images?: string[]; content: string }[] = [];
+    return {
+      seen,
+      llm: {
+        chat: async (request: {
+          messages: { role: string; content: string; images?: string[] }[];
+        }) => {
+          const user = request.messages.find((m) => m.role === 'user');
+          if (user)
+            seen.push({ content: user.content, ...(user.images ? { images: user.images } : {}) });
+          return { content: says, toolCalls: [], usage: {}, finishReason: 'stop' };
+        },
+      },
+    };
+  };
+
+  const jpeg = {
+    filename: 'worksheet.jpg',
+    mimeType: 'image/jpeg',
+    bytes: bytes('not-a-real-jpeg'),
+  };
+
+  it('keeps what the picture said, not the picture', async () => {
+    const vault = await emptyVault();
+    const { llm } = reader('1. Name the organelles.\n2. Describe photosynthesis.');
+
+    const result = await importUpload(vault, jpeg, { llm: llm as never, userId: 'u1' });
+
+    expect(result).toEqual({ ok: true, name: 'worksheet' });
+    const note = await vault.read('entity', 'worksheet');
+    expect(note?.body).toContain('Name the organelles');
+    // Read once, at the door. Nothing downstream has to know it was a picture.
+    expect(note?.description).toContain('picture');
+  });
+
+  it('sends the image to the model as a data url', async () => {
+    const vault = await emptyVault();
+    const { llm, seen } = reader('Some text.');
+    await importUpload(vault, jpeg, { llm: llm as never, userId: 'u1' });
+
+    expect(seen[0]?.images?.[0]).toMatch(/^data:image\/jpeg;base64,/);
+  });
+
+  it('refuses when there is no model to read it with', async () => {
+    // A deployment without vision should say so, not fail somewhere odd.
+    const vault = await emptyVault();
+    expect(await importUpload(vault, jpeg)).toEqual({ ok: false, reason: 'no-vision' });
+    expect(await vault.count('entity')).toBe(0);
+  });
+
+  it('writes nothing when the model found nothing to read', async () => {
+    const vault = await emptyVault();
+    const { llm } = reader('   ');
+    const result = await importUpload(vault, jpeg, { llm: llm as never, userId: 'u1' });
+
+    expect(result).toEqual({ ok: false, reason: 'nothing-in-it' });
+    expect(await vault.count('entity')).toBe(0);
   });
 });
