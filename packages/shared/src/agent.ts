@@ -102,18 +102,31 @@ export const messageSchema = z.object({
 });
 export type Message = z.infer<typeof messageSchema>;
 
-export const sendMessageSchema = z.object({
-  content: z.string().min(1).max(10_000),
-  /**
-   * Vault notes attached to this message, by name.
-   *
-   * Sent separately from the text rather than pasted into it. The transcript
-   * keeps what the student typed; the turn gets what they attached. Putting a
-   * whole document inside `content` would store it in the conversation for
-   * ever and show it to them in their own message bubble.
-   */
-  attachments: z.array(messageAttachmentSchema).max(10).optional(),
-});
+export const sendMessageSchema = z
+  .object({
+    /*
+     * May be empty, but only when something came with it.
+     *
+     * A picture sent on its own is a real message -- "what is this" is often
+     * the photograph and nothing else -- and requiring a character meant
+     * padding it with a sentence naming the file, which is what the thumbnail
+     * is for.
+     */
+    content: z.string().max(10_000),
+    /**
+     * Vault notes attached to this message, by name.
+     *
+     * Sent separately from the text rather than pasted into it. The transcript
+     * keeps what the student typed; the turn gets what they attached. Putting a
+     * whole document inside `content` would store it in the conversation for
+     * ever and show it to them in their own message bubble.
+     */
+    attachments: z.array(messageAttachmentSchema).max(10).optional(),
+  })
+  .refine((body) => body.content.trim() !== '' || (body.attachments?.length ?? 0) > 0, {
+    message: 'Say something or attach something.',
+    path: ['content'],
+  });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 
 /**

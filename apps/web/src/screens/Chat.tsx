@@ -11,7 +11,7 @@ import { MessageText } from './MessageText.js';
 import { MessageFiles } from './MessageFiles.js';
 import { useAttachments } from '../lib/attachments.js';
 import type { Attachment as AttachmentItem } from '../lib/attachments.js';
-import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
+import { AttachButton, AttachedFiles } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 import { useReportWorking } from '../lib/working.js';
 import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
@@ -255,10 +255,6 @@ export function Chat({ agentId }: Props) {
      * with nothing happening, which is exactly what an app looks like when it
      * has crashed. The question goes up first, and the work happens under it.
      */
-    const shown = withAttachments(
-      said,
-      waiting.map((item) => item.file.name),
-    );
 
     /*
      * The files, as the message will show them, before any of them are sent.
@@ -290,7 +286,7 @@ export function Chat({ agentId }: Props) {
       id: `pending-${Date.now()}`,
       agentId,
       role: 'user',
-      content: shown,
+      content: said,
       toolsUsed: [],
       attachments: localFiles,
       createdAt: new Date().toISOString(),
@@ -303,12 +299,16 @@ export function Chat({ agentId }: Props) {
        * exists by the time the turn reads it. A refusal stops the send: a
        * reply written around a missing attachment is worse than being told.
        */
-      const uploaded = waiting.length > 0 ? await attachments.upload(waiting, said) : [];
-      const content = withAttachments(
-        said,
-        uploaded.map((file) => file.filename),
-      );
-      const files = uploaded;
+      /*
+       * The message is what they typed and nothing else.
+       *
+       * It used to have "Files I have attached: board.png" appended, which
+       * showed up in their own bubble under the thumbnail already showing it.
+       * The model learns what came with the message from the turn context,
+       * where the files are carried by name with their contents.
+       */
+      const files = waiting.length > 0 ? await attachments.upload(waiting, said) : [];
+      const content = said;
       const res = await api.agents[':id'].messages.$post({
         param: { id: agentId },
         json: { content, ...(files.length > 0 ? { attachments: files } : {}) },

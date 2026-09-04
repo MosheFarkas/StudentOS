@@ -144,22 +144,6 @@ function kindOf(filename: string): string {
   return /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toUpperCase() ?? 'FILE';
 }
 
-/**
- * The message, with the attached files named in it.
- *
- * There is no attachment channel beside the text, and none is needed: by the
- * time this runs each file is a note in the vault, and the agent opens vault
- * notes by name. Naming them is the whole of the handover -- and it is also
- * what connects them to everything else, because the pass that writes a
- * conversation into the vault links it to the notes that conversation names.
- */
-export function withAttachments(text: string, filenames: string[]): string {
-  if (filenames.length === 0) return text;
-  return [text, `Files I have attached: ${filenames.join(', ')}`]
-    .filter((part) => part !== '')
-    .join('\n\n');
-}
-
 function PlusIcon() {
   return (
     <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true" focusable="false">

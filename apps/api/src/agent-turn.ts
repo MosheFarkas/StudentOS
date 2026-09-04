@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
 import type { Message, MessageAttachment } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
@@ -121,12 +121,17 @@ export async function runTurnForAgent(
          * puts a photograph's transcription in front of the model on the turn
          * that asked about it.
          */
-        ...(attachments?.length && vault
+        /*
+         * Everything attached to this conversation, not just to this message.
+         *
+         * A photograph is attached once and asked about for the rest of the
+         * afternoon. Carrying only the current message's files meant the
+         * second question about a worksheet met an agent that had never seen
+         * it -- the transcription was in the vault, and out of reach again.
+         */
+        ...(vault
           ? {
-              attachments: await readAttachments(
-                vault,
-                attachments.map((file) => file.name),
-              ),
+              attachments: await conversationAttachments(ctx, vault, agent.id, attachments ?? []),
             }
           : {}),
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),
@@ -185,7 +190,48 @@ export function toMessage(row: typeof agentMessages.$inferSelect): Message {
 }
 
 /**
- * The notes a message attached, as text.
+ * How far back to look for files, and how many to carry.
+ *
+ * Both bounds exist for the same reason: every file carried is its whole text
+ * on every turn for the rest of the conversation. A student who attaches a
+ * syllabus, a mark sheet and six photographs should not be paying for all
+ * nine on their twentieth question -- so the most recent few win, and the
+ * older ones go back to being findable in the vault rather than carried.
+ */
+const ATTACHMENT_LOOKBACK = 40;
+const ATTACHMENT_LIMIT = 6;
+
+/**
+ * The files this conversation has been given, newest first.
+ *
+ * The incoming message's own attachments lead, because they are what the
+ * question is most likely about; the rest of the conversation follows.
+ */
+async function conversationAttachments(
+  ctx: AppContext,
+  vault: Vault,
+  agentId: string,
+  incoming: MessageAttachment[],
+): Promise<{ name: string; body: string }[]> {
+  const rows = await ctx.db
+    .select({ attachments: agentMessages.attachments })
+    .from(agentMessages)
+    .where(eq(agentMessages.agentId, agentId))
+    .orderBy(desc(agentMessages.createdAt))
+    .limit(ATTACHMENT_LOOKBACK);
+
+  const names: string[] = [];
+  for (const file of [...incoming, ...rows.flatMap((row) => row.attachments ?? [])]) {
+    // Deduped by name: a file re-attached to a later message is one file.
+    if (!names.includes(file.name)) names.push(file.name);
+    if (names.length >= ATTACHMENT_LIMIT) break;
+  }
+
+  return readAttachments(vault, names);
+}
+
+/**
+ * The notes, as text.
  *
  * A name that is not there is skipped rather than thrown: the upload that
  * wrote it has already reported its own failures, and losing the whole turn

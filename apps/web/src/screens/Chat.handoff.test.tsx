@@ -213,6 +213,8 @@ describe('a message with a picture on it', () => {
       releaseUpload?.();
     });
     await settle();
-    expect(posted).toEqual(['what is this\n\nFiles I have attached: board.png']);
+    // Just what they typed. The file is carried beside the message, not
+    // announced inside it -- the thumbnail above the bubble already says so.
+    expect(posted).toEqual(['what is this']);
   });
 });
