@@ -136,7 +136,7 @@ export function NewChat({ name }: Props) {
   return (
     <div className="newchat">
       <h1 className="newchat-greeting">
-        <LogoMark size={30} working={false} />
+        <LogoMark size={42} working={false} />
         <span>{greeting}</span>
       </h1>
 

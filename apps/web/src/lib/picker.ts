@@ -21,6 +21,8 @@ const GAPI_SRC = 'https://apis.google.com/js/api.js';
 /** Only the surface we use, so no @types packages for two call sites. */
 interface TokenResponse {
   access_token?: string;
+  /** Seconds, as Google sends it -- sometimes as a string. */
+  expires_in?: number | string;
   error?: string;
 }
 export interface PickerDoc {
@@ -123,8 +125,43 @@ export function warmPicker(): void {
   void loadScript(GAPI_SRC).catch(() => {});
 }
 
+/**
+ * When a token Google just issued stops being usable, as a timestamp.
+ *
+ * A minute is taken off deliberately. The token is handed to the Picker, which
+ * uses it over the following seconds, and one that expires in transit fails as
+ * an unexplained permission error rather than as an expiry.
+ *
+ * Exported for its test: the arithmetic is the part worth pinning, and the
+ * rest of this module needs a browser.
+ */
+export function tokenExpiry(expiresIn: number | string | undefined, now: number): number {
+  const seconds = Number(expiresIn);
+  // Google always sends one, but a token treated as valid for ever when it is
+  // not would fail in a way nobody could reproduce.
+  if (!Number.isFinite(seconds) || seconds <= 0) return now;
+  return now + Math.max(0, seconds - 60) * 1000;
+}
+
+/**
+ * The last token Google issued, kept until it expires.
+ *
+ * Getting a token opens a popup, and a popup that opens and shuts by itself is
+ * what a student sees every time they attach a file -- the window flashes even
+ * when they granted access months ago, because nothing was keeping the answer.
+ * Google's tokens last about an hour, so holding one turns that into once a
+ * session rather than once a click.
+ *
+ * In memory only. It is a bearer token for the student's own Drive, and
+ * sessionStorage would leave it readable by anything that can run script on
+ * this origin, long after the tab that earned it.
+ */
+let held: { value: string; expiresAt: number } | undefined;
+
 /** Request a drive.file-only access token, without re-prompting if granted. */
 async function requestDriveToken(): Promise<string> {
+  if (held && held.expiresAt > Date.now()) return held.value;
+
   await loadScript(GSI_SRC);
   const google = window.google;
   if (!google) throw new Error('Google sign-in library did not load.');
@@ -134,8 +171,15 @@ async function requestDriveToken(): Promise<string> {
       client_id: CLIENT_ID as string,
       scope: DRIVE_FILE_SCOPE,
       callback: (response) => {
-        if (response.access_token) resolve(response.access_token);
-        else reject(new Error(response.error ?? 'Google did not return a token.'));
+        if (response.access_token) {
+          held = {
+            value: response.access_token,
+            expiresAt: tokenExpiry(response.expires_in, Date.now()),
+          };
+          resolve(response.access_token);
+        } else {
+          reject(new Error(response.error ?? 'Google did not return a token.'));
+        }
       },
       /*
        * Say which failure it was.
