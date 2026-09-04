@@ -1,17 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { uploadFile } from '../lib/upload.js';
-
-/** Something the agent can open. */
-export interface Attachment {
-  id: string;
-  /** What the student sees on the chip, and what the agent is told. */
-  label: string;
-}
+import type { Attachment } from '../lib/attachments.js';
 
 interface Props {
-  /** Called with whatever was uploaded, already in the vault. */
-  onAttached: (files: Attachment[]) => void;
-  onError: (message: string) => void;
+  /** Called with the files chosen. Nothing is sent anywhere yet. */
+  onChosen: (files: File[]) => void;
   disabled?: boolean;
 }
 
@@ -26,9 +18,8 @@ interface Props {
  * lands, and a button that silently changes into a menu later is a worse
  * introduction than a menu that grows an entry.
  */
-export function AttachButton({ onAttached, onError, disabled }: Props) {
+export function AttachButton({ onChosen, disabled }: Props) {
   const [open, setOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const chooser = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
 
@@ -48,32 +39,6 @@ export function AttachButton({ onAttached, onError, disabled }: Props) {
       document.removeEventListener('keydown', escape);
     };
   }, [open]);
-
-  /**
-   * Uploaded as they are chosen rather than held until the message is sent.
-   *
-   * The refusals are the reason: a scan or an oversized file has to be said
-   * while the student is still thinking about the file, not after they have
-   * written a paragraph and pressed send.
-   */
-  async function take(chosen: FileList | null) {
-    if (!chosen || chosen.length === 0) return;
-    setUploading(true);
-    onError('');
-
-    try {
-      for (const file of Array.from(chosen)) {
-        const uploaded = await uploadFile(file);
-        onAttached([{ id: `upload:${uploaded.name}`, label: uploaded.filename }]);
-      }
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : 'Could not upload that file.');
-    } finally {
-      setUploading(false);
-      // So choosing the same file again still fires a change event.
-      if (chooser.current) chooser.current.value = '';
-    }
-  }
 
   return (
     <div className="attach" ref={box}>
@@ -95,14 +60,15 @@ export function AttachButton({ onAttached, onError, disabled }: Props) {
          *
          * An accept attribute makes the system dialog open filtered -- macOS
          * shows "Custom Files" and hides everything else until the student
-         * finds the dropdown and changes it. Since what can actually be read
-         * is decided by looking inside the file rather than at its extension,
-         * a filter here would only be a worse guess made earlier, and the
-         * server's refusal says far more than a greyed-out filename does.
+         * finds the dropdown. Since what can be read is decided by looking
+         * inside the file rather than at its extension, a filter here would
+         * only be a worse guess made earlier.
          */
         onChange={(event) => {
           setOpen(false);
-          void take(event.target.files);
+          onChosen(Array.from(event.target.files ?? []));
+          // So choosing the same file again still fires a change event.
+          event.target.value = '';
         }}
       />
 
@@ -112,8 +78,8 @@ export function AttachButton({ onAttached, onError, disabled }: Props) {
         aria-label="Attach files"
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={disabled || uploading}
-        title={uploading ? 'Reading…' : 'Attach files'}
+        disabled={disabled}
+        title="Attach files"
         onClick={() => setOpen((was) => !was)}
       >
         <PlusIcon />
@@ -122,45 +88,74 @@ export function AttachButton({ onAttached, onError, disabled }: Props) {
   );
 }
 
-/** The chips under a composer, and the way to take one back off. */
+/**
+ * What is riding on the message, shown above where it is typed.
+ *
+ * A picture shows itself. Everything else gets its name and its kind, because
+ * a row of identical grey squares is no more use than a list of filenames and
+ * takes four times the room.
+ */
 export function AttachedFiles({
   files,
+  busy,
   onRemove,
 }: {
   files: Attachment[];
+  busy?: boolean;
   onRemove: (id: string) => void;
 }) {
   if (files.length === 0) return null;
 
   return (
-    <div className="newchat-files">
-      {files.map((file) => (
-        <span key={file.id} className="file-chip">
-          {file.label}
+    <div className="attached">
+      {files.map((item) => (
+        <div key={item.id} className={`attached-item${item.preview ? ' is-image' : ''}`}>
+          {item.preview ? (
+            <img src={item.preview} alt={item.file.name} />
+          ) : (
+            <div className="attached-doc">
+              <span className="attached-kind">{kindOf(item.file.name)}</span>
+              <span className="attached-name">{item.file.name}</span>
+            </div>
+          )}
+
+          {/*
+            Hidden until the pointer is on the card, and always reachable by
+            keyboard. It sits over the corner of the picture rather than beside
+            it, which is where the room is.
+          */}
           <button
             type="button"
-            aria-label={`Remove ${file.label}`}
-            onClick={() => onRemove(file.id)}
+            className="attached-remove"
+            aria-label={`Remove ${item.file.name}`}
+            disabled={busy}
+            onClick={() => onRemove(item.id)}
           >
             ×
           </button>
-        </span>
+        </div>
       ))}
     </div>
   );
 }
 
+/** The extension, upper-cased. Enough to tell a deck from a spreadsheet. */
+function kindOf(filename: string): string {
+  return /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toUpperCase() ?? 'FILE';
+}
+
 /**
  * The message, with the attached files named in it.
  *
- * There is no attachment channel beside the text, and none is needed: an
- * uploaded file is already a note in the vault, and the agent opens vault
- * notes by name. Naming them is the whole of the handover.
+ * There is no attachment channel beside the text, and none is needed: by the
+ * time this runs each file is a note in the vault, and the agent opens vault
+ * notes by name. Naming them is the whole of the handover -- and it is also
+ * what connects them to everything else, because the pass that writes a
+ * conversation into the vault links it to the notes that conversation names.
  */
-export function withAttachments(text: string, files: Attachment[]): string {
-  if (files.length === 0) return text;
-  const named = files.map((file) => file.label).join(', ');
-  return [text, `Files I have uploaded to my vault: ${named}`]
+export function withAttachments(text: string, names: string[]): string {
+  if (names.length === 0) return text;
+  return [text, `Files I have attached: ${names.join(', ')}`]
     .filter((part) => part !== '')
     .join('\n\n');
 }

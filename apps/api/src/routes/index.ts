@@ -101,6 +101,9 @@ export function createRoutes(ctx: AppContext) {
 
         const body = await c.req.parseBody();
         const file = body['file'];
+        // What the student was typing when they attached it. Steers how a
+        // picture is read; ignored for everything else.
+        const context = typeof body['context'] === 'string' ? body['context'] : undefined;
         if (!(file instanceof File)) {
           throw new ContextoError('validation_failed', 'No file was attached.');
         }
@@ -132,7 +135,7 @@ export function createRoutes(ctx: AppContext) {
             mimeType: file.type,
             bytes: new Uint8Array(await file.arrayBuffer()),
           },
-          { llm: await ctx.llm.resolve(userId), userId },
+          { llm: await ctx.llm.resolve(userId), userId, ...(context ? { context } : {}) },
         );
 
         if (!result.ok) throw new ContextoError('validation_failed', REFUSALS[result.reason]);

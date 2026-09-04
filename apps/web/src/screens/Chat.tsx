@@ -8,8 +8,8 @@ import { takeHandoff } from '../lib/handoff.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
+import { useAttachments } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
-import type { Attachment } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 import { useReportWorking } from '../lib/working.js';
 import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
@@ -44,8 +44,8 @@ export function Chat({ agentId }: Props) {
   const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
-  /** Files uploaded into the vault, waiting to be named in the next message. */
-  const [files, setFiles] = useState<Attachment[]>([]);
+  /** Files on the composer, sent with the message rather than before it. */
+  const attachments = useAttachments();
   /*
    * Whether the newest message is on screen.
    *
@@ -208,11 +208,30 @@ export function Chat({ agentId }: Props) {
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
-    const content = withAttachments(draft.trim(), files);
-    if (!content || sending) return;
+    const said = draft.trim();
+    if ((!said && attachments.items.length === 0) || sending) return;
+
+    setSending(true);
+    setError(null);
+
+    /*
+     * The files go first, and the message only if they all landed. A refusal
+     * has to stop the send: a reply written around a missing attachment is
+     * worse than being told the attachment failed.
+     */
+    let content: string;
+    try {
+      content = withAttachments(said, await attachments.upload(attachments.items, said));
+    } catch (cause) {
+      // Everything stays where it was, so it can be sent again unchanged.
+      setError(cause instanceof Error ? cause.message : 'Could not attach that file.');
+      setSending(false);
+      return;
+    }
 
     setDraft('');
-    setFiles([]);
+    attachments.clear();
+    setSending(false);
     await deliver(content);
   }
 
@@ -367,22 +386,10 @@ export function Chat({ agentId }: Props) {
           )}
 
           <form className="composer" onSubmit={send}>
-            <AttachedFiles
-              files={files}
-              onRemove={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
-            />
+            <AttachedFiles files={attachments.items} busy={sending} onRemove={attachments.remove} />
 
             <div className="composer-row">
-              <AttachButton
-                onAttached={(incoming) =>
-                  setFiles((prev) => [
-                    ...prev,
-                    ...incoming.filter((doc) => !prev.some((p) => p.id === doc.id)),
-                  ])
-                }
-                onError={(message) => setError(message || null)}
-                disabled={sending}
-              />
+              <AttachButton onChosen={attachments.add} disabled={sending} />
 
               <input
                 value={draft}
@@ -400,7 +407,7 @@ export function Chat({ agentId }: Props) {
                 className="composer-send"
                 type="submit"
                 aria-label="Send"
-                disabled={sending || (!draft.trim() && files.length === 0)}
+                disabled={sending || (!draft.trim() && attachments.items.length === 0)}
               >
                 <SendIcon />
               </button>

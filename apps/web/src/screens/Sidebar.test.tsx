@@ -457,6 +457,60 @@ describe('the new-chat screen', () => {
       expect(input?.hasAttribute('multiple')).toBe(true);
     });
 
+    /** Put a file on the composer the way the dialog would. */
+    async function choose(file: File) {
+      const input = container.querySelector<HTMLInputElement>('input[type=file]');
+      if (!input) throw new Error('no file input');
+      Object.defineProperty(input, 'files', { value: [file], configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+
+    const png = () => new File([new Uint8Array([1, 2, 3])], 'board.png', { type: 'image/png' });
+
+    it('shows a picked file on the composer without sending it anywhere', async () => {
+      /*
+       * The change this is here for. Uploading on pick meant a file the
+       * student thought better of was already in their vault, and a message
+       * never sent had still put something there.
+       */
+      const posts: string[] = [];
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+        if (method === 'POST') posts.push(String(input));
+        return new Response(JSON.stringify({ agents: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+
+      await show();
+      await choose(png());
+
+      expect(container.querySelectorAll('.attached-item').length).toBe(1);
+      expect(container.querySelector('.attached-item.is-image')).not.toBeNull();
+      expect(posts).toEqual([]);
+    });
+
+    it('takes one back off again', async () => {
+      await show();
+      await choose(png());
+      await act(async () => {
+        container.querySelector<HTMLButtonElement>('.attached-remove')?.click();
+      });
+      expect(container.querySelectorAll('.attached-item').length).toBe(0);
+    });
+
+    it('shows a document by name rather than as a blank square', async () => {
+      await show();
+      await choose(new File([new Uint8Array([1])], 'Syllabus.docx', { type: '' }));
+
+      expect(container.querySelector('.attached-item.is-image')).toBeNull();
+      expect(container.querySelector('.attached-kind')?.textContent).toBe('DOCX');
+      expect(container.querySelector('.attached-name')?.textContent).toBe('Syllabus.docx');
+    });
+
     it('shuts the menu when Escape is pressed', async () => {
       await show();
       await openMenu();
@@ -538,6 +592,95 @@ describe('the new-chat screen', () => {
       await typeAndSend('   ');
       expect(created).toBeUndefined();
       expect(window.location.pathname).toBe('/');
+    });
+
+    it('uploads the attachments before it creates the chat', async () => {
+      const calls: string[] = [];
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+        if (method === 'POST') calls.push(url.endsWith('/uploads') ? 'upload' : 'create');
+
+        const body = url.endsWith('/uploads')
+          ? { name: 'board', filename: 'board.png' }
+          : { agent: { id: 'new-1', name: 'x' } };
+        return new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+
+      await act(async () => {
+        root.render(<NewChat name="Lucas" />);
+      });
+      await settle();
+
+      const input = container.querySelector<HTMLInputElement>('input[type=file]');
+      Object.defineProperty(input, 'files', {
+        value: [new File([new Uint8Array([1])], 'board.png', { type: 'image/png' })],
+        configurable: true,
+      });
+      await act(async () => {
+        input?.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      await act(async () => {
+        container
+          .querySelector('form')
+          ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await settle();
+
+      // The file has to be in the vault before the message naming it is sent,
+      // or the agent is told to open something that is not there yet.
+      expect(calls).toEqual(['upload', 'create']);
+    });
+
+    it('does not send the message when an attachment is refused', async () => {
+      /*
+       * A reply written around a missing attachment is worse than a refusal:
+       * the student cannot tell it happened.
+       */
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input instanceof Request ? input.url : input);
+        const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+        if (method === 'POST' && url.endsWith('/uploads')) {
+          return new Response(JSON.stringify({ message: 'That picture is in a format…' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (method === 'POST') throw new Error('the chat should never have been created');
+        return new Response(JSON.stringify({ agents: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+
+      await act(async () => {
+        root.render(<NewChat name="Lucas" />);
+      });
+      await settle();
+
+      const input = container.querySelector<HTMLInputElement>('input[type=file]');
+      Object.defineProperty(input, 'files', {
+        value: [new File([new Uint8Array([1])], 'shot.heic', { type: '' })],
+        configurable: true,
+      });
+      await act(async () => {
+        input?.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await act(async () => {
+        container
+          .querySelector('form')
+          ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      await settle();
+
+      expect(container.querySelector('.newchat-error')?.textContent).toContain('format');
+      expect(window.location.pathname).toBe('/');
+      // Still on the composer, so it can be removed or tried again.
+      expect(container.querySelectorAll('.attached-item').length).toBe(1);
     });
 
     it('says so when the chat cannot be created, and keeps the draft', async () => {

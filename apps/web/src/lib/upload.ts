@@ -19,9 +19,18 @@ export interface Uploaded {
   filename: string;
 }
 
-export async function uploadFile(file: File): Promise<Uploaded> {
+export async function uploadFile(file: File, context = ''): Promise<Uploaded> {
   const body = new FormData();
   body.append('file', file);
+  /*
+   * The message this file is riding on.
+   *
+   * Only used to steer the reading of a picture: "what is the answer to 3b"
+   * and "is this the right connector" want different things transcribed off
+   * the same photograph. Ignored for everything else, where the text of a
+   * document is the text of a document whatever was asked about it.
+   */
+  if (context.trim() !== '') body.append('context', context.trim());
 
   const res = await fetch(`${API_BASE_URL}/api/uploads`, {
     method: 'POST',

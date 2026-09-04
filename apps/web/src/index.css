@@ -2214,40 +2214,112 @@ a.button {
   cursor: not-allowed;
 }
 
-.newchat-files {
+/*
+ * What is riding on the message, above where it is typed.
+ *
+ * Above rather than below, because it is read before the sentence it belongs
+ * to -- and because a row of thumbnails under a text box looks like results
+ * rather than like an attachment.
+ */
+.attached {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
 }
 
-.file-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  max-width: 16rem;
-  padding: 0.2rem 0.3rem 0.2rem 0.55rem;
+.attached-item {
+  position: relative;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--wash);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* Square, cropped. A row of different shapes reads as a mess. */
+.attached-item.is-image {
+  width: 76px;
+  height: 76px;
+}
+
+.attached-item.is-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * Everything that is not a picture. A document has nothing to show, so it
+ * says what it is instead -- a row of identical grey squares would be no more
+ * use than filenames and would take four times the room.
+ */
+.attached-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  justify-content: center;
+  max-width: 12rem;
+  height: 76px;
+  padding: 0.5rem 0.7rem;
+}
+
+.attached-kind {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--violet);
+}
+
+.attached-name {
   font-size: 0.8rem;
   color: var(--ink-soft);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.file-chip button {
-  border: 0;
-  background: none;
-  padding: 0 0.15rem;
-  font-size: 0.95rem;
+/*
+ * The way to take one back off.
+ *
+ * Hidden until the pointer is on the card, and always there for a keyboard --
+ * :focus-within is what keeps it reachable by tab, where hover alone would
+ * make removing an attachment a mouse-only action.
+ */
+.attached-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
   line-height: 1;
-  color: var(--ink-faint);
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  box-shadow: 0 1px 3px rgba(10, 16, 69, 0.16);
 }
 
-.file-chip button:hover {
+.attached-item:hover .attached-remove,
+.attached-item:focus-within .attached-remove {
+  opacity: 1;
+}
+
+.attached-remove:hover {
   color: var(--danger);
+  border-color: var(--danger);
+}
+
+.attached-remove:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .newchat-error {

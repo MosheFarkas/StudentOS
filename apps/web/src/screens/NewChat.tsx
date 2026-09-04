@@ -4,8 +4,8 @@ import { chatTitle } from '../lib/chatTitle.js';
 import { handOff } from '../lib/handoff.js';
 import { pickGreeting } from '../lib/greeting.js';
 import { navigate } from '../lib/router.js';
+import { useAttachments } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
-import type { Attachment } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 
 interface Props {
@@ -24,7 +24,7 @@ interface Props {
 export function NewChat({ name }: Props) {
   const greeting = useMemo(() => pickGreeting(new Date(), name ?? undefined), [name]);
   const [draft, setDraft] = useState('');
-  const [files, setFiles] = useState<Attachment[]>([]);
+  const attachments = useAttachments();
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
@@ -39,29 +39,36 @@ export function NewChat({ name }: Props) {
    */
   async function start(event: React.FormEvent) {
     event.preventDefault();
-    const content = withAttachments(draft.trim(), files);
-    if (!content || starting) return;
+    const said = draft.trim();
+    if ((!said && attachments.items.length === 0) || starting) return;
 
     setStarting(true);
     setError(null);
 
     try {
-      const res = await api.agents.$post({ json: { name: titleFor(draft, files), purpose: '' } });
+      /*
+       * The files go first, and the message only if they all landed.
+       *
+       * A refusal has to stop the send: a reply written around a missing
+       * attachment is worse than being told the attachment failed, because
+       * the student cannot tell it happened.
+       */
+      const names = await attachments.upload(attachments.items, said);
+      const content = withAttachments(said, names);
+
+      const res = await api.agents.$post({ json: { name: titleFor(said, names), purpose: '' } });
       if (!res.ok) throw new Error(`Could not start a chat (${res.status})`);
       const { agent } = await res.json();
+
+      attachments.clear();
       handOff(agent.id, content);
       navigate({ name: 'chat', agentId: agent.id });
     } catch (cause) {
-      // The draft is still in the box, so there is nothing to restore -- only
-      // the button to give back.
+      // The draft and the attachments are both still there, so there is
+      // nothing to restore -- only the button to give back.
       setError(cause instanceof Error ? cause.message : 'Unknown error');
       setStarting(false);
     }
-  }
-
-  /** Added without duplicates, so picking the same file twice shows one chip. */
-  function add(incoming: Attachment[]) {
-    setFiles((prev) => [...prev, ...incoming.filter((doc) => !prev.some((p) => p.id === doc.id))]);
   }
 
   return (
@@ -78,6 +85,8 @@ export function NewChat({ name }: Props) {
       */}
       <div className="composer-glow">
         <form className="newchat-composer" onSubmit={(event) => void start(event)}>
+          <AttachedFiles files={attachments.items} busy={starting} onRemove={attachments.remove} />
+
           <textarea
             className="newchat-input"
             value={draft}
@@ -96,24 +105,15 @@ export function NewChat({ name }: Props) {
             aria-label="Message ContextoAgent"
           />
 
-          <AttachedFiles
-            files={files}
-            onRemove={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
-          />
-
           <div className="newchat-tools">
-            <AttachButton
-              onAttached={add}
-              onError={(message) => setError(message || null)}
-              disabled={starting}
-            />
+            <AttachButton onChosen={attachments.add} disabled={starting} />
 
             <button
               className="composer-send primary"
               type="submit"
-              disabled={starting || (!draft.trim() && files.length === 0)}
+              disabled={starting || (!draft.trim() && attachments.items.length === 0)}
             >
-              {starting ? 'Starting…' : 'Send'}
+              {starting ? 'Sending…' : 'Send'}
             </button>
           </div>
         </form>
@@ -125,6 +125,6 @@ export function NewChat({ name }: Props) {
 }
 
 /** What the chat is called: what they typed, or what they attached instead. */
-function titleFor(draft: string, files: Attachment[]): string {
-  return chatTitle(draft.trim() || files.map((file) => file.label).join(', '));
+function titleFor(said: string, names: string[]): string {
+  return chatTitle(said || names.join(', '));
 }

@@ -193,6 +193,8 @@ export function uploadNoteName(filename: string): string {
 export interface UploadDeps {
   llm?: Pick<LlmProvider, 'chat'>;
   userId?: string;
+  /** The message the file was attached to, for reading pictures in context. */
+  context?: string;
 }
 
 /** Read the file's text, or say why there is none to read. */
@@ -213,7 +215,7 @@ async function textOf(
 
   if (classified.kind === 'image') {
     if (!deps.llm || !deps.userId) return { ok: false, reason: 'no-vision' };
-    const described = await describeImage(deps.llm, file, deps.userId);
+    const described = await describeImage(deps.llm, file, deps.userId, deps.context);
     return described ?? { ok: false, reason: 'nothing-in-it' };
   }
 

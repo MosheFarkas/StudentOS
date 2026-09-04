@@ -71,6 +71,16 @@ export async function describeImage(
   llm: Pick<LlmProvider, 'chat'>,
   image: ImageToRead,
   userId: string,
+  /**
+   * What the student was saying when they attached it.
+   *
+   * Steers what gets transcribed rather than replacing the instruction:
+   * "what's the answer to 3b" and "is this the right connector" want different
+   * things read off the same photograph. Deliberately framed as background
+   * rather than as a question to answer -- the note is a record of the picture
+   * and has to stay useful to a conversation months later that never asked it.
+   */
+  context?: string,
 ): Promise<string | null> {
   const type = image.mimeType.split(';')[0]?.trim().toLowerCase() || guessType(image.filename);
   const dataUrl = `data:${type};base64,${toBase64(image.bytes)}`;
@@ -84,7 +94,13 @@ export async function describeImage(
             'You transcribe images for a student who cannot see them. You are precise ' +
             'and you never invent text that is not there.',
         },
-        { role: 'user', content: PROMPT, images: [dataUrl] },
+        {
+          role: 'user',
+          content: context?.trim()
+            ? `${PROMPT}\n\nFor background, the student said this while attaching it -- use it to judge what matters in the image, not as a question to answer:\n${context.trim()}`
+            : PROMPT,
+          images: [dataUrl],
+        },
       ],
     },
     { userId },
