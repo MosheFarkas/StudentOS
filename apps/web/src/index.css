@@ -2488,27 +2488,6 @@ a.button {
   background: var(--wash);
 }
 
-.attach-status {
-  font-size: 0.82rem;
-}
-
-/*
- * Where a file came from, in the chip's own colour. An uploaded file lives in
- * the vault for good and a Drive file is only borrowed for the turn, which is
- * a difference worth being able to see at a glance.
- */
-.file-chip.from-upload {
-  border-color: rgba(80, 16, 208, 0.35);
-  background: rgba(80, 16, 208, 0.06);
-  color: var(--violet-dark);
-}
-
-.file-chip.from-drive {
-  border-color: rgba(47, 155, 188, 0.4);
-  background: rgba(47, 155, 188, 0.08);
-  color: #1d6f88;
-}
-
 /* ---------- the one question worth stopping for ---------- */
 
 /*
