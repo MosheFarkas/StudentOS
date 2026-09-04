@@ -25,11 +25,38 @@ interface Props {
 export function ConfirmDelete({ title, busy, onCancel, onConfirm }: Props) {
   const cancel = useRef<HTMLButtonElement>(null);
 
+  /*
+   * Blur what is behind by blurring it, not by asking the scrim to.
+   *
+   * backdrop-filter was the first attempt and it did not survive the build:
+   * the minifier shipped only the -webkit- form, and even where it applies it
+   * softens a backdrop rather than the page. A filter on the app itself is
+   * unambiguous, works everywhere, and is what "everything around blurs"
+   * actually describes.
+   *
+   * Safe only because the dialog is portalled OUT of the app: a filter makes
+   * its element a containing block for fixed positioning, so a dialog inside
+   * the blurred subtree would be positioned against it -- and blurred along
+   * with everything else.
+   *
+   * Its own effect, with no dependencies. Sharing one with the key handler
+   * below meant re-running on every render -- onCancel is written inline by
+   * the caller and is a new function each time -- which took the class off and
+   * put it back, restarting the transition into the blur on every keystroke
+   * anywhere on the page.
+   */
+  useEffect(() => {
+    document.body.classList.add('dialog-open');
+    return () => document.body.classList.remove('dialog-open');
+  }, []);
+
   useEffect(() => {
     // Focus lands on Cancel, not Delete: the safe option is the one a stray
     // Return should take.
     cancel.current?.focus();
+  }, []);
 
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) onCancel();
     };

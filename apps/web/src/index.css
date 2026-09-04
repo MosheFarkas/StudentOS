@@ -95,7 +95,7 @@
   --lavender: #c090ff;
   --teal: #2f9bbc;
 
-  --page: #fbfbfd;
+  --page: #faf9fd;
   --surface: #ffffff;
   --line: #e3e4ee;
   --line-strong: #cdcfe0;
@@ -729,13 +729,58 @@ hr {
   font-family: var(--serif);
 }
 
+/*
+ * The bar at the bottom of a conversation.
+ *
+ * Held off the floor rather than sitting on it: a box flush against the
+ * bottom edge reads as part of the window chrome instead of part of the page.
+ *
+ * The blur is on the strip above it, not on the bar. What needs softening is
+ * the messages sliding underneath -- text passing behind a bar with a hard
+ * edge cuts off mid-letter -- so a masked, blurred band sits over that seam
+ * and fades out upward. The mask is what keeps the blur from creeping up the
+ * transcript: without it the whole column would go soft.
+ */
 .composer {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.4rem;
   position: sticky;
-  bottom: 0;
-  padding: 0.5rem 0 0.75rem;
-  background: linear-gradient(to bottom, transparent, var(--page) 30%);
+  bottom: 1rem;
+  z-index: 5;
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.composer::before {
+  content: '';
+  position: absolute;
+  left: -0.7rem;
+  right: -0.7rem;
+  bottom: -1.4rem;
+  top: -1.6rem;
+  z-index: -1;
+  pointer-events: none;
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  mask-image: linear-gradient(to bottom, transparent, #000 42%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 42%);
+}
+
+/* The controls themselves, in a row inside the lifted box. */
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.composer-row input {
+  flex: 1;
+  min-width: 0;
 }
 
 dl {
@@ -1586,8 +1631,16 @@ a.button {
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.85rem 0.6rem 0.6rem;
+  /*
+   * The same ground as the column beside it.
+   *
+   * The rail used to be a shade darker, which drew a hard vertical seam down
+   * the window and made the conversation look like a panel dropped onto a
+   * different page. One colour, and the rail is part of the same surface --
+   * the hairline is all the edge it needs.
+   */
   border-right: 1px solid var(--line);
-  background: var(--wash);
+  background: var(--page);
   height: 100dvh;
   position: sticky;
   top: 0;
@@ -2289,11 +2342,26 @@ a.button {
 /* ---------- the one question worth stopping for ---------- */
 
 /*
- * The scrim blurs what is behind it rather than only darkening it. The rail is
- * a list of chats and the question is about one of them; leaving the others
- * legible behind the dialog invites reading the wrong title and answering
- * about the wrong chat.
+ * Everything behind the question goes soft.
+ *
+ * The blur is applied to the app rather than to the scrim. backdrop-filter was
+ * the obvious way and it lost its unprefixed form to the minifier, which is
+ * reason enough -- but blurring the page directly is also the stronger effect,
+ * and it is what was asked for. The rail is a list of chats and the question
+ * is about one of them; leaving the others crisp invites reading the wrong
+ * title and answering about the wrong chat.
+ *
+ * This works only because the dialog is portalled out of .app. A filter makes
+ * its element a containing block for fixed positioning, so a dialog rendered
+ * inside would be positioned against the blurred box and blurred with it.
  */
+body.dialog-open .app {
+  filter: blur(4px);
+  transition: filter 140ms ease-out;
+  pointer-events: none;
+  user-select: none;
+}
+
 .scrim {
   position: fixed;
   inset: 0;
@@ -2301,9 +2369,7 @@ a.button {
   display: grid;
   place-items: center;
   padding: 1.25rem;
-  background: rgba(10, 16, 69, 0.28);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(10, 16, 69, 0.22);
   animation: scrim-in 140ms ease-out;
 }
 
@@ -2352,5 +2418,10 @@ a.button {
   .scrim,
   .dialog {
     animation: none;
+  }
+
+  /* The blur stays -- it carries meaning. Only the movement into it goes. */
+  body.dialog-open .app {
+    transition: none;
   }
 }

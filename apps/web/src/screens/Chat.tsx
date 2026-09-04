@@ -8,6 +8,8 @@ import { takeHandoff } from '../lib/handoff.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
+import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
+import type { Attachment } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 import { useReportWorking } from '../lib/working.js';
 import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
@@ -42,6 +44,8 @@ export function Chat({ agentId }: Props) {
   const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
+  /** Files uploaded into the vault, waiting to be named in the next message. */
+  const [files, setFiles] = useState<Attachment[]>([]);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -167,10 +171,11 @@ export function Chat({ agentId }: Props) {
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
-    const content = draft.trim();
+    const content = withAttachments(draft.trim(), files);
     if (!content || sending) return;
 
     setDraft('');
+    setFiles([]);
     await deliver(content);
   }
 
@@ -295,21 +300,43 @@ export function Chat({ agentId }: Props) {
           {error && <p className="muted">{error}</p>}
 
           <form className="composer" onSubmit={send}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              /*
-               * Not the chat's name. It used to be an agent the student had
-               * named -- "Message Study buddy" -- and a title taken from the
-               * first thing they said reads as nonsense in its place:
-               * "Message What is due friday".
-               */
-              placeholder="Message ContextoAgent"
-              disabled={sending}
+            <AttachedFiles
+              files={files}
+              onRemove={(id) => setFiles((prev) => prev.filter((f) => f.id !== id))}
             />
-            <button className="primary" type="submit" disabled={sending || !draft.trim()}>
-              Send
-            </button>
+
+            <div className="composer-row">
+              <AttachButton
+                onAttached={(incoming) =>
+                  setFiles((prev) => [
+                    ...prev,
+                    ...incoming.filter((doc) => !prev.some((p) => p.id === doc.id)),
+                  ])
+                }
+                onError={(message) => setError(message || null)}
+                disabled={sending}
+              />
+
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                /*
+                 * Not the chat's name. It used to be an agent the student had
+                 * named -- "Message Study buddy" -- and a title taken from the
+                 * first thing they said reads as nonsense in its place:
+                 * "Message What is due friday".
+                 */
+                placeholder="Message ContextoAgent"
+                disabled={sending}
+              />
+              <button
+                className="primary"
+                type="submit"
+                disabled={sending || (!draft.trim() && files.length === 0)}
+              >
+                Send
+              </button>
+            </div>
           </form>
         </div>
 

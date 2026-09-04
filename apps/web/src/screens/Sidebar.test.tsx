@@ -267,6 +267,28 @@ describe('what a chat row can do', () => {
     expect(patched).toEqual([]);
   });
 
+  it('blurs the app while the question is up, and stops when it goes', async () => {
+    // The blur is a filter on .app, not a backdrop-filter on the scrim -- so
+    // what proves it is the class the dialog puts on the body.
+    await railWith({ id: 'c1', name: 'Bio midterm plan' });
+    expect(document.body.classList.contains('dialog-open')).toBe(false);
+
+    await openRowMenu();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>('.chat-menu button')]
+        .find((b) => b.textContent === 'Delete')
+        ?.click();
+    });
+    expect(document.body.classList.contains('dialog-open')).toBe(true);
+
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>('.dialog-actions button')]
+        .find((b) => b.textContent === 'Cancel')
+        ?.click();
+    });
+    expect(document.body.classList.contains('dialog-open')).toBe(false);
+  });
+
   it('deletes nothing when the question is cancelled', async () => {
     await railWith({ id: 'c1', name: 'Bio midterm plan' });
     await openRowMenu();

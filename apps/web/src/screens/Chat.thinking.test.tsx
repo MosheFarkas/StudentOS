@@ -62,7 +62,9 @@ async function poll() {
 const line = () => container.querySelector('.thinking > span:not(.logo-mark)')?.textContent ?? '';
 
 async function type(text: string) {
-  const input = container.querySelector('input');
+  // Not the first input on the page any more: the attach button keeps a
+  // hidden file input, and setting a value on one of those throws.
+  const input = container.querySelector<HTMLInputElement>('.composer-row > input');
   if (!input) throw new Error('no composer on screen');
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
