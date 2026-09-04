@@ -430,6 +430,57 @@ describe('the assembled system prompt', () => {
     return seen.find((m) => m.role === 'system')?.content ?? '';
   }
 
+  /**
+   * What the student attached reaches the model on the turn they attached it.
+   *
+   * The bug this pins was the whole image feature failing at its last step: a
+   * photograph was read, transcribed and filed in the vault, and then the
+   * agent answered "I cannot see images" -- because nothing put the
+   * transcription in front of it, and "what is this" gives vault_search
+   * nothing to search for.
+   */
+  async function turnWith(attachments: { name: string; body: string }[]): Promise<string> {
+    const seen: { role: string; content: string }[] = [];
+    await runAgentTurn(capturing(seen), {
+      userId: 'u1',
+      agentId: 'a1',
+      purpose: 'help',
+      message: 'what is this',
+      timezone: 'Europe/London',
+      attachments,
+    } as never);
+    return seen.find((m) => m.role === 'user')?.content ?? '';
+  }
+
+  it('carries what the student attached, contents and all', async () => {
+    const turn = await turnWith([
+      { name: 'board', body: '## What is in it\n\nA brass push-fit pneumatic connector.' },
+    ]);
+
+    expect(turn).toContain('brass push-fit pneumatic connector');
+    expect(turn).toContain('board');
+  });
+
+  it('says nothing about attachments when there are none', async () => {
+    expect(await turnWith([])).not.toContain('attached to this message');
+  });
+
+  it('keeps them in the turn rather than the system prompt', async () => {
+    // The system prompt has to stay byte-identical between turns or nothing in
+    // it caches, ever. A file attached to one message must not land there.
+    const seen: { role: string; content: string }[] = [];
+    await runAgentTurn(capturing(seen), {
+      userId: 'u1',
+      agentId: 'a1',
+      purpose: 'help',
+      message: 'what is this',
+      timezone: 'Europe/London',
+      attachments: [{ name: 'board', body: 'A connector.' }],
+    } as never);
+
+    expect(seen.find((m) => m.role === 'system')?.content ?? '').not.toContain('A connector.');
+  });
+
   it('states the purpose when the student wrote one', async () => {
     expect(await promptForPurpose('keep me on top of chemistry')).toContain(
       'Your purpose, in their words: keep me on top of chemistry',

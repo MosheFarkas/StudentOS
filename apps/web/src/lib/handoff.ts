@@ -15,12 +15,14 @@
 interface Handoff {
   agentId: string;
   content: string;
+  /** Vault notes uploaded with it, by name. */
+  attachments: string[];
 }
 
 let waiting: Handoff | undefined;
 
-export function handOff(agentId: string, content: string): void {
-  waiting = { agentId, content };
+export function handOff(agentId: string, content: string, attachments: string[] = []): void {
+  waiting = { agentId, content, attachments };
 }
 
 /**
@@ -28,9 +30,11 @@ export function handOff(agentId: string, content: string): void {
  * caller gets nothing, so a re-run of the effect that consumes it cannot send
  * the same message twice.
  */
-export function takeHandoff(agentId: string): string | undefined {
+export function takeHandoff(
+  agentId: string,
+): { content: string; attachments: string[] } | undefined {
   if (waiting?.agentId !== agentId) return undefined;
-  const { content } = waiting;
+  const { content, attachments } = waiting;
   waiting = undefined;
-  return content;
+  return { content, attachments };
 }

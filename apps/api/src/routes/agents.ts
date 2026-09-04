@@ -291,10 +291,12 @@ export function createAgentRoutes(ctx: AppContext) {
          *
          * Shared with the messaging gateway -- see src/agent-turn.ts.
          */
+        const body = c.req.valid('json');
         const result = await runTurnForAgent(ctx, {
           userId,
           agent,
-          content: c.req.valid('json').content,
+          content: body.content,
+          ...(body.attachments ? { attachments: body.attachments } : {}),
         });
 
         return c.json(result);

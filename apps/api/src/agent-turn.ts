@@ -50,10 +50,12 @@ export async function runTurnForAgent(
     userId: string;
     agent: typeof agents.$inferSelect;
     content: string;
+    /** Vault notes attached to this message, by name. */
+    attachments?: string[];
     signal?: AbortSignal;
   },
 ): Promise<{ userMessage: Message; assistantMessage: Message }> {
-  const { userId, agent, content, signal } = params;
+  const { userId, agent, content, attachments, signal } = params;
 
   const [userMessage] = await ctx.db
     .insert(agentMessages)
@@ -111,6 +113,17 @@ export async function runTurnForAgent(
         ...(vault ? { about: (await readUserDoc(vault)) ?? undefined } : {}),
         ...(vault ? { vault } : {}),
         message: content,
+        /*
+         * Read now, not searched for later.
+         *
+         * The note was written moments ago by the upload the message came
+         * with, so this is a read of a file already on disk -- and it is what
+         * puts a photograph's transcription in front of the model on the turn
+         * that asked about it.
+         */
+        ...(attachments?.length && vault
+          ? { attachments: await readAttachments(vault, attachments) }
+          : {}),
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),
         google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
         ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
@@ -163,4 +176,21 @@ export function toMessage(row: typeof agentMessages.$inferSelect): Message {
     toolsUsed: row.toolsUsed,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/**
+ * The notes a message attached, as text.
+ *
+ * A name that is not there is skipped rather than thrown: the upload that
+ * wrote it has already reported its own failures, and losing the whole turn
+ * because one attachment went missing would be the wrong trade.
+ */
+async function readAttachments(
+  vault: Vault,
+  names: string[],
+): Promise<{ name: string; body: string }[]> {
+  const found = await Promise.all(names.map((name) => vault.read('entity', name)));
+  return found
+    .filter((note): note is NonNullable<typeof note> => note !== null)
+    .map((note) => ({ name: note.name, body: note.body }));
 }

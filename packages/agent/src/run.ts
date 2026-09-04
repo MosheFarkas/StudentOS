@@ -33,6 +33,17 @@ export interface AgentRunInput {
   about?: string;
   message: string;
   /**
+   * Files attached to this message, already read into text.
+   *
+   * Carried on the turn rather than left in the vault to be searched for. The
+   * vault copy is what makes a file findable next month; this is what makes it
+   * readable now. A student who attaches a photograph and asks "what is this"
+   * has given the agent nothing to search with, and an agent answering "I
+   * cannot see images" while holding the transcription of one is the whole
+   * feature failing at its last step.
+   */
+  attachments?: { name: string; body: string }[];
+  /**
    * IANA timezone. Defaults to UTC.
    *
    * Without this the agent cannot resolve "tomorrow at 3pm" into a timestamp
@@ -118,7 +129,10 @@ export async function runAgentTurn(
     },
     {
       role: 'user',
-      content: buildUserMessage(buildTurnContext(recalled, input.timezone), input.message),
+      content: buildUserMessage(
+        buildTurnContext(recalled, input.timezone, input.attachments),
+        input.message,
+      ),
     },
   ];
 
@@ -383,8 +397,33 @@ export function buildSystemPrompt(
 export function buildTurnContext(
   recalled: Awaited<ReturnType<MemoryStore['recall']>>,
   timezone: string | undefined,
+  /**
+   * Files the student attached to this message, already read.
+   *
+   * Carried here rather than left in the vault to be searched for. The vault
+   * copy is what makes a file findable next month; this is what makes it
+   * readable now -- a student who attaches a photograph and asks "what is
+   * this" has given the agent nothing to search with, and an agent that
+   * answers "I cannot see images" while holding the transcription of one is
+   * the whole feature failing at the last step.
+   */
+  attachments?: { name: string; body: string }[],
 ): string {
   const sections = [
+    /*
+     * What they attached, first.
+     *
+     * Ahead of the clock and the memory because it is the subject of the
+     * question rather than background to it -- and because a model that has
+     * read this far already has what it needs to answer.
+     */
+    ...(attachments && attachments.length > 0
+      ? [
+          'Files the student attached to this message. They are in the vault ' +
+            'under these names, and this is what they contain:\n\n' +
+            attachments.map((file) => `## ${file.name}\n${file.body}`).join('\n\n'),
+        ]
+      : []),
     /*
      * Temporal grounding.
      *

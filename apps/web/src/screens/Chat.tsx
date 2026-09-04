@@ -9,6 +9,7 @@ import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
 import { useAttachments } from '../lib/attachments.js';
+import type { Attachment as AttachmentItem } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 import { useReportWorking } from '../lib/working.js';
@@ -90,7 +91,7 @@ export function Chat({ agentId }: Props) {
        * the message this puts on screen optimistically.
        */
       const first = takeHandoff(agentId);
-      if (first) void deliver(first);
+      if (first) void deliver(first.content, first.attachments);
     })();
   }, [agentId]);
 
@@ -210,29 +211,7 @@ export function Chat({ agentId }: Props) {
     event.preventDefault();
     const said = draft.trim();
     if ((!said && attachments.items.length === 0) || sending) return;
-
-    setSending(true);
-    setError(null);
-
-    /*
-     * The files go first, and the message only if they all landed. A refusal
-     * has to stop the send: a reply written around a missing attachment is
-     * worse than being told the attachment failed.
-     */
-    let content: string;
-    try {
-      content = withAttachments(said, await attachments.upload(attachments.items, said));
-    } catch (cause) {
-      // Everything stays where it was, so it can be sent again unchanged.
-      setError(cause instanceof Error ? cause.message : 'Could not attach that file.');
-      setSending(false);
-      return;
-    }
-
-    setDraft('');
-    attachments.clear();
-    setSending(false);
-    await deliver(content);
+    await deliver(said, [], attachments.items);
   }
 
   /**
@@ -242,9 +221,22 @@ export function Chat({ agentId }: Props) {
    * come from the composer -- it is handed over by the screen the chat was
    * started on, and has to travel the same path once it arrives.
    */
-  async function deliver(content: string) {
+  async function deliver(said: string, noteNames: string[], waiting: AttachmentItem[] = []) {
     setSending(true);
     setError(null);
+
+    /*
+     * On screen before anything is uploaded.
+     *
+     * Reading a photograph is a model call and takes seconds; doing that
+     * before showing the student their own message left the composer frozen
+     * with nothing happening, which is exactly what an app looks like when it
+     * has crashed. The question goes up first, and the work happens under it.
+     */
+    const shown = withAttachments(
+      said,
+      waiting.map((item) => item.file.name),
+    );
 
     // Optimistic: the turn is not streamed and can take several seconds, so
     // the student's own message has to appear immediately or the app feels
@@ -253,16 +245,29 @@ export function Chat({ agentId }: Props) {
       id: `pending-${Date.now()}`,
       agentId,
       role: 'user',
-      content,
+      content: shown,
       toolsUsed: [],
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, pending]);
+    setDraft('');
 
     try {
+      /*
+       * The files go up before the message that names them, so the note
+       * exists by the time the turn reads it. A refusal stops the send: a
+       * reply written around a missing attachment is worse than being told.
+       */
+      const uploaded = waiting.length > 0 ? await attachments.upload(waiting, said) : [];
+      if (waiting.length > 0) attachments.clear();
+      const content = withAttachments(
+        said,
+        uploaded.map((file) => file.filename),
+      );
+      const names = [...noteNames, ...uploaded.map((file) => file.name)];
       const res = await api.agents[':id'].messages.$post({
         param: { id: agentId },
-        json: { content },
+        json: { content, ...(names.length > 0 ? { attachments: names } : {}) },
       });
 
       if (!res.ok) {
@@ -278,8 +283,9 @@ export function Chat({ agentId }: Props) {
       ]);
     } catch (cause) {
       setMessages((prev) => prev.filter((m) => m.id !== pending.id));
-      // Back into the box, so it can be sent again rather than retyped.
-      setDraft(content);
+      // Back into the box, so it can be sent again rather than retyped. The
+      // attachments are still on the composer unless they uploaded cleanly.
+      setDraft(said);
       setError(cause instanceof Error ? cause.message : 'Unknown error');
     } finally {
       setSending(false);

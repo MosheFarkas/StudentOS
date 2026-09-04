@@ -269,7 +269,14 @@ export async function importUpload(
      * genuinely revised document without re-reading either.
      */
     externalId: createHash('sha256').update(file.bytes).digest('hex'),
-    body,
+    /*
+     * Under a "What is in it" heading, because that is the shape the reading
+     * rules already describe: a file note carries such a section where
+     * something has read it, and its absence is what tells the agent nothing
+     * has. Writing the text bare would leave every uploaded file looking
+     * unread to an agent following its own instructions.
+     */
+    body: `## What is in it\n\n${body}`,
   });
 
   return { ok: true, name };

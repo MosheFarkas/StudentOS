@@ -585,7 +585,7 @@ describe('the new-chat screen', () => {
       await typeAndSend('what is due friday');
       // Sent from the conversation, not from here, so the student watches the
       // reply arrive rather than a screen that has not changed.
-      expect(takeHandoff('new-1')).toBe('what is due friday');
+      expect(takeHandoff('new-1')?.content).toBe('what is due friday');
     });
 
     it('will not start a chat from an empty box', async () => {

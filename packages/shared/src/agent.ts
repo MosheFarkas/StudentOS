@@ -87,6 +87,15 @@ export type Message = z.infer<typeof messageSchema>;
 
 export const sendMessageSchema = z.object({
   content: z.string().min(1).max(10_000),
+  /**
+   * Vault notes attached to this message, by name.
+   *
+   * Sent separately from the text rather than pasted into it. The transcript
+   * keeps what the student typed; the turn gets what they attached. Putting a
+   * whole document inside `content` would store it in the conversation for
+   * ever and show it to them in their own message bubble.
+   */
+  attachments: z.array(z.string().min(1).max(120)).max(10).optional(),
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 

@@ -53,15 +53,22 @@ export function NewChat({ name }: Props) {
        * attachment is worse than being told the attachment failed, because
        * the student cannot tell it happened.
        */
-      const names = await attachments.upload(attachments.items, said);
-      const content = withAttachments(said, names);
+      const uploaded = await attachments.upload(attachments.items, said);
+      const filenames = uploaded.map((file) => file.filename);
+      const content = withAttachments(said, filenames);
 
-      const res = await api.agents.$post({ json: { name: titleFor(said, names), purpose: '' } });
+      const res = await api.agents.$post({
+        json: { name: titleFor(said, filenames), purpose: '' },
+      });
       if (!res.ok) throw new Error(`Could not start a chat (${res.status})`);
       const { agent } = await res.json();
 
       attachments.clear();
-      handOff(agent.id, content);
+      handOff(
+        agent.id,
+        content,
+        uploaded.map((file) => file.name),
+      );
       navigate({ name: 'chat', agentId: agent.id });
     } catch (cause) {
       // The draft and the attachments are both still there, so there is

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { uploadFile } from './upload.js';
+import type { Uploaded } from './upload.js';
 
 /**
  * Files waiting on the composer.
@@ -75,13 +76,10 @@ export function useAttachments() {
    * around a missing attachment is worse than being told the attachment
    * failed.
    */
-  const upload = useCallback(async (all: Attachment[], context: string): Promise<string[]> => {
-    const names: string[] = [];
-    for (const item of all) {
-      const uploaded = await uploadFile(item.file, context);
-      names.push(uploaded.filename);
-    }
-    return names;
+  const upload = useCallback(async (all: Attachment[], context: string): Promise<Uploaded[]> => {
+    const done: Uploaded[] = [];
+    for (const item of all) done.push(await uploadFile(item.file, context));
+    return done;
   }, []);
 
   return { items, add, remove, clear, upload };

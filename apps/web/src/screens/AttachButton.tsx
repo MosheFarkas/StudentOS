@@ -153,9 +153,9 @@ function kindOf(filename: string): string {
  * what connects them to everything else, because the pass that writes a
  * conversation into the vault links it to the notes that conversation names.
  */
-export function withAttachments(text: string, names: string[]): string {
-  if (names.length === 0) return text;
-  return [text, `Files I have attached: ${names.join(', ')}`]
+export function withAttachments(text: string, filenames: string[]): string {
+  if (filenames.length === 0) return text;
+  return [text, `Files I have attached: ${filenames.join(', ')}`]
     .filter((part) => part !== '')
     .join('\n\n');
 }
