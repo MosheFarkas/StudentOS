@@ -152,3 +152,67 @@ describe('the message a chat was started with', () => {
     expect(posted).toEqual([]);
   });
 });
+
+describe('a message with a picture on it', () => {
+  const photo = () => new File([new Uint8Array([1, 2])], 'board.png', { type: 'image/png' });
+
+  it('shows the picture the instant it is sent, before any upload lands', async () => {
+    /*
+     * The whole point of the change. Uploading first meant the thumbnail sat
+     * in the composer for several seconds after the student pressed send,
+     * which reads as the press not having worked.
+     *
+     * The upload is held open here, so what is asserted is the state while it
+     * is still in flight: the message is up, the picture is on it, and it is
+     * being shown from the copy the browser already has.
+     */
+    let releaseUpload: (() => void) | undefined;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+
+      if (url.endsWith('/uploads')) {
+        await new Promise<void>((go) => (releaseUpload = go));
+        return new Response(JSON.stringify({ name: 'board', filename: 'board.png', image: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/messages') && method === 'POST') {
+        posted.push(JSON.parse(String(init?.body ?? '{}')).content as string);
+        return new Response(
+          JSON.stringify({
+            userMessage: { ...message('user', 'what is this'), attachments: [] },
+            assistantMessage: message('assistant', 'A connector.'),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/messages')) {
+        return new Response(JSON.stringify({ messages: [], pending: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ agent: { id: 'a1', name: 'x', purpose: '' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    handOff('a1', 'what is this', [photo()]);
+    await open();
+
+    // Still uploading, and the message is already complete on screen.
+    const shown = container.querySelector<HTMLImageElement>('.message-image');
+    expect(shown).not.toBeNull();
+    expect(shown?.getAttribute('src')).toMatch(/^blob:|^data:/);
+    expect(posted).toEqual([]);
+
+    await act(async () => {
+      releaseUpload?.();
+    });
+    await settle();
+    expect(posted).toEqual(['what is this\n\nFiles I have attached: board.png']);
+  });
+});

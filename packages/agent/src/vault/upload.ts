@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { LlmProvider } from '@contexto/llm';
 import { extractPdfText } from '../tools/pdf.js';
 import { describeImage, isReadableImage } from './image-doc.js';
@@ -44,7 +46,36 @@ export type UploadRefusal =
   /** A document that opened but held no words at all. */
   | 'nothing-in-it';
 
-export type UploadResult = { ok: true; name: string } | { ok: false; reason: UploadRefusal };
+export type UploadResult =
+  | {
+      ok: true;
+      name: string;
+      /** Whether the original was kept, which is true only for pictures. */
+      image: boolean;
+    }
+  | { ok: false; reason: UploadRefusal };
+
+/**
+ * Where an original picture is kept, inside the student's own vault.
+ *
+ * Only pictures, and only because a conversation has to be able to show one
+ * back. Everything else is read and dropped: a Word document reopened next
+ * term is its text, and keeping the .docx beside it would be storage bought
+ * for nothing.
+ */
+export function imagePath(vault: Vault, name: string, extension: string): string {
+  return join(vault.directory, 'uploads', `${name}.${extension}`);
+}
+
+/** The extension an image note's original was kept under, from its type. */
+export function imageExtension(mimeType: string, filename: string): string {
+  const type = mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (type === 'image/png') return 'png';
+  if (type === 'image/gif') return 'gif';
+  if (type === 'image/webp') return 'webp';
+  if (type === 'image/jpeg') return 'jpg';
+  return /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase() === 'png' ? 'png' : 'jpg';
+}
 
 export interface IncomingFile {
   filename: string;
@@ -279,5 +310,19 @@ export async function importUpload(
     body: `## What is in it\n\n${body}`,
   });
 
-  return { ok: true, name };
+  /*
+   * The picture itself, kept beside its note.
+   *
+   * After the write, not before: a note that failed to save should not leave
+   * an orphaned image in the vault, and this ordering makes that impossible
+   * rather than merely unlikely.
+   */
+  const isImage = classified.kind === 'image';
+  if (isImage) {
+    const path = imagePath(vault, name, imageExtension(file.mimeType, file.filename));
+    await mkdir(join(vault.directory, 'uploads'), { recursive: true });
+    await writeFile(path, file.bytes);
+  }
+
+  return { ok: true, name, image: isImage };
 }

@@ -594,17 +594,20 @@ describe('the new-chat screen', () => {
       expect(window.location.pathname).toBe('/');
     });
 
-    it('uploads the attachments before it creates the chat', async () => {
+    it('starts the chat without waiting to upload anything', async () => {
+      /*
+       * The behaviour this replaced: the new-chat screen uploaded first, so
+       * attaching a photograph meant several seconds of an unchanged screen
+       * and a "Sending…" button before anything happened. Creating the chat
+       * is one fast request; the reading happens in the conversation, under a
+       * message already on screen.
+       */
       const calls: string[] = [];
       vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input instanceof Request ? input.url : input);
         const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
         if (method === 'POST') calls.push(url.endsWith('/uploads') ? 'upload' : 'create');
-
-        const body = url.endsWith('/uploads')
-          ? { name: 'board', filename: 'board.png' }
-          : { agent: { id: 'new-1', name: 'x' } };
-        return new Response(JSON.stringify(body), {
+        return new Response(JSON.stringify({ agent: { id: 'new-1', name: 'x' }, agents: [] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -616,10 +619,8 @@ describe('the new-chat screen', () => {
       await settle();
 
       const input = container.querySelector<HTMLInputElement>('input[type=file]');
-      Object.defineProperty(input, 'files', {
-        value: [new File([new Uint8Array([1])], 'board.png', { type: 'image/png' })],
-        configurable: true,
-      });
+      const photo = new File([new Uint8Array([1])], 'board.png', { type: 'image/png' });
+      Object.defineProperty(input, 'files', { value: [photo], configurable: true });
       await act(async () => {
         input?.dispatchEvent(new Event('change', { bubbles: true }));
       });
@@ -631,31 +632,20 @@ describe('the new-chat screen', () => {
       });
       await settle();
 
-      // The file has to be in the vault before the message naming it is sent,
-      // or the agent is told to open something that is not there yet.
-      expect(calls).toEqual(['upload', 'create']);
+      // The chat was created and nothing was uploaded on the way.
+      expect(calls).toEqual(['create']);
+      expect(window.location.pathname).toBe('/chats/new-1');
     });
 
-    it('does not send the message when an attachment is refused', async () => {
-      /*
-       * A reply written around a missing attachment is worse than a refusal:
-       * the student cannot tell it happened.
-       */
-      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input instanceof Request ? input.url : input);
-        const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
-        if (method === 'POST' && url.endsWith('/uploads')) {
-          return new Response(JSON.stringify({ message: 'That picture is in a format…' }), {
-            status: 400,
+    it('hands the files to the conversation rather than the server', async () => {
+      vi.stubGlobal(
+        'fetch',
+        async () =>
+          new Response(JSON.stringify({ agent: { id: 'new-2', name: 'x' }, agents: [] }), {
+            status: 200,
             headers: { 'content-type': 'application/json' },
-          });
-        }
-        if (method === 'POST') throw new Error('the chat should never have been created');
-        return new Response(JSON.stringify({ agents: [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      });
+          }),
+      );
 
       await act(async () => {
         root.render(<NewChat name="Lucas" />);
@@ -663,10 +653,8 @@ describe('the new-chat screen', () => {
       await settle();
 
       const input = container.querySelector<HTMLInputElement>('input[type=file]');
-      Object.defineProperty(input, 'files', {
-        value: [new File([new Uint8Array([1])], 'shot.heic', { type: '' })],
-        configurable: true,
-      });
+      const photo = new File([new Uint8Array([1])], 'board.png', { type: 'image/png' });
+      Object.defineProperty(input, 'files', { value: [photo], configurable: true });
       await act(async () => {
         input?.dispatchEvent(new Event('change', { bubbles: true }));
       });
@@ -677,10 +665,9 @@ describe('the new-chat screen', () => {
       });
       await settle();
 
-      expect(container.querySelector('.newchat-error')?.textContent).toContain('format');
-      expect(window.location.pathname).toBe('/');
-      // Still on the composer, so it can be removed or tried again.
-      expect(container.querySelectorAll('.attached-item').length).toBe(1);
+      // The File itself travels, so the conversation can show it at once and
+      // upload it underneath.
+      expect(takeHandoff('new-2')?.files[0]).toBe(photo);
     });
 
     it('says so when the chat cannot be created, and keeps the draft', async () => {

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
-import type { Message } from '@contexto/shared';
+import type { Message, MessageAttachment } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
 import {
   Vault,
@@ -50,8 +50,8 @@ export async function runTurnForAgent(
     userId: string;
     agent: typeof agents.$inferSelect;
     content: string;
-    /** Vault notes attached to this message, by name. */
-    attachments?: string[];
+    /** Files that went with this message. */
+    attachments?: MessageAttachment[];
     signal?: AbortSignal;
   },
 ): Promise<{ userMessage: Message; assistantMessage: Message }> {
@@ -59,7 +59,7 @@ export async function runTurnForAgent(
 
   const [userMessage] = await ctx.db
     .insert(agentMessages)
-    .values({ agentId: agent.id, role: 'user', content })
+    .values({ agentId: agent.id, role: 'user', content, attachments: attachments ?? [] })
     .returning();
 
   /*
@@ -122,7 +122,12 @@ export async function runTurnForAgent(
          * that asked about it.
          */
         ...(attachments?.length && vault
-          ? { attachments: await readAttachments(vault, attachments) }
+          ? {
+              attachments: await readAttachments(
+                vault,
+                attachments.map((file) => file.name),
+              ),
+            }
           : {}),
         ...(profile?.timezone ? { timezone: profile.timezone } : {}),
         google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
@@ -173,6 +178,7 @@ export function toMessage(row: typeof agentMessages.$inferSelect): Message {
     agentId: row.agentId,
     role: row.role as Message['role'],
     content: row.content,
+    attachments: row.attachments ?? [],
     toolsUsed: row.toolsUsed,
     createdAt: row.createdAt.toISOString(),
   };

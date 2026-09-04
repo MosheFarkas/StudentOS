@@ -15,14 +15,20 @@
 interface Handoff {
   agentId: string;
   content: string;
-  /** Vault notes uploaded with it, by name. */
-  attachments: string[];
+  /**
+   * The files attached to it, still only in the browser.
+   *
+   * Handed over rather than uploaded first, so starting a chat is one fast
+   * request and the reading of a photograph happens under a message already
+   * on screen.
+   */
+  files: File[];
 }
 
 let waiting: Handoff | undefined;
 
-export function handOff(agentId: string, content: string, attachments: string[] = []): void {
-  waiting = { agentId, content, attachments };
+export function handOff(agentId: string, content: string, files: File[] = []): void {
+  waiting = { agentId, content, files };
 }
 
 /**
@@ -30,11 +36,9 @@ export function handOff(agentId: string, content: string, attachments: string[] 
  * caller gets nothing, so a re-run of the effect that consumes it cannot send
  * the same message twice.
  */
-export function takeHandoff(
-  agentId: string,
-): { content: string; attachments: string[] } | undefined {
+export function takeHandoff(agentId: string): { content: string; files: File[] } | undefined {
   if (waiting?.agentId !== agentId) return undefined;
-  const { content, attachments } = waiting;
+  const { content, files } = waiting;
   waiting = undefined;
-  return { content, attachments };
+  return { content, files };
 }

@@ -157,7 +157,7 @@ describe('importing an upload into the vault', () => {
       bytes: bytes('Unit 1 is due on the 14th of October.'),
     });
 
-    expect(result).toEqual({ ok: true, name: 'syllabus' });
+    expect(result).toEqual({ ok: true, name: 'syllabus', image: false });
     const note = await vault.read('entity', 'syllabus');
     expect(note?.body).toContain('due on the 14th of October');
   });
@@ -244,7 +244,7 @@ describe('importing an upload into the vault', () => {
       bytes: bytes('Period 1 Biology\nPeriod 2 Maths\n'),
     });
 
-    expect(result).toEqual({ ok: true, name: 'timetable' });
+    expect(result).toEqual({ ok: true, name: 'timetable', image: false });
     expect((await vault.read('entity', 'timetable'))?.body).toContain('Period 2 Maths');
   });
 
@@ -347,7 +347,7 @@ describe('reading a document someone wrote in Word', () => {
       bytes,
     });
 
-    expect(result).toEqual({ ok: true, name: 'biology-syllabus' });
+    expect(result).toEqual({ ok: true, name: 'biology-syllabus', image: false });
     expect((await vault.read('entity', 'biology-syllabus'))?.body).toContain('due on Friday');
   });
 
@@ -395,7 +395,7 @@ describe('reading a picture', () => {
 
     const result = await importUpload(vault, jpeg, { llm: llm as never, userId: 'u1' });
 
-    expect(result).toEqual({ ok: true, name: 'worksheet' });
+    expect(result).toEqual({ ok: true, name: 'worksheet', image: true });
     const note = await vault.read('entity', 'worksheet');
     expect(note?.body).toContain('Name the organelles');
     // Read once, at the door. Nothing downstream has to know it was a picture.

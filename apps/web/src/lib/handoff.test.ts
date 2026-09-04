@@ -26,17 +26,23 @@ describe('carrying the first message into a new chat', () => {
     expect(takeHandoff('never-set')).toBeUndefined();
   });
 
-  it('carries the notes uploaded with it, so the turn can read them', () => {
-    // The names, not the filenames: this is what the server looks the notes
-    // up by, and it is the whole reason an attached photograph is readable on
-    // the turn it was attached to.
-    handOff('a1', 'what is this', ['board']);
-    expect(takeHandoff('a1')?.attachments).toEqual(['board']);
+  it('carries the files themselves, not uploads of them', () => {
+    /*
+     * The files are handed over rather than sent first, so starting a chat
+     * stays one fast request. A File survives the navigation because nothing
+     * about it belongs to the screen that picked it.
+     */
+    const photo = new File([new Uint8Array([1])], 'board.png', { type: 'image/png' });
+    handOff('a1', 'what is this', [photo]);
+
+    const taken = takeHandoff('a1');
+    expect(taken?.files).toHaveLength(1);
+    expect(taken?.files[0]).toBe(photo);
   });
 
   it('carries an empty list when nothing was attached', () => {
     handOff('a1', 'just words');
-    expect(takeHandoff('a1')?.attachments).toEqual([]);
+    expect(takeHandoff('a1')?.files).toEqual([]);
   });
 
   it('keeps only the most recent, so an abandoned start cannot resurface', () => {

@@ -5,7 +5,7 @@ import { handOff } from '../lib/handoff.js';
 import { pickGreeting } from '../lib/greeting.js';
 import { navigate } from '../lib/router.js';
 import { useAttachments } from '../lib/attachments.js';
-import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
+import { AttachButton, AttachedFiles } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
 
 interface Props {
@@ -53,21 +53,26 @@ export function NewChat({ name }: Props) {
        * attachment is worse than being told the attachment failed, because
        * the student cannot tell it happened.
        */
-      const uploaded = await attachments.upload(attachments.items, said);
-      const filenames = uploaded.map((file) => file.filename);
-      const content = withAttachments(said, filenames);
-
+      /*
+       * Nothing is uploaded here.
+       *
+       * Creating the chat is one fast request; reading a photograph is a
+       * model call taking seconds. Doing the second one first left the
+       * student watching an unchanged screen and a "Sending…" button. The
+       * files are handed to the conversation, which shows them above the
+       * message and does the reading underneath it.
+       */
+      const filenames = attachments.items.map((item) => item.file.name);
       const res = await api.agents.$post({
         json: { name: titleFor(said, filenames), purpose: '' },
       });
       if (!res.ok) throw new Error(`Could not start a chat (${res.status})`);
       const { agent } = await res.json();
 
-      attachments.clear();
       handOff(
         agent.id,
-        content,
-        uploaded.map((file) => file.name),
+        said,
+        attachments.items.map((item) => item.file),
       );
       navigate({ name: 'chat', agentId: agent.id });
     } catch (cause) {

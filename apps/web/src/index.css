@@ -739,6 +739,58 @@ hr {
   line-height: 1.68;
 }
 
+/*
+ * What came with a message, above it.
+ *
+ * Outside the bubble and above it, because that is the order they were made
+ * in: the picture was attached, then the question was asked about it. The
+ * message column is right-aligned, so these follow it.
+ */
+.message-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.message-image {
+  display: block;
+  max-width: 15rem;
+  max-height: 15rem;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.message-doc {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/*
+ * The message is a column once it can carry files, so the bubble has to stop
+ * stretching to the column's width and go back to hugging its text.
+ */
+.message.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  background: none;
+  padding: 0;
+}
+
+.message.user .message-said {
+  padding: 0.6rem 0.9rem;
+  border-radius: 15px;
+  background: rgba(10, 16, 69, 0.05);
+  white-space: pre-wrap;
+}
+
 /* The mark that closes a reply, on its own line under the last paragraph. */
 .message.assistant .logo-mark {
   margin-top: 1.4rem;

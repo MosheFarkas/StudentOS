@@ -17,6 +17,8 @@ export interface Uploaded {
   name: string;
   /** What it was called on their machine. */
   filename: string;
+  /** Whether the original was kept, so the conversation can show it back. */
+  image: boolean;
 }
 
 export async function uploadFile(file: File, context = ''): Promise<Uploaded> {

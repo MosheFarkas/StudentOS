@@ -8,6 +8,7 @@ import { takeHandoff } from '../lib/handoff.js';
 import type { PreviewTarget } from '../lib/preview.js';
 import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
+import { MessageFiles } from './MessageFiles.js';
 import { useAttachments } from '../lib/attachments.js';
 import type { Attachment as AttachmentItem } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles, withAttachments } from './AttachButton.js';
@@ -47,6 +48,15 @@ export function Chat({ agentId }: Props) {
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
   /** Files on the composer, sent with the message rather than before it. */
   const attachments = useAttachments();
+  /*
+   * Object URLs for pictures sent in this session, by filename.
+   *
+   * The server has a copy the moment the upload lands, but asking it for one
+   * costs a request the browser does not need to make -- it is holding the
+   * file. Without this the thumbnail blinks: local preview, gone, then the
+   * fetched copy a beat later.
+   */
+  const [localPreviews, setLocalPreviews] = useState<Record<string, string>>({});
   /*
    * Whether the newest message is on screen.
    *
@@ -91,7 +101,7 @@ export function Chat({ agentId }: Props) {
        * the message this puts on screen optimistically.
        */
       const first = takeHandoff(agentId);
-      if (first) void deliver(first.content, first.attachments);
+      if (first) void deliver(first.content, attachments.adopt(first.files));
     })();
   }, [agentId]);
 
@@ -211,7 +221,19 @@ export function Chat({ agentId }: Props) {
     event.preventDefault();
     const said = draft.trim();
     if ((!said && attachments.items.length === 0) || sending) return;
-    await deliver(said, [], attachments.items);
+
+    /*
+     * The composer empties on the keystroke, not when the network agrees.
+     *
+     * Taking a copy of the files first and clearing immediately is the whole
+     * of it: leaving them in the box while a photograph is read left the
+     * thumbnail sitting in the composer for several seconds after the student
+     * pressed send, which reads as the press not having worked.
+     */
+    const going = attachments.items;
+    setDraft('');
+    attachments.clear();
+    await deliver(said, going);
   }
 
   /**
@@ -221,7 +243,7 @@ export function Chat({ agentId }: Props) {
    * come from the composer -- it is handed over by the screen the chat was
    * started on, and has to travel the same path once it arrives.
    */
-  async function deliver(said: string, noteNames: string[], waiting: AttachmentItem[] = []) {
+  async function deliver(said: string, waiting: AttachmentItem[] = []) {
     setSending(true);
     setError(null);
 
@@ -238,6 +260,29 @@ export function Chat({ agentId }: Props) {
       waiting.map((item) => item.file.name),
     );
 
+    /*
+     * The files, as the message will show them, before any of them are sent.
+     *
+     * `name` is the filename here rather than the slug the server will
+     * derive. It is only a React key until the server's copy of this message
+     * replaces it, and the picture is found by filename either way.
+     */
+    const localFiles = waiting.map((item) => ({
+      name: item.file.name,
+      filename: item.file.name,
+      image: Boolean(item.preview),
+    }));
+    if (waiting.length > 0) {
+      setLocalPreviews((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          waiting.flatMap((item) =>
+            item.preview ? [[item.file.name, item.preview] as const] : [],
+          ),
+        ),
+      }));
+    }
+
     // Optimistic: the turn is not streamed and can take several seconds, so
     // the student's own message has to appear immediately or the app feels
     // broken. Replaced by the server's copy when the response lands.
@@ -247,10 +292,10 @@ export function Chat({ agentId }: Props) {
       role: 'user',
       content: shown,
       toolsUsed: [],
+      attachments: localFiles,
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, pending]);
-    setDraft('');
 
     try {
       /*
@@ -259,15 +304,14 @@ export function Chat({ agentId }: Props) {
        * reply written around a missing attachment is worse than being told.
        */
       const uploaded = waiting.length > 0 ? await attachments.upload(waiting, said) : [];
-      if (waiting.length > 0) attachments.clear();
       const content = withAttachments(
         said,
         uploaded.map((file) => file.filename),
       );
-      const names = [...noteNames, ...uploaded.map((file) => file.name)];
+      const files = uploaded;
       const res = await api.agents[':id'].messages.$post({
         param: { id: agentId },
-        json: { content, ...(names.length > 0 ? { attachments: names } : {}) },
+        json: { content, ...(files.length > 0 ? { attachments: files } : {}) },
       });
 
       if (!res.ok) {
@@ -333,7 +377,10 @@ export function Chat({ agentId }: Props) {
                     <LogoMark size={26} working={false} />
                   </>
                 ) : (
-                  message.content
+                  <>
+                    <MessageFiles attachments={message.attachments} local={localPreviews} />
+                    {message.content && <span className="message-said">{message.content}</span>}
+                  </>
                 )}
               </div>
             ))}

@@ -75,6 +75,21 @@ export type UpdateAgentInput = z.infer<typeof updateAgentSchema>;
 export const messageRoleSchema = z.enum(['user', 'assistant']);
 export type MessageRole = z.infer<typeof messageRoleSchema>;
 
+/**
+ * A file that went with a message.
+ *
+ * `name` is the vault note, which is what the turn reads and what makes the
+ * file's contents available to the model. `filename` is what the student
+ * called it, which is what they will recognise. `image` decides whether the
+ * conversation shows a picture or a name.
+ */
+export const messageAttachmentSchema = z.object({
+  name: z.string().min(1).max(120),
+  filename: z.string().min(1).max(300),
+  image: z.boolean(),
+});
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
 export const messageSchema = z.object({
   id: z.string(),
   agentId: z.string(),
@@ -82,6 +97,8 @@ export const messageSchema = z.object({
   content: z.string(),
   toolsUsed: z.array(z.string()),
   createdAt: z.iso.datetime(),
+  /** Files that went with it. Empty for everything the agent says. */
+  attachments: z.array(messageAttachmentSchema).default([]),
 });
 export type Message = z.infer<typeof messageSchema>;
 
@@ -95,7 +112,7 @@ export const sendMessageSchema = z.object({
    * whole document inside `content` would store it in the conversation for
    * ever and show it to them in their own message bubble.
    */
-  attachments: z.array(z.string().min(1).max(120)).max(10).optional(),
+  attachments: z.array(messageAttachmentSchema).max(10).optional(),
 });
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
 

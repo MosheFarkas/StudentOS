@@ -26,6 +26,7 @@ export {
   type UploadResult,
 } from './vault/upload.js';
 export { extractOfficeText, officeKindFor, type OfficeKind } from './vault/office.js';
+export { imageExtension, imagePath } from './vault/upload.js';
 export { describeImage, isReadableImage } from './vault/image-doc.js';
 export { renderNotes } from './vault/render.js';
 export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';

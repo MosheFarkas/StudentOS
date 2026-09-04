@@ -4,7 +4,8 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { user } from '@contexto/db';
 import { addCredentialSchema, ContextoError, type UsageStatus } from '@contexto/shared';
-import { UPLOAD_LIMIT_BYTES, Vault, importUpload } from '@contexto/agent';
+import { readFile } from 'node:fs/promises';
+import { UPLOAD_LIMIT_BYTES, Vault, imagePath, importUpload } from '@contexto/agent';
 import type { UploadRefusal } from '@contexto/agent';
 import { currentWindowEnd, currentWindowStart } from '@contexto/llm';
 import type { AppContext } from '../context.js';
@@ -139,7 +140,41 @@ export function createRoutes(ctx: AppContext) {
         );
 
         if (!result.ok) throw new ContextoError('validation_failed', REFUSALS[result.reason]);
-        return c.json({ name: result.name, filename: file.name });
+        return c.json({ name: result.name, filename: file.name, image: result.image });
+      })
+
+      /**
+       * A picture the student uploaded, served back to them.
+       *
+       * Only pictures are kept, and only so a conversation can show one above
+       * the question it was attached to. The name comes from the URL and is
+       * checked against the slug alphabet before it is joined onto a path --
+       * Vault does the same check on the way in, and this is the way out.
+       */
+      .get('/uploads/:name', auth, async (c) => {
+        if (!ctx.env?.VAULT_ROOT) throw new ContextoError('not_found', 'No vault here.');
+
+        const name = c.req.param('name');
+        if (!/^[a-z0-9-]{1,120}$/.test(name)) {
+          throw new ContextoError('validation_failed', 'Not a file name.');
+        }
+
+        const vault = new Vault(ctx.env.VAULT_ROOT, c.get('userId'));
+        for (const extension of ['png', 'jpg', 'gif', 'webp']) {
+          try {
+            const bytes = await readFile(imagePath(vault, name, extension));
+            return c.body(bytes.buffer as ArrayBuffer, 200, {
+              'content-type': extension === 'jpg' ? 'image/jpeg' : `image/${extension}`,
+              // Immutable: the name is derived from the file, so a different
+              // picture is a different name.
+              'cache-control': 'private, max-age=31536000, immutable',
+            });
+          } catch {
+            // Not this extension. The list is short and a miss costs a stat.
+          }
+        }
+
+        throw new ContextoError('not_found', 'No such picture.');
       })
 
       .route('/agents', createAgentRoutes(ctx))

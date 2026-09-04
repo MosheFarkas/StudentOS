@@ -42,15 +42,27 @@ export function useAttachments() {
     [],
   );
 
-  const add = useCallback((chosen: File[]) => {
-    const taken = chosen.map((file) => {
+  /**
+   * Wrap files into attachments this hook will clean up after.
+   *
+   * Separate from `add` because the new-chat screen hands its files to the
+   * conversation and then unmounts, taking its own object URLs with it. The
+   * conversation makes fresh ones from the same File objects, which survive
+   * the navigation because nothing about them is tied to a component.
+   */
+  const adopt = useCallback((chosen: File[]): Attachment[] => {
+    return chosen.map((file) => {
       const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
       if (preview) urls.current.push(preview);
       counter += 1;
       return { id: `a${counter}`, file, ...(preview ? { preview } : {}) };
     });
-    setItems((prev) => [...prev, ...taken]);
   }, []);
+
+  const add = useCallback(
+    (chosen: File[]) => setItems((prev) => [...prev, ...adopt(chosen)]),
+    [adopt],
+  );
 
   const remove = useCallback((id: string) => {
     setItems((prev) => {
@@ -82,5 +94,5 @@ export function useAttachments() {
     return done;
   }, []);
 
-  return { items, add, remove, clear, upload };
+  return { items, add, adopt, remove, clear, upload };
 }

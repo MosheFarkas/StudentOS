@@ -28,6 +28,18 @@ export const agentMessages = pgTable(
     content: text('content').notNull(),
     /** Tool ids invoked while producing this message, for UI attribution. */
     toolsUsed: jsonb('tools_used').$type<string[]>().notNull().default([]),
+    /**
+     * Files the student attached to this message.
+     *
+     * Stored on the message rather than derived from its text, because the
+     * text is what they typed and this is what they sent with it. It is what
+     * lets a conversation reopened next term still show the photograph above
+     * the question about it, rather than a filename in a sentence.
+     */
+    attachments: jsonb('attachments')
+      .$type<{ name: string; filename: string; image: boolean }[]>()
+      .notNull()
+      .default([]),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('agent_messages_agent_created_idx').on(t.agentId, t.createdAt)],
