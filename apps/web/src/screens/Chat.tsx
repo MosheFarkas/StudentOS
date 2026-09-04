@@ -46,6 +46,15 @@ export function Chat({ agentId }: Props) {
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
   /** Files uploaded into the vault, waiting to be named in the next message. */
   const [files, setFiles] = useState<Attachment[]>([]);
+  /*
+   * Whether the newest message is on screen.
+   *
+   * Only used to decide whether to offer the jump button -- a student who has
+   * scrolled up to reread something should not be dragged back down by an
+   * arriving reply, but they should be told there is one and given one click
+   * to reach it.
+   */
+  const [atBottom, setAtBottom] = useState(true);
   const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,8 +95,36 @@ export function Chat({ agentId }: Props) {
   }, [agentId]);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only when they are already at the bottom. Scrolling someone back down
+    // mid-sentence because a reply landed is the rudest thing a chat can do.
+    if (atBottom) bottom.current?.scrollIntoView({ behavior: 'smooth' });
+    /*
+     * atBottom is read but not depended on, deliberately. This fires when the
+     * conversation changes; re-running it every time the student scrolls would
+     * have it fight them for the scroll position.
+     */
   }, [messages, sending]);
+
+  /*
+   * The page scrolls, not a box inside it, so the window is what to watch.
+   *
+   * The slack is generous: a couple of lines from the bottom still counts as
+   * "at the bottom", because a button that appears the instant a scroll
+   * overshoots by three pixels is a button that flickers.
+   */
+  useEffect(() => {
+    const check = () => {
+      const from = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      setAtBottom(from < 120);
+    };
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, []);
 
   useEffect(() => {
     /*
@@ -260,7 +297,16 @@ export function Chat({ agentId }: Props) {
                  * is shown exactly as they typed it.
                  */}
                 {message.role === 'assistant' ? (
-                  <MessageText text={message.content} onPreview={setPreview} />
+                  <>
+                    <MessageText text={message.content} onPreview={setPreview} />
+                    {/*
+                      The mark closes a reply the way a signature closes a
+                      letter. With the bubbles gone there is no edge saying
+                      where an answer stops, and two replies in a row would
+                      otherwise read as one long one.
+                    */}
+                    <LogoMark size={19} working={false} />
+                  </>
                 ) : (
                   message.content
                 )}
@@ -299,6 +345,27 @@ export function Chat({ agentId }: Props) {
 
           {error && <p className="muted">{error}</p>}
 
+          {/*
+            The band that softens the seam.
+            
+            Its own element rather than a pseudo-element on the bar. As a
+            ::before with a negative z-index it sat inside the bar's own
+            stacking context, so what it blurred was the bar's opaque
+            background rather than the transcript sliding under it.
+          */}
+          <div className="composer-fade" aria-hidden="true" />
+
+          {!atBottom && messages.length > 0 && (
+            <button
+              className="to-bottom"
+              type="button"
+              aria-label="Jump to the latest message"
+              onClick={() => bottom.current?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <DownIcon />
+            </button>
+          )}
+
           <form className="composer" onSubmit={send}>
             <AttachedFiles
               files={files}
@@ -330,11 +397,12 @@ export function Chat({ agentId }: Props) {
                 disabled={sending}
               />
               <button
-                className="primary"
+                className="composer-send"
                 type="submit"
+                aria-label="Send"
                 disabled={sending || (!draft.trim() && files.length === 0)}
               >
-                Send
+                <SendIcon />
               </button>
             </div>
           </form>
@@ -343,5 +411,35 @@ export function Chat({ agentId }: Props) {
         {preview && <FilePreview target={preview} onClose={() => setPreview(null)} />}
       </div>
     </>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true" focusable="false">
+      <path
+        d="M3.5 9h11M10 4.5 14.5 9 10 13.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DownIcon() {
+  return (
+    <svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true" focusable="false">
+      <path
+        d="M9 3.5v11M4.5 10 9 14.5 13.5 10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

@@ -688,99 +688,187 @@ hr {
 .messages {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 1.5rem;
   min-height: 12rem;
   margin-bottom: 1rem;
 }
 
 .message {
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-lg);
-  max-width: 88%;
+  max-width: 100%;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: 0.95rem;
 }
 
+/*
+ * The question keeps a shape; the answer does not.
+ *
+ * Only one side of a conversation needs marking out, and it is the shorter
+ * one. A reply set as plain text on the page reads as writing rather than as
+ * a chat log -- which is what it is -- and two containers facing each other
+ * across a column is a lot of furniture for a page that is mostly prose.
+ *
+ * Faint and grey rather than the brand violet: this is the student's own
+ * words repeated back, not something the product is saying.
+ */
 .message.user {
   align-self: flex-end;
-  background: var(--violet);
-  color: #fff;
-  border-bottom-right-radius: 4px;
-}
-
-.message.user a {
-  color: #fff;
+  max-width: 78%;
+  padding: 0.6rem 0.9rem;
+  border-radius: 15px;
+  background: rgba(10, 16, 69, 0.05);
+  color: var(--ink);
 }
 
 /*
  * The only serif in the interface.
  *
- * Everything the student operates is set in the sans; what the agent says
- * back is set in the serif, so the two are told apart by the letterforms
- * before anything else -- bubble side, colour and border are all saying it a
- * second time.
+ * It is now the ONLY thing telling the two sides apart, which is what it was
+ * always meant to be. The bubble, the border and the background were each
+ * saying the same thing again; with them gone the letterforms carry it alone,
+ * and the reply sits on the page as writing rather than as a log entry.
  */
 .message.assistant {
-  align-self: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-bottom-left-radius: 4px;
+  align-self: stretch;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
   font-family: var(--serif);
+  font-size: 1.02rem;
+  line-height: 1.68;
+}
+
+/* The mark that closes a reply, on its own line under the last paragraph. */
+.message.assistant .logo-mark {
+  margin-top: 1.15rem;
+  opacity: 0.85;
 }
 
 /*
  * The bar at the bottom of a conversation.
  *
  * Held off the floor rather than sitting on it: a box flush against the
- * bottom edge reads as part of the window chrome instead of part of the page.
- *
- * The blur is on the strip above it, not on the bar. What needs softening is
- * the messages sliding underneath -- text passing behind a bar with a hard
- * edge cuts off mid-letter -- so a masked, blurred band sits over that seam
- * and fades out upward. The mask is what keeps the blur from creeping up the
- * transcript: without it the whole column would go soft.
+ * bottom edge reads as window chrome instead of part of the page. One rounded
+ * field with the + inside it, not a row of controls beside a box.
  */
 .composer {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   position: sticky;
-  bottom: 1rem;
-  z-index: 5;
+  bottom: 1.1rem;
+  z-index: 6;
   margin-top: 0.5rem;
-  padding: 0.6rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  padding: 0.4rem 0.5rem 0.4rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow:
+    0 1px 2px rgba(10, 16, 69, 0.04),
+    0 6px 20px rgba(10, 16, 69, 0.06);
 }
 
-.composer::before {
-  content: '';
-  position: absolute;
-  left: -0.7rem;
-  right: -0.7rem;
-  bottom: -1.4rem;
-  top: -1.6rem;
-  z-index: -1;
-  pointer-events: none;
-  backdrop-filter: blur(7px);
-  -webkit-backdrop-filter: blur(7px);
-  mask-image: linear-gradient(to bottom, transparent, #000 42%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 42%);
-}
-
-/* The controls themselves, in a row inside the lifted box. */
 .composer-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
-.composer-row input {
+/* No border of its own: the bar around it is the field. */
+.composer-row > input {
   flex: 1;
   min-width: 0;
+  font: inherit;
+  font-size: 0.97rem;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--ink);
+  padding: 0.5rem 0.15rem;
+}
+
+.composer-row > input::placeholder {
+  color: var(--ink-faint);
+}
+
+/*
+ * The band that softens the seam above the bar.
+ *
+ * A real element rather than a pseudo-element on the bar. As a ::before with a
+ * negative z-index it lived inside the bar's own stacking context, so the
+ * backdrop it sampled was the bar's opaque background -- it was blurring
+ * white. Here it sits over the transcript, which is what needed softening.
+ *
+ * Note the single unprefixed backdrop-filter. Writing the -webkit- form by
+ * hand is what broke this the first time: the build adds the prefix itself,
+ * and when both are present its dedupe keeps only the prefixed one.
+ */
+.composer-fade {
+  position: sticky;
+  bottom: 3.4rem;
+  z-index: 5;
+  height: 2.6rem;
+  margin: 0 -0.75rem -2.6rem;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to bottom, transparent, #000 70%);
+  background: linear-gradient(to bottom, transparent, var(--page));
+}
+
+/*
+ * The way back down, offered only when it is needed.
+ *
+ * Sits above the bar and centred on the column, so it reads as belonging to
+ * the conversation rather than to the composer.
+ */
+.to-bottom {
+  position: sticky;
+  bottom: 4.6rem;
+  z-index: 7;
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: -2.2rem;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(10, 16, 69, 0.1);
+}
+
+.to-bottom:hover {
+  color: var(--violet);
+  border-color: var(--violet);
+}
+
+/* An arrow, not the word. The field is the sentence; this is the full stop. */
+.composer-send {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.composer-send:hover:not(:disabled) {
+  background: var(--wash);
+  color: var(--violet);
+}
+
+.composer-send:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 dl {
@@ -2086,10 +2174,13 @@ a.button {
 }
 
 /* Pushed to the far end, so the row reads as "add something" then "go". */
-.composer-send {
+.newchat-tools .composer-send {
   margin-left: auto;
+  width: auto;
+  height: auto;
   padding: 0.34rem 0.9rem;
   font-size: 0.87rem;
+  border-radius: var(--radius);
 }
 
 .composer-attach {
@@ -2356,7 +2447,7 @@ a.button {
  * inside would be positioned against the blurred box and blurred with it.
  */
 body.dialog-open .app {
-  filter: blur(4px);
+  filter: blur(2.5px);
   transition: filter 140ms ease-out;
   pointer-events: none;
   user-select: none;
