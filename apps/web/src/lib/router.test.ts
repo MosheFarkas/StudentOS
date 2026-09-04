@@ -6,12 +6,12 @@ describe('parseRoute', () => {
     expect(parseRoute('/')).toEqual({ name: 'new' });
     expect(parseRoute('/agents')).toEqual({ name: 'new' });
     expect(parseRoute('/settings')).toEqual({ name: 'settings' });
-    expect(parseRoute('/agents/abc123')).toEqual({ name: 'chat', agentId: 'abc123' });
+    expect(parseRoute('/chats/abc123')).toEqual({ name: 'chat', agentId: 'abc123' });
   });
 
   it('ignores a trailing slash', () => {
     expect(parseRoute('/settings/')).toEqual({ name: 'settings' });
-    expect(parseRoute('/agents/abc123/')).toEqual({ name: 'chat', agentId: 'abc123' });
+    expect(parseRoute('/chats/abc123/')).toEqual({ name: 'chat', agentId: 'abc123' });
   });
 
   /**
@@ -22,7 +22,7 @@ describe('parseRoute', () => {
    */
   it('sends unknown paths to notFound', () => {
     expect(parseRoute('/nope').name).toBe('notFound');
-    expect(parseRoute('/agents/abc/extra').name).toBe('notFound');
+    expect(parseRoute('/chats/abc/extra').name).toBe('notFound');
     expect(parseRoute('/settings/deep').name).toBe('notFound');
   });
 
@@ -44,11 +44,26 @@ describe('parseRoute', () => {
    */
   it('round-trips an id that needs escaping', () => {
     const path = routeToPath({ name: 'chat', agentId: 'a b/c' });
-    expect(path).toBe('/agents/a%20b%2Fc');
+    expect(path).toBe('/chats/a%20b%2Fc');
     expect(parseRoute(path)).toEqual({ name: 'chat', agentId: 'a b/c' });
   });
 
   it('does not throw on a malformed escape', () => {
-    expect(() => parseRoute('/agents/%E0%A4%A')).not.toThrow();
+    expect(() => parseRoute('/chats/%E0%A4%A')).not.toThrow();
+  });
+});
+
+describe('the address a chat used to have', () => {
+  /*
+   * Links to /agents/:id are in browser histories, in the desktop app, and in
+   * whatever a student has sent themselves. The word is gone from the product;
+   * the addresses it minted are not.
+   */
+  it('still opens a chat', () => {
+    expect(parseRoute('/agents/abc123')).toEqual({ name: 'chat', agentId: 'abc123' });
+  });
+
+  it('is never handed back out', () => {
+    expect(routeToPath({ name: 'chat', agentId: 'abc123' })).toBe('/chats/abc123');
   });
 });

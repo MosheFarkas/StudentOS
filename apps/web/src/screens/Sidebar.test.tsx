@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Sidebar } from './Sidebar.js';
+import { Sidebar, sortChats } from './Sidebar.js';
 import { initialOf } from '../lib/initial.js';
 import { NewChat } from './NewChat.js';
 import { takeHandoff } from '../lib/handoff.js';
@@ -46,6 +46,8 @@ beforeEach(() => {
       name,
       purpose: '',
       profile: '',
+      archivedAt: null,
+      pinnedAt: null,
       createdAt: '',
       updatedAt: '',
     });
@@ -80,7 +82,7 @@ describe('the rail', () => {
 
   it('lists the chats the server returned', async () => {
     await show('Lucas');
-    expect(text('.sidebar-chat')).toEqual(['Bio midterm plan', 'Essay outline']);
+    expect(text('.sidebar-chat-open')).toEqual(['Bio midterm plan', 'Essay outline']);
   });
 
   it('offers exactly one way to start, and calls it New', async () => {
@@ -93,7 +95,7 @@ describe('the rail', () => {
       root.render(<Sidebar route={{ name: 'chat', agentId: 'a2' }} working={false} name="Lucas" />);
     });
     await settle();
-    expect(text('.sidebar-chat.is-current')).toEqual(['Essay outline']);
+    expect(text('.sidebar-chat.is-current .sidebar-chat-open')).toEqual(['Essay outline']);
   });
 
   it('shows the student their initial and their name', async () => {
@@ -125,7 +127,202 @@ describe('the rail', () => {
     });
     await show('Lucas');
     expect(text('.sidebar-new')).toEqual(['New']);
-    expect(text('.sidebar-chat')).toEqual([]);
+    expect(text('.sidebar-chat-open')).toEqual([]);
+  });
+});
+
+describe('what a chat row can do', () => {
+  /** Chats as the server would send them, with whatever state the test needs. */
+  function listing(
+    ...rows: { id: string; name: string; archivedAt?: string; pinnedAt?: string }[]
+  ) {
+    return async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (input instanceof Request ? input.method : init?.method) ?? 'GET';
+      if (method === 'PATCH' || method === 'DELETE') {
+        patched.push({
+          method,
+          ...(init?.body ? { body: JSON.parse(String(init.body)) as Record<string, unknown> } : {}),
+        });
+        const [target] = rows;
+        return new Response(
+          JSON.stringify({
+            agent: { ...blank(target!.id, target!.name), ...patched.at(-1)?.body },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(
+        JSON.stringify({ agents: rows.map((r) => ({ ...blank(r.id, r.name), ...r })) }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+  }
+
+  const blank = (id: string, name: string) => ({
+    id,
+    name,
+    purpose: '',
+    profile: '',
+    archivedAt: null,
+    pinnedAt: null,
+    createdAt: '',
+    updatedAt: '',
+  });
+
+  let patched: { method: string; body?: Record<string, unknown> }[];
+
+  beforeEach(() => {
+    patched = [];
+  });
+
+  async function railWith(...rows: Parameters<typeof listing>) {
+    vi.stubGlobal('fetch', listing(...rows));
+    await act(async () => {
+      root.render(<Sidebar route={{ name: 'new' }} working={false} name="Lucas" />);
+    });
+    await settle();
+  }
+
+  const openRowMenu = async (index = 0) => {
+    await act(async () => {
+      container.querySelectorAll<HTMLButtonElement>('.sidebar-chat-more')[index]?.click();
+    });
+  };
+
+  it('keeps the menu shut until the dots are pressed', async () => {
+    await railWith({ id: 'c1', name: 'Bio midterm plan' });
+    expect(container.querySelector('.chat-menu')).toBeNull();
+  });
+
+  it('offers rename, pin, archive and delete', async () => {
+    await railWith({ id: 'c1', name: 'Bio midterm plan' });
+    await openRowMenu();
+    expect(text('.chat-menu button')).toEqual(['Rename', 'Pin', 'Archive', 'Delete']);
+  });
+
+  it('offers to unpin a chat that is already pinned', async () => {
+    await railWith({ id: 'c1', name: 'Bio midterm plan', pinnedAt: '2026-09-01T00:00:00.000Z' });
+    await openRowMenu();
+    expect(text('.chat-menu button')).toContain('Unpin');
+  });
+
+  it('keeps archived chats out of the rail', async () => {
+    // Not deleted -- settings lists them, and the vault never noticed.
+    await railWith(
+      { id: 'c1', name: 'Still here' },
+      { id: 'c2', name: 'Put away', archivedAt: '2026-09-01T00:00:00.000Z' },
+    );
+    expect(text('.sidebar-chat-open')).toEqual(['Still here']);
+  });
+
+  it('shows a chat whose archived flag the server never sent', async () => {
+    /*
+     * A response from before the column existed, or a client ahead of a
+     * server. Reading a missing field as "archived" would empty the rail
+     * completely -- the loudest possible failure for the smallest mismatch.
+     */
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({
+            agents: [
+              {
+                id: 'c1',
+                name: 'No flags',
+                purpose: '',
+                profile: '',
+                createdAt: '',
+                updatedAt: '',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+    );
+    await act(async () => {
+      root.render(<Sidebar route={{ name: 'new' }} working={false} name="Lucas" />);
+    });
+    await settle();
+    expect(text('.sidebar-chat-open')).toEqual(['No flags']);
+  });
+
+  it('asks before deleting, naming the chat', async () => {
+    await railWith({ id: 'c1', name: 'Bio midterm plan' });
+    await openRowMenu();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>('.chat-menu button')]
+        .find((b) => b.textContent === 'Delete')
+        ?.click();
+    });
+
+    // Portalled to the body, so it is not inside the rail.
+    const dialog = document.querySelector('.dialog');
+    expect(dialog?.textContent).toContain('Are you sure you want to delete this chat?');
+    expect(dialog?.textContent).toContain('Bio midterm plan');
+    expect(dialog?.textContent).toContain('permanently deleted from your vault');
+    expect(patched).toEqual([]);
+  });
+
+  it('deletes nothing when the question is cancelled', async () => {
+    await railWith({ id: 'c1', name: 'Bio midterm plan' });
+    await openRowMenu();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>('.chat-menu button')]
+        .find((b) => b.textContent === 'Delete')
+        ?.click();
+    });
+    await act(async () => {
+      [...document.querySelectorAll<HTMLButtonElement>('.dialog-actions button')]
+        .find((b) => b.textContent === 'Cancel')
+        ?.click();
+    });
+
+    expect(document.querySelector('.dialog')).toBeNull();
+    expect(patched).toEqual([]);
+    expect(text('.sidebar-chat-open')).toEqual(['Bio midterm plan']);
+  });
+});
+
+describe('the order the rail is in', () => {
+  const at = (id: string, pinnedAt: string | null, updatedAt: string) => ({
+    id,
+    name: id,
+    purpose: '',
+    profile: '',
+    archivedAt: null,
+    pinnedAt,
+    updatedAt,
+    createdAt: '',
+  });
+
+  it('puts pinned chats above the rest', () => {
+    const order = sortChats([
+      at('plain', null, '2026-09-03T00:00:00.000Z'),
+      at('pinned', '2026-09-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z'),
+    ]).map((c) => c.id);
+
+    // Even though the unpinned one was used more recently.
+    expect(order).toEqual(['pinned', 'plain']);
+  });
+
+  it('puts the newest pin first among pinned chats', () => {
+    const order = sortChats([
+      at('older', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z'),
+      at('newer', '2026-09-02T00:00:00.000Z', '2026-09-01T00:00:00.000Z'),
+    ]).map((c) => c.id);
+    expect(order).toEqual(['newer', 'older']);
+  });
+
+  it('falls back to most recently used', () => {
+    const order = sortChats([
+      at('stale', null, '2026-08-01T00:00:00.000Z'),
+      at('fresh', null, '2026-09-03T00:00:00.000Z'),
+    ]).map((c) => c.id);
+    expect(order).toEqual(['fresh', 'stale']);
   });
 });
 
@@ -298,7 +495,7 @@ describe('the new-chat screen', () => {
 
     it('opens the new chat', async () => {
       await typeAndSend('what is due friday');
-      expect(window.location.pathname).toBe('/agents/new-1');
+      expect(window.location.pathname).toBe('/chats/new-1');
     });
 
     it('leaves the message for the conversation to send', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { ArchivedChats } from './ArchivedChats.js';
 import { DeviceConnections } from './DeviceConnections.js';
 import { VaultMap } from './VaultMap.js';
 import { VaultBuild } from './VaultBuild.js';
@@ -85,6 +86,8 @@ export function Settings() {
         <VaultBuild />
         <VaultMap />
       </div>
+
+      <ArchivedChats />
 
       <GoogleConnections />
 

@@ -37,6 +37,22 @@ export const agents = pgTable(
      * after it.
      */
     profileUpdatedAt: timestamp('profile_updated_at', { withTimezone: true }),
+    /*
+     * Out of the rail, still in the vault.
+     *
+     * Timestamps rather than booleans, and both nullable: null is the ordinary
+     * state, and when it is set the moment it happened is worth having --
+     * "archived in June" is the thing a student needs to recognise a chat by
+     * in a list of forty they have put away.
+     *
+     * Archiving deliberately touches nothing but this column. The transcript,
+     * the memories and everything the chat taught chats.md stay exactly where
+     * they were; it is a filter on one list, not a kind of deletion. Deleting
+     * is the other thing, and it is a DELETE.
+     */
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    /** Pinned to the top of the rail. Ordered by when, so the newest pin leads. */
+    pinnedAt: timestamp('pinned_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

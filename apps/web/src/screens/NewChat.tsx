@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { chatTitle } from '../lib/chatTitle.js';
 import { handOff } from '../lib/handoff.js';
-import { pickDriveFiles, pickerConfigured, warmPicker } from '../lib/picker.js';
 import { uploadFile } from '../lib/upload.js';
 import { pickGreeting } from '../lib/greeting.js';
 import { navigate } from '../lib/router.js';
@@ -36,8 +35,6 @@ export function NewChat({ name }: Props) {
    * have to wait for them. See warmPicker: the wait is what gets the popup
    * blocked.
    */
-  useEffect(warmPicker, []);
-
   /** A menu that ignores a click elsewhere is a menu you cannot put away. */
   useEffect(() => {
     if (!menuOpen) return;
@@ -86,21 +83,6 @@ export function NewChat({ name }: Props) {
     }
   }
 
-  /** Files from Drive, which the agent reaches with its Drive tools. */
-  async function attachFromDrive() {
-    setMenuOpen(false);
-    setError(null);
-    try {
-      const picked = await pickDriveFiles();
-      // Cancelling hands back an empty list, which must not clear what was
-      // already attached.
-      if (picked.length === 0) return;
-      add(picked.map((doc) => ({ id: doc.id, label: doc.name ?? 'Untitled', from: 'drive' })));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not open your Drive.');
-    }
-  }
-
   /**
    * Files from this machine, which go into the vault.
    *
@@ -117,7 +99,7 @@ export function NewChat({ name }: Props) {
     try {
       for (const file of Array.from(chosen)) {
         const uploaded = await uploadFile(file);
-        add([{ id: `upload:${uploaded.name}`, label: uploaded.filename, from: 'upload' }]);
+        add([{ id: `upload:${uploaded.name}`, label: uploaded.filename }]);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not upload that file.');
@@ -168,7 +150,7 @@ export function NewChat({ name }: Props) {
           {files.length > 0 && (
             <div className="newchat-files">
               {files.map((file) => (
-                <span key={file.id} className={`file-chip from-${file.from}`}>
+                <span key={file.id} className="file-chip">
                   {file.label}
                   <button
                     type="button"
@@ -189,16 +171,6 @@ export function NewChat({ name }: Props) {
                   <button role="menuitem" type="button" onClick={() => chooser.current?.click()}>
                     Upload from this computer
                   </button>
-                  {/*
-                    Offered only where it can work. The Drive picker needs two
-                    build-time keys, and a deployment without them would show a
-                    choice that silently does nothing.
-                  */}
-                  {pickerConfigured() && (
-                    <button role="menuitem" type="button" onClick={() => void attachFromDrive()}>
-                      Choose from Drive
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -245,43 +217,26 @@ export function NewChat({ name }: Props) {
   );
 }
 
-/** Something the agent can open, and where it will find it. */
+/** Something the agent can open. */
 interface Attachment {
   id: string;
   /** What the student sees on the chip, and what the agent is told. */
   label: string;
-  from: 'drive' | 'upload';
 }
 
 /**
  * The message, with the attached files named in it.
  *
- * There is no attachment channel beside the text, and neither kind needs one.
- * A Drive file is reachable because picking it is itself what granted access
- * -- drive.file covers exactly what was chosen. An uploaded file is reachable
- * because its text is already a note in the vault. Both are opened by name, so
- * naming them is the whole of the handover.
- *
- * Named separately because the agent looks in a different place for each, and
- * one merged list would leave it guessing which.
+ * There is no attachment channel beside the text, and none is needed: an
+ * uploaded file is already a note in the vault, and the agent opens vault
+ * notes by name. Naming them is the whole of the handover.
  */
 function withAttachments(text: string, files: Attachment[]): string {
-  const lines = [
-    named(files, 'upload', (list) => `Files I have uploaded to my vault: ${list}`),
-    named(files, 'drive', (list) => `From my Google Drive: ${list}`),
-  ].filter((line): line is string => line !== undefined);
-
-  if (lines.length === 0) return text;
-  return [text, ...lines].filter((part) => part !== '').join('\n\n');
-}
-
-function named(
-  files: Attachment[],
-  from: Attachment['from'],
-  line: (list: string) => string,
-): string | undefined {
-  const mine = files.filter((file) => file.from === from);
-  return mine.length === 0 ? undefined : line(mine.map((file) => file.label).join(', '));
+  if (files.length === 0) return text;
+  const named = files.map((file) => file.label).join(', ');
+  return [text, `Files I have uploaded to my vault: ${named}`]
+    .filter((part) => part !== '')
+    .join('\n\n');
 }
 
 /** What the chat is called: what they typed, or what they attached instead. */

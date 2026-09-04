@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { agentMessages, agents } from '@contexto/db';
 import {
   createAgentSchema,
   sendMessageSchema,
+  updateChatSchema,
   updateProfileSchema,
   ContextoError,
 } from '@contexto/shared';
@@ -41,11 +42,21 @@ export function createAgentRoutes(ctx: AppContext) {
   return (
     new Hono<{ Variables: AuthVariables }>()
       .get('/', auth, async (c) => {
+        /*
+         * Pinned first, then most recently used.
+         *
+         * NULLS LAST on the pin, because an unpinned chat has no pin date and
+         * Postgres sorts nulls first on DESC by default -- which would put
+         * every ordinary chat above every pinned one, the exact inverse.
+         *
+         * Archived rows come back too. The rail hides them and settings lists
+         * them, and one query answering both beats a flag on the request.
+         */
         const rows = await ctx.db
           .select()
           .from(agents)
           .where(eq(agents.userId, c.get('userId')))
-          .orderBy(desc(agents.updatedAt));
+          .orderBy(sql`${agents.pinnedAt} desc nulls last`, desc(agents.updatedAt));
 
         return c.json({ agents: rows.map(toAgent) });
       })
@@ -66,6 +77,43 @@ export function createAgentRoutes(ctx: AppContext) {
 
       .get('/:id', auth, async (c) => {
         const row = await ownedAgent(c.get('userId'), c.req.param('id'));
+        return c.json({ agent: toAgent(row) });
+      })
+
+      /**
+       * Rename, pin, archive -- everything that changes a chat without saying
+       * anything to it.
+       *
+       * Only the fields that arrived are written. Sending `{ pinned: true }`
+       * must not blank the name, which is what spreading the whole validated
+       * body would do the moment a field is absent.
+       *
+       * updatedAt is deliberately left alone. It orders the rail by when a
+       * chat was last USED, and touching it here would send a chat to the top
+       * for being renamed -- or, worse, for being archived.
+       */
+      .patch('/:id', auth, zValidator('json', updateChatSchema), async (c) => {
+        const userId = c.get('userId');
+        await ownedAgent(userId, c.req.param('id'));
+        const body = c.req.valid('json');
+
+        const changes: Partial<typeof agents.$inferInsert> = {};
+        if (body.name !== undefined) changes.name = body.name;
+        if (body.archived !== undefined) changes.archivedAt = body.archived ? new Date() : null;
+        if (body.pinned !== undefined) changes.pinnedAt = body.pinned ? new Date() : null;
+
+        if (Object.keys(changes).length === 0) {
+          const row = await ownedAgent(userId, c.req.param('id'));
+          return c.json({ agent: toAgent(row) });
+        }
+
+        const [row] = await ctx.db
+          .update(agents)
+          .set(changes)
+          .where(and(eq(agents.id, c.req.param('id')), eq(agents.userId, userId)))
+          .returning();
+
+        if (!row) throw new ContextoError('internal_error', 'Failed to update the chat.');
         return c.json({ agent: toAgent(row) });
       })
 
@@ -265,6 +313,8 @@ function toAgent(row: typeof agents.$inferSelect): Agent {
     name: row.name,
     purpose: row.purpose,
     profile: row.profile,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+    pinnedAt: row.pinnedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -17,10 +17,30 @@ export const agentSchema = z.object({
    * or correct is one they have no reason to trust.
    */
   profile: z.string(),
+  /** When it was put away, if it was. Null is the ordinary state. */
+  archivedAt: z.iso.datetime().nullable(),
+  /** When it was pinned, if it is. Ordered by this, so the newest pin leads. */
+  pinnedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
 export type Agent = z.infer<typeof agentSchema>;
+
+/**
+ * Changing a chat without saying anything to it.
+ *
+ * Every field is optional and each is sent on its own -- renaming and pinning
+ * are separate gestures and a request carrying both would be a rename that
+ * silently unpinned. Archive and pin are booleans here rather than the
+ * timestamps they become: when it happened is the server's to decide, and a
+ * client that could choose would be a client that could lie about it.
+ */
+export const updateChatSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  archived: z.boolean().optional(),
+  pinned: z.boolean().optional(),
+});
+export type UpdateChatInput = z.infer<typeof updateChatSchema>;
 
 /**
  * Editing what the agent remembers about you.

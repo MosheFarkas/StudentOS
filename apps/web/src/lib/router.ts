@@ -33,7 +33,14 @@ export function parseRoute(pathname: string): Route {
     return { name: 'link', requestId: safeDecode(segments[1]) };
   }
 
-  if (segments[0] === 'agents') {
+  /*
+   * `chats` is the address a chat has. `agents` is the address it used to
+   * have, still parsed and never generated: the word is gone from the product,
+   * but links to it are in browser histories, in the desktop app and in
+   * whatever a student has sent themselves. Dropping it would break those to
+   * save four lines.
+   */
+  if (segments[0] === 'chats' || segments[0] === 'agents') {
     if (segments.length === 1) return { name: 'new' };
     /*
      * Decoded, because routeToPath encodes. Ids are UUIDs today so nothing
@@ -65,7 +72,7 @@ export function routeToPath(route: Route): string {
     case 'new':
       return '/';
     case 'chat':
-      return `/agents/${encodeURIComponent(route.agentId)}`;
+      return `/chats/${encodeURIComponent(route.agentId)}`;
     case 'settings':
       return '/settings';
     case 'link':
