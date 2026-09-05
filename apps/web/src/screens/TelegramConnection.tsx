@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Agent } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { Row } from './SettingsRow.js';
 
 type Link = { channel: string; agentId: string };
 
@@ -65,49 +66,51 @@ export function TelegramConnection() {
     void load();
   }
 
+  const answering = agents.find((a) => a.id === linked?.agentId)?.name ?? 'a chat';
+
   return (
-    <div className="panel">
-      <h2>Telegram</h2>
-      <p className="muted">
-        Message your agent from your phone. It answers whether or not this page is open.
-      </p>
+    <>
+      <h2 className="settings-heading">Telegram</h2>
 
       {linked ? (
-        <div className="row static">
-          <span className="status">
-            Connected to {agents.find((a) => a.id === linked.agentId)?.name ?? 'an agent'}
-          </span>
+        <Row
+          label="Connected"
+          hint={`Messages go to ${answering}, and it answers whether or not this page is open.`}
+        >
           <button onClick={() => void unlink()}>Disconnect</button>
-        </div>
+        </Row>
       ) : agents.length === 0 ? (
-        <p className="muted">Create an agent first, then connect Telegram to it.</p>
+        <p className="settings-empty">Start a chat first, then connect Telegram to it.</p>
       ) : code ? (
-        <>
-          <p>
-            Send this to the bot: <strong>/link {code.code}</strong>
-          </p>
-          <p className="muted">
-            Expires {new Date(code.expiresAt).toLocaleTimeString()}. Message the bot on Telegram,
-            then reload this page.
-          </p>
-        </>
+        <Row
+          label={
+            <>
+              Send <strong>/link {code.code}</strong> to the bot
+            </>
+          }
+          hint={`Expires ${new Date(code.expiresAt).toLocaleTimeString()}. Message the bot on Telegram, then reload this page.`}
+        />
       ) : (
-        <>
-          <label>
-            Which agent should answer?
-            <select value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        <Row
+          label="Message your agent from your phone"
+          hint="It answers whether or not this page is open."
+        >
+          <select
+            aria-label="Which chat should answer"
+            value={selectedAgent}
+            onChange={(e) => setSelectedAgent(e.target.value)}
+          >
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
           <button onClick={() => void requestCode()}>Get linking code</button>
-        </>
+        </Row>
       )}
 
-      {error && <p className="muted">{error}</p>}
-    </div>
+      {error && <p className="settings-note">{error}</p>}
+    </>
   );
 }

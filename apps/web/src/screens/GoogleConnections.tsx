@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { connectGoogleScopes } from '../lib/auth.js';
-import { SiteConnections } from './SiteConnections.js';
+import { Row } from './SettingsRow.js';
 import { Toggle } from './Toggle.js';
 
 type Group = 'calendar' | 'classroom' | 'drive' | 'gmail';
@@ -137,14 +137,12 @@ export function GoogleConnections() {
   const allConnected = connected.length === CONNECTIONS.length;
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <h2>Connections</h2>
-        <p className="muted">
-          What your agent can see and do. Connect everything for the full thing, or pick what you
-          want &mdash; you can switch any of it off later.
-        </p>
-      </div>
+    <>
+      <h2 className="settings-heading">Google</h2>
+      <p className="settings-intro">
+        What your agent can see and do. Connect everything for the full thing, or pick what you want
+        &mdash; you can switch any of it off later.
+      </p>
 
       {/*
        * One tap for the whole product, before the list of parts. Someone
@@ -153,10 +151,8 @@ export function GoogleConnections() {
        */}
       {!allConnected && (
         <div className="connect-all">
-          <div className="row-main">
-            <strong>Connect everything</strong>
-            <span className="badge">Recommended</span>
-            <br />
+          <div className="settings-label">
+            <span>Connect everything</span>
             <span className="muted">
               Calendar, Classroom, Drive and Gmail in one step, so your agent knows your coursework
               from the start.
@@ -171,33 +167,20 @@ export function GoogleConnections() {
       {CONNECTIONS.map(({ group, name, blurb, sub }) => {
         const parentOn = isOn(group);
         return (
-          <div key={group}>
-            <div className="row static">
-              <span className="row-main">
-                <strong>{name}</strong>
-                <br />
-                <span className="muted">{blurb}</span>
-              </span>
-
-              <span className="row-control">
-                {status[group] ? (
-                  <>
-                    <span className={parentOn ? 'status' : 'status off'}>
-                      {parentOn ? 'On' : 'Off'}
-                    </span>
-                    <Toggle
-                      label={`${name} enabled`}
-                      checked={parentOn}
-                      onChange={(next) => void toggle(group, next)}
-                    />
-                  </>
-                ) : (
-                  <button disabled={busy !== null} onClick={() => void connect(group)}>
-                    {busy === group ? 'Opening…' : 'Connect'}
-                  </button>
-                )}
-              </span>
-            </div>
+          <Fragment key={group}>
+            <Row label={name} hint={blurb}>
+              {status[group] ? (
+                <Toggle
+                  label={`${name} enabled`}
+                  checked={parentOn}
+                  onChange={(next) => void toggle(group, next)}
+                />
+              ) : (
+                <button disabled={busy !== null} onClick={() => void connect(group)}>
+                  {busy === group ? 'Opening…' : 'Connect'}
+                </button>
+              )}
+            </Row>
 
             {/*
              * Classroom hands back the NAME and link of every attachment but
@@ -223,26 +206,16 @@ export function GoogleConnections() {
              * setting stays visible and its state is obvious.
              */}
             {sub && status[group] && (
-              <div className="row static sub">
-                <span className="row-main">
-                  <strong>{sub.name}</strong>
-                  <br />
-                  <span className="muted">{sub.blurb}</span>
-                </span>
-                <span className="row-control">
-                  <span className={parentOn && isOn(`${group}:write`) ? 'status' : 'status off'}>
-                    {parentOn && isOn(`${group}:write`) ? 'On' : 'Off'}
-                  </span>
-                  <Toggle
-                    label={`${sub.name} enabled`}
-                    checked={parentOn && isOn(`${group}:write`)}
-                    disabled={!parentOn}
-                    onChange={(next) => void toggle(`${group}:write`, next)}
-                  />
-                </span>
-              </div>
+              <Row label={sub.name} hint={sub.blurb} sub>
+                <Toggle
+                  label={`${sub.name} enabled`}
+                  checked={parentOn && isOn(`${group}:write`)}
+                  disabled={!parentOn}
+                  onChange={(next) => void toggle(`${group}:write`, next)}
+                />
+              </Row>
             )}
-          </div>
+          </Fragment>
         );
       })}
 
@@ -252,23 +225,19 @@ export function GoogleConnections() {
        * "my school didn't approve that part".
        */}
       {status.classroom && status.missing.classroom.length > 0 && (
-        <p className="muted">
+        <p className="settings-note">
           Your school hasn&apos;t approved everything for Classroom, so some of it won&apos;t work.
         </p>
       )}
 
       {!status.classroom && (
-        <p className="muted">
+        <p className="settings-note">
           On a school account, Classroom may need an administrator to approve ContextoAgent first.
           Everything else works either way.
         </p>
       )}
 
-      {error && <p className="muted">{error}</p>}
-
-      {/* Part of Connections: it is another thing the agent can see, and the
-          only one a browser cannot set up for itself. */}
-      <SiteConnections />
-    </div>
+      {error && <p className="settings-note">{error}</p>}
+    </>
   );
 }

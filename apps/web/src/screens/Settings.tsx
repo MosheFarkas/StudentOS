@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MeProfile, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { forgetGraph, loadGraph } from '../lib/vaultGraph.js';
 import { signOut } from '../lib/auth.js';
 import { initialOf } from '../lib/initial.js';
 import { ArchivedChats } from './ArchivedChats.js';
 import { DeviceConnections } from './DeviceConnections.js';
 import { GoogleConnections } from './GoogleConnections.js';
+import { Row } from './SettingsRow.js';
+import { SiteConnections } from './SiteConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 import { UsageBars } from './UsageBars.js';
 import { VaultMap } from './VaultMap.js';
@@ -53,6 +56,15 @@ export function Settings({ onClose }: { onClose: () => void }) {
     })();
   }, []);
 
+  /*
+   * The vault's shape is asked for as the window opens rather than when the
+   * memory section is looked at, so it is usually here before it is wanted.
+   */
+  useEffect(() => {
+    void loadGraph();
+    return () => forgetGraph();
+  }, []);
+
   return createPortal(
     <div className="scrim" onMouseDown={onClose}>
       <div
@@ -82,7 +94,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
           </button>
 
           {section === 'General' && <General me={me} onChange={setMe} />}
-          {section === 'Account' && <Account />}
+          {section === 'Account' && <Account me={me} />}
           {section === 'Usage' && <Usage />}
           {section === 'Connections' && <Connections />}
           {section === 'Memory' && <Memory />}
@@ -90,27 +102,6 @@ export function Settings({ onClose }: { onClose: () => void }) {
       </div>
     </div>,
     document.body,
-  );
-}
-
-/** A labelled row: what it is on the left, the control on the right. */
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="settings-row">
-      <div className="settings-label">
-        <span>{label}</span>
-        {hint && <span className="muted">{hint}</span>}
-      </div>
-      <div className="settings-control">{children}</div>
-    </div>
   );
 }
 
@@ -217,12 +208,24 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
   );
 }
 
-function Account() {
+function Account({ me }: { me: MeProfile | null }) {
   const [signingOut, setSigningOut] = useState(false);
 
   return (
     <>
       <h2 className="settings-heading">Account</h2>
+
+      <Row label="Signed in with Google">
+        <span className="settings-static">{me?.email}</span>
+      </Row>
+
+      <DeviceConnections />
+
+      {/*
+       * Last, and under its own heading. The one control in here that ends
+       * the session should not sit above the things a student came to see.
+       */}
+      <h2 className="settings-heading">Sign out</h2>
 
       <Row
         label="Log out of all devices"
@@ -239,8 +242,6 @@ function Account() {
           {signingOut ? 'Logging out…' : 'Log out'}
         </button>
       </Row>
-
-      <DeviceConnections />
     </>
   );
 }
@@ -269,6 +270,9 @@ function Connections() {
   return (
     <>
       <GoogleConnections />
+      {/* Another thing the agent can see, and the only one a browser cannot
+          set up for itself. */}
+      <SiteConnections />
       <TelegramConnection />
     </>
   );
@@ -278,7 +282,7 @@ function Memory() {
   return (
     <>
       <h2 className="settings-heading">Your vault</h2>
-      <p className="muted">
+      <p className="settings-intro">
         Everything your agent has worked out about your school, as a shape. Built from your own
         Classroom, Drive and mail.
       </p>

@@ -352,10 +352,6 @@ label > select {
   margin-top: 0;
 }
 
-.panel-head {
-  margin-bottom: 0.9rem;
-}
-
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -506,17 +502,6 @@ hr {
   font-weight: 600;
 }
 
-.row-main {
-  min-width: 0;
-}
-
-.row-control {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
 /*
  * The one-tap path, set apart from the list of parts so it reads as the
  * recommended route rather than a fifth item in a menu.
@@ -525,42 +510,12 @@ hr {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1rem;
-  margin-bottom: 1.1rem;
-  border: 1px solid var(--lavender);
+  gap: 1.5rem;
+  margin: 0.6rem 0 0.4rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #e4d9ff;
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #faf7ff, #f4efff);
-}
-
-.badge {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.05rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--violet-dark);
-  background: #ece3ff;
-  vertical-align: 0.1em;
-}
-
-/*
- * The write half of an integration, indented under its parent. The rule down
- * the left is what makes it read as belonging to the row above rather than as
- * another integration in its own right.
- */
-.row.static.sub {
-  padding-left: 1rem;
-  margin-left: 0.35rem;
-  border-left: 2px solid var(--line);
-}
-
-.row.static.sub strong {
-  font-weight: 500;
-  font-size: 0.95rem;
+  background: #f7f3ff;
 }
 
 /*
@@ -582,31 +537,6 @@ hr {
 .notice strong {
   color: var(--ink);
   font-weight: 600;
-}
-
-/* ---------- status ---------- */
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--ok);
-  white-space: nowrap;
-}
-
-.status::before {
-  content: '';
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 50%;
-  background: currentColor;
-  flex: none;
-}
-
-.status.off {
-  color: var(--ink-faint);
 }
 
 /*
@@ -1030,42 +960,6 @@ a.button.blue:hover {
   border-color: var(--blue-dark);
 }
 
-/* The switch and Remove sit together on one line. Note this is NOT .row --
-   that class is a bordered column card in this app, which is what boxed these
-   in and stacked them. .actions already exists for plain button rows. */
-.site-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-shrink: 0;
-}
-
-.site-name {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* A block within a panel -- sites live inside Connections. */
-.subsection {
-  margin-top: 1.5rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--line);
-}
-
-.subsection h3 {
-  font-size: 0.95rem;
-  margin: 0 0 0.25rem;
-}
-
-.subsection .download-label {
-  margin: 1rem 0 0;
-}
-
-.subsection a.button {
-  display: inline-block;
-  margin-top: 0.4rem;
-}
-
 /* ---------- file preview ---------- */
 
 main:has(.preview-pane) {
@@ -1194,25 +1088,6 @@ main:has(.preview-pane) .workspace {
 }
 
 /* Linked desktop companions. */
-.device-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.device-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.device-list li:last-child {
-  border-bottom: none;
-}
-
 /* A link styled as a button — the desktop download is a real navigation, so it
    has to stay an anchor rather than a button with an onClick. */
 a.button {
@@ -2744,6 +2619,63 @@ body.dialog-open .app {
   min-width: 0;
 }
 
+.settings-label > span:first-child {
+  font-weight: 500;
+}
+
+.settings-label .muted {
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+/*
+ * The write half of an integration, under its parent. The rule down the
+ * left is what makes it read as belonging to the row above rather than as
+ * another integration in its own right.
+ */
+.settings-row.sub {
+  margin-left: 0.35rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--line);
+}
+
+/* One line under a heading saying what the rows beneath it are for. */
+.settings-intro,
+.settings-empty,
+.settings-note {
+  margin: 0 0 0.35rem;
+  max-width: 60ch;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.settings-empty {
+  margin-top: 0.5rem;
+}
+
+/* A consequence worth knowing, after the rows it is about. */
+.settings-note {
+  margin: 0.7rem 0 0;
+  font-size: 0.84rem;
+  color: var(--ink-faint);
+}
+
+.settings-body .notice {
+  margin: 0.6rem 0 0.2rem;
+}
+
+.settings-control select {
+  font: inherit;
+  font-size: 0.88rem;
+  max-width: 12rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
 .settings-control {
   display: flex;
   align-items: center;
@@ -2935,30 +2867,61 @@ body.dialog-open .app {
  * Blurred hard and inert: what it is for is recognising the shape of your own
  * vault, not reading it. Everything readable is inside, behind the button.
  */
+/*
+ * The vault's own dark, so the still is a picture of the thing rather than
+ * a diagram of it. The frame is painted at once, before there is a graph to
+ * fill it, which is what keeps the section from arriving in two stages.
+ */
 .vault-still {
   position: relative;
   display: grid;
   place-items: center;
   height: 13rem;
   margin-top: 0.75rem;
-  border: 1px solid var(--line);
+  border: 1px solid #161b46;
   border-radius: var(--radius-lg);
-  background: var(--page);
+  background: radial-gradient(ellipse at 50% 45%, #0d1236 0%, #05071a 68%);
   overflow: hidden;
 }
 
 .vault-thumb {
   position: absolute;
-  inset: -10%;
-  width: 120%;
-  height: 120%;
-  filter: blur(9px);
-  opacity: 0.75;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: blur(0.6px);
   pointer-events: none;
+  animation: vault-thumb-in 200ms ease-out;
+}
+
+/* The scene's own resting colours, as they are when nothing is held. */
+.vault-thumb-links line {
+  stroke: rgba(148, 163, 184, 0.3);
+  stroke-width: 0.24;
+}
+
+.vault-thumb-dots circle {
+  fill: rgba(168, 178, 212, 0.9);
+}
+
+@keyframes vault-thumb-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vault-thumb {
+    animation: none;
+  }
 }
 
 .vault-open {
   position: relative;
+  box-shadow: 0 6px 24px rgba(5, 7, 26, 0.55);
 }
 
 /*

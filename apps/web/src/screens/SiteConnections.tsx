@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { desktop, type LocalSite } from '../lib/desktop.js';
 import { MAC_DOWNLOAD } from '../lib/download.js';
+import { Row } from './SettingsRow.js';
 import { Toggle } from './Toggle.js';
 
 export interface ServerSite {
@@ -178,52 +179,42 @@ export function SiteConnections() {
   }
 
   return (
-    <div className="subsection">
-      <h3>Sites that need a login</h3>
-      <p className="muted">
+    <>
+      <h2 className="settings-heading">Sites that need a login</h2>
+      <p className="settings-intro">
         Course portals and anything else behind a sign-in.
-        {!bridge && ' Added in the desktop app.'}
+        {!bridge && ' Added from the desktop app.'}
       </p>
 
-      {rows.length > 0 && (
-        <ul className="device-list">
-          {rows.map((row) => (
-            <li key={row.id}>
-              <div className="site-name">
-                <strong>{row.label}</strong>
-                <span className="muted"> — {row.detail}</span>
-              </div>
-              <div className="site-actions">
-                <Toggle
-                  checked={row.enabled}
-                  disabled={busy === row.id}
-                  label={`Let your agent read ${row.label}`}
-                  onChange={(next) => void setEnabled(row, next)}
-                />
-                {bridge?.saveCredentials &&
-                  (saved[row.id] ? (
-                    <button disabled={busy === row.id} onClick={() => void forgetSignIn(row)}>
-                      Forget sign-in
-                    </button>
-                  ) : (
-                    <button
-                      disabled={busy === row.id}
-                      onClick={() => {
-                        setEditing(row.id);
-                        setCreds({ username: '', password: '' });
-                      }}
-                    >
-                      Save sign-in
-                    </button>
-                  ))}
-                <button disabled={busy === row.id} onClick={() => void remove(row)}>
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      {rows.map((row) => (
+        <Row key={row.id} label={row.label} hint={row.detail}>
+          <Toggle
+            checked={row.enabled}
+            disabled={busy === row.id}
+            label={`Let your agent read ${row.label}`}
+            onChange={(next) => void setEnabled(row, next)}
+          />
+          {bridge?.saveCredentials &&
+            (saved[row.id] ? (
+              <button disabled={busy === row.id} onClick={() => void forgetSignIn(row)}>
+                Forget sign-in
+              </button>
+            ) : (
+              <button
+                disabled={busy === row.id}
+                onClick={() => {
+                  setEditing(row.id);
+                  setCreds({ username: '', password: '' });
+                }}
+              >
+                Save sign-in
+              </button>
+            ))}
+          <button disabled={busy === row.id} onClick={() => void remove(row)}>
+            Remove
+          </button>
+        </Row>
+      ))}
 
       {editing && (
         <div className="saved-signin">
@@ -305,13 +296,15 @@ export function SiteConnections() {
           </div>
         </div>
       ) : (
-        <>
-          <p className="muted download-label">Download ContextoAgent desktop app</p>
+        <Row
+          label="ContextoAgent for Mac"
+          hint="Signs into your course portals on your computer and keeps your agent up to date with them."
+        >
           <a className="button blue" href={MAC_DOWNLOAD}>
             Download for macOS
           </a>
-        </>
+        </Row>
       )}
-    </div>
+    </>
   );
 }

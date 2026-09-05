@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Agent } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
+import { Row } from './SettingsRow.js';
 
 /**
  * Chats the student has put away.
@@ -45,27 +46,22 @@ export function ArchivedChats() {
   if (archived.length === 0) return null;
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <h2>Archived chats</h2>
-      </div>
-      <p className="muted">
+    <>
+      <h2 className="settings-heading">Archived chats</h2>
+      <p className="settings-intro">
         Out of the rail, still in your vault. Everything these taught your agent is still
         remembered.
       </p>
 
       {archived.map((chat) => (
-        <div key={chat.id} className="row">
-          <button className="row-open" onClick={() => navigate({ name: 'chat', agentId: chat.id })}>
-            <strong>{chat.name}</strong>
-            <span className="muted">Archived {when(chat.archivedAt)}</span>
-          </button>
+        <Row key={chat.id} label={chat.name} hint={`Archived ${when(chat.archivedAt)}`}>
+          <button onClick={() => navigate({ name: 'chat', agentId: chat.id })}>Open</button>
           <button disabled={busy === chat.id} onClick={() => void restore(chat)}>
             {busy === chat.id ? 'Restoring…' : 'Restore'}
           </button>
-        </div>
+        </Row>
       ))}
-    </div>
+    </>
   );
 }
 

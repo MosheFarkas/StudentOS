@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
+import { Row } from './SettingsRow.js';
 
 interface Device {
   id: string;
@@ -8,15 +9,18 @@ interface Device {
   createdAt: string;
 }
 
-function lastSeen(value: string | null): string {
-  if (!value) return 'never synced';
+/** When a computer last reported, as the line under its name. */
+export function lastSynced(value: string | null): string {
+  if (!value) return 'Never synced';
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60_000);
-  if (minutes < 2) return 'syncing now';
-  if (minutes < 60) return `${minutes} minutes ago`;
+  if (minutes < 2) return 'Syncing now';
+  if (minutes < 60) return `Last synced ${count(minutes, 'minute')} ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hours ago`;
-  return `${Math.round(hours / 24)} days ago`;
+  if (hours < 24) return `Last synced ${count(hours, 'hour')} ago`;
+  return `Last synced ${count(Math.round(hours / 24), 'day')} ago`;
 }
+
+const count = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
 
 /**
  * Linked computers.
@@ -53,26 +57,21 @@ export function DeviceConnections() {
   if (!devices) return null;
 
   return (
-    <div className="panel">
-      <div className="panel-head">
-        <h2>Devices</h2>
-      </div>
+    <>
+      <h2 className="settings-heading">Linked computers</h2>
 
       {devices.length === 0 ? (
-        <p className="muted">No devices connected — connect with the desktop app.</p>
+        <p className="settings-empty">
+          No computers linked yet. Link one from the desktop app and it will keep your agent up to
+          date with the sites you sign into there.
+        </p>
       ) : (
-        <ul className="device-list">
-          {devices.map((device) => (
-            <li key={device.id}>
-              <div>
-                <strong>{device.name}</strong>
-                <span className="muted"> — {lastSeen(device.lastSeenAt)}</span>
-              </div>
-              <button onClick={() => void revoke(device)}>Unlink</button>
-            </li>
-          ))}
-        </ul>
+        devices.map((device) => (
+          <Row key={device.id} label={device.name} hint={lastSynced(device.lastSeenAt)}>
+            <button onClick={() => void revoke(device)}>Unlink</button>
+          </Row>
+        ))
       )}
-    </div>
+    </>
   );
 }
