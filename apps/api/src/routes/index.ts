@@ -3,7 +3,13 @@ import { zValidator } from '@hono/zod-validator';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { user } from '@contexto/db';
-import { addCredentialSchema, ContextoError, type UsageStatus } from '@contexto/shared';
+import {
+  addCredentialSchema,
+  updateProfileSettingsSchema,
+  ContextoError,
+  type MeProfile,
+  type UsageStatus,
+} from '@contexto/shared';
 import { readFile } from 'node:fs/promises';
 import { UPLOAD_LIMIT_BYTES, Vault, imagePath, importUpload } from '@contexto/agent';
 import type { UploadRefusal } from '@contexto/agent';
@@ -177,6 +183,59 @@ export function createRoutes(ctx: AppContext) {
         throw new ContextoError('not_found', 'No such picture.');
       })
 
+      /** Who the student is, and what they have chosen to be called. */
+      .get('/me', auth, async (c) => {
+        const [row] = await ctx.db
+          .select({
+            name: user.name,
+            email: user.email,
+            preferredName: user.preferredName,
+            appearance: user.appearance,
+            image: user.image,
+          })
+          .from(user)
+          .where(eq(user.id, c.get('userId')))
+          .limit(1);
+
+        if (!row) throw new ContextoError('not_found', 'No such account.');
+
+        return c.json({
+          name: row.name,
+          email: row.email,
+          // Falls back to the first name, which is what almost everyone wants
+          // and nobody should have to type.
+          preferredName: row.preferredName?.trim() || row.name.trim().split(/\s+/)[0] || '',
+          appearance: (row.appearance ?? 'system') as 'light' | 'dark' | 'system',
+          hasAvatar: Boolean(row.image),
+        } satisfies MeProfile);
+      })
+
+      .patch('/me', auth, zValidator('json', updateProfileSettingsSchema), async (c) => {
+        const body = c.req.valid('json');
+        const changes: { preferredName?: string | null; appearance?: string | null } = {};
+
+        /*
+         * An empty name is a clearing, not a blank.
+         *
+         * "Go back to calling me what my account says" is a thing a student
+         * will want, and the way they will ask for it is by emptying the box.
+         */
+        if (body.preferredName !== undefined) {
+          changes.preferredName = body.preferredName.trim() || null;
+        }
+        if (body.appearance !== undefined) {
+          changes.appearance = body.appearance === 'system' ? null : body.appearance;
+        }
+
+        if (Object.keys(changes).length > 0) {
+          await ctx.db
+            .update(user)
+            .set(changes)
+            .where(eq(user.id, c.get('userId')));
+        }
+        return c.body(null, 204);
+      })
+
       .route('/agents', createAgentRoutes(ctx))
       .route('/google', createGoogleRoutes(ctx))
       .route('/vault', createVaultRoutes(ctx))
@@ -215,6 +274,7 @@ export function createRoutes(ctx: AppContext) {
           const status: UsageStatus = {
             activeProvider: credentials[0]!.provider,
             quota: null,
+            limits: null,
           };
           return c.json(status);
         }
@@ -225,7 +285,11 @@ export function createRoutes(ctx: AppContext) {
          * limit does not apply to would read as a problem to fix.
          */
         if (await ctx.quota.isExempt(userId)) {
-          return c.json({ activeProvider: 'platform', quota: null } satisfies UsageStatus);
+          return c.json({
+            activeProvider: 'platform',
+            quota: null,
+            limits: null,
+          } satisfies UsageStatus);
         }
 
         const status: UsageStatus = {
@@ -236,6 +300,7 @@ export function createRoutes(ctx: AppContext) {
             tokensUsed: await ctx.quota.tokensUsedThisWindow(userId),
             tokenLimit: ctx.quota.limit,
           },
+          limits: await ctx.quota.standing(userId),
         };
         return c.json(status);
       })

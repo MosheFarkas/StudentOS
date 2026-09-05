@@ -36,6 +36,20 @@ export const addCredentialSchema = z.object({
 });
 export type AddCredentialInput = z.infer<typeof addCredentialSchema>;
 
+/**
+ * One usage bar on the settings screen.
+ *
+ * `resetsAt` is null for the session window, which trails the clock and so has
+ * no single moment of reset -- it recovers gradually as old calls fall out of
+ * the last five hours.
+ */
+export const quotaBarSchema = z.object({
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  resetsAt: z.iso.datetime().nullable(),
+});
+export type QuotaBar = z.infer<typeof quotaBarSchema>;
+
 /** Where a student currently sits: their own key, or our subsidised tier. */
 export const usageStatusSchema = z.object({
   activeProvider: providerIdSchema,
@@ -46,6 +60,18 @@ export const usageStatusSchema = z.object({
       windowEnd: z.iso.datetime(),
       tokensUsed: z.number().int().nonnegative(),
       tokenLimit: z.number().int().positive(),
+    })
+    .nullable(),
+  /**
+   * The two limits a student actually meets, when they are on our tier.
+   *
+   * The month above is what the allowance is defined as; these are how it is
+   * spent -- a five-hour burst window and the week it belongs to.
+   */
+  limits: z
+    .object({
+      session: quotaBarSchema,
+      week: quotaBarSchema,
     })
     .nullable(),
 });

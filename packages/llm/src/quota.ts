@@ -32,12 +32,34 @@ export class QuotaService {
     // every turn to reach a limit that will never apply to it.
     if (await this.isExempt(userId)) return;
 
-    const used = await this.tokensUsedThisWindow(userId);
-    if (used >= this.monthlyTokenQuota) {
+    /*
+     * Two limits, checked in the order a student meets them.
+     *
+     * The session cap is the one an ordinary heavy afternoon reaches, and it
+     * comes back in hours; the weekly is the backstop and comes back on
+     * Monday. Reporting the wrong one would send a student away for six days
+     * over a wait of two hours, so they are checked separately and say
+     * different things.
+     */
+    const now = new Date();
+    const [session, week] = await Promise.all([
+      this.tokensUsedSince(userId, new Date(now.getTime() - SESSION_WINDOW_MS)),
+      this.tokensUsedSince(userId, currentWeekStart(now)),
+    ]);
+
+    if (session >= this.sessionLimit) {
       throw new ContextoError(
         'quota_exceeded',
-        'You have used your monthly allowance. Add your own API key for unlimited use, ' +
-          'or wait for the allowance to reset.',
+        'You have used this session\u2019s allowance. It refills over the next few hours -- ' +
+          'or add your own API key for unlimited use.',
+      );
+    }
+
+    if (week >= this.weeklyLimit) {
+      throw new ContextoError(
+        'quota_exceeded',
+        'You have used this week\u2019s allowance. It resets on Monday -- or add your own ' +
+          'API key for unlimited use.',
       );
     }
   }
@@ -61,6 +83,11 @@ export class QuotaService {
   }
 
   async tokensUsedThisWindow(userId: string): Promise<number> {
+    return this.tokensUsedSince(userId, currentWindowStart());
+  }
+
+  /** Platform tokens spent by this student since a moment. */
+  async tokensUsedSince(userId: string, since: Date): Promise<number> {
     const [row] = await this.db
       .select({
         total: sql<number>`coalesce(sum(${llmUsage.inputTokens} + ${llmUsage.outputTokens}), 0)`,
@@ -70,11 +97,28 @@ export class QuotaService {
         and(
           eq(llmUsage.userId, userId),
           eq(llmUsage.provider, 'platform'),
-          gte(llmUsage.createdAt, currentWindowStart()),
+          gte(llmUsage.createdAt, since),
         ),
       );
 
     return Number(row?.total ?? 0);
+  }
+
+  /** Where the student stands against both limits, for the usage screen. */
+  async standing(userId: string, now = new Date()): Promise<QuotaStanding> {
+    const [session, week] = await Promise.all([
+      this.tokensUsedSince(userId, new Date(now.getTime() - SESSION_WINDOW_MS)),
+      this.tokensUsedSince(userId, currentWeekStart(now)),
+    ]);
+
+    return {
+      session: { used: session, limit: this.sessionLimit, resetsAt: null },
+      week: {
+        used: week,
+        limit: this.weeklyLimit,
+        resetsAt: currentWeekEnd(now).toISOString(),
+      },
+    };
   }
 
   /** Record a completed call. BYOK rows are stored but never gate anything. */
@@ -100,6 +144,72 @@ export class QuotaService {
   get limit(): number {
     return this.monthlyTokenQuota;
   }
+
+  /**
+   * The month's allowance, spread evenly over weeks.
+   *
+   * Twelve months over fifty-two weeks rather than a quarter, because a month
+   * is not four weeks and dividing by four quietly hands out an extra fortnight
+   * a year.
+   */
+  get weeklyLimit(): number {
+    return Math.floor((this.monthlyTokenQuota * 12) / 52);
+  }
+
+  /**
+   * What one five-hour stretch may spend.
+   *
+   * A fifth of the week, so a student can work hard for an afternoon without
+   * the week's pace holding them back -- and five such afternoons is the week.
+   * A strictly pro-rata slice would be a thirty-third of the week, which is
+   * about twenty messages, and would make the cap the thing they notice most.
+   */
+  get sessionLimit(): number {
+    return Math.floor(this.weeklyLimit / 5);
+  }
+}
+
+/**
+ * The burst window: five hours, trailing.
+ *
+ * Trailing rather than anchored to a first message, which needs no session
+ * row and no decision about when one ends. What it means to a student is the
+ * same thing either way -- what you have spent in the last five hours -- and
+ * it recovers gradually rather than all at once, which is the kinder shape.
+ */
+export const SESSION_WINDOW_MS = 5 * 60 * 60 * 1000;
+
+export interface QuotaBar {
+  used: number;
+  limit: number;
+  /** Null where the window is trailing and has no single moment of reset. */
+  resetsAt: string | null;
+}
+
+export interface QuotaStanding {
+  session: QuotaBar;
+  week: QuotaBar;
+}
+
+/**
+ * ISO weeks, starting Monday 00:00 UTC.
+ *
+ * A fixed weekly reset rather than a rolling seven days: "resets Monday" is
+ * something a student can plan around, where "resets whenever the oldest of
+ * your last seven days falls off" is not.
+ */
+export function currentWeekStart(now = new Date()): Date {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  // getUTCDay is 0 for Sunday, which is six days into an ISO week, not none.
+  const since = (start.getUTCDay() + 6) % 7;
+  start.setUTCDate(start.getUTCDate() - since);
+  return start;
+}
+
+export function currentWeekEnd(now = new Date()): Date {
+  const end = currentWeekStart(now);
+  end.setUTCDate(end.getUTCDate() + 7);
+  return end;
 }
 
 /** Calendar-month windows. Simple to explain to a student, simple to query. */

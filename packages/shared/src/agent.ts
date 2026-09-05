@@ -164,3 +164,26 @@ export const agentActivitySchema = z.union([
   z.object({ kind: z.literal('tool'), name: z.string() }),
 ]);
 export type AgentActivity = z.infer<typeof agentActivitySchema>;
+
+/**
+ * The parts of an account a student can change themselves.
+ *
+ * Each field is optional and sent alone, so saving a name does not silently
+ * write back an appearance the screen happened to be holding.
+ */
+export const updateProfileSettingsSchema = z.object({
+  /** Empty string clears it, which means "go back to my first name". */
+  preferredName: z.string().max(60).optional(),
+  appearance: z.enum(['light', 'dark', 'system']).optional(),
+});
+export type UpdateProfileSettingsInput = z.infer<typeof updateProfileSettingsSchema>;
+
+/** Who the student is, as the settings screen needs them. */
+export interface MeProfile {
+  name: string;
+  email: string;
+  /** What the agent calls them: their choice, else their first name. */
+  preferredName: string;
+  appearance: 'light' | 'dark' | 'system';
+  hasAvatar: boolean;
+}

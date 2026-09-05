@@ -47,6 +47,23 @@ export const user = pgTable('user', {
    * makes this migration survive contact with production.
    */
   unlimitedUsage: boolean('unlimited_usage').default(false).notNull(),
+  /**
+   * What the agent calls them, when it is not what Google calls them.
+   *
+   * Null means "use the first name from the account", which is what almost
+   * everyone will want and nobody should have to type. Set, it replaces the
+   * name in greetings and is how the agent refers to them -- a student called
+   * Alexander who has been Xan since primary school should be Xan here.
+   */
+  preferredName: text('preferred_name'),
+  /**
+   * 'light' | 'dark'. Null means follow the system.
+   *
+   * Stored rather than kept in the browser so it follows a student between
+   * their phone and a library machine, which is the whole reason to have the
+   * setting rather than a switch that forgets.
+   */
+  appearance: text('appearance'),
   createdAt: timestamp('created_at')
     .$defaultFn(() => new Date())
     .notNull(),

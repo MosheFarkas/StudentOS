@@ -99,6 +99,13 @@
       "when": 1788563680468,
       "tag": "0013_rich_magma",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788615781644,
+      "tag": "0014_chief_thing",
+      "breakpoints": true
     }
   ]
 }

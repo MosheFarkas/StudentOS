@@ -21,6 +21,22 @@ export function App() {
   const report = useCallback((next: boolean) => setWorking(next), []);
   // View state lives in the URL now, so refresh and Back both behave.
   const route = useRoute();
+  /*
+   * What the student has asked to be called, when they have asked.
+   *
+   * Loaded here rather than in the greeting, because the rail's footer wants
+   * it too and one request is enough. Undefined until it arrives, which the
+   * greeting reads as "no name yet" and simply leaves those lines out.
+   */
+  const [preferred, setPreferred] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    void (async () => {
+      const res = await api.me.$get();
+      if (res.ok) setPreferred(((await res.json()) as { preferredName: string }).preferredName);
+    })();
+  }, [session?.user]);
 
   /*
    * Report the browser's timezone once signed in.
@@ -101,7 +117,7 @@ export function App() {
         <Sidebar
           route={route}
           working={working}
-          name={session.user.name}
+          name={preferred ?? session.user.name}
           email={session.user.email}
         />
 
@@ -125,7 +141,13 @@ export function App() {
             <span />
           </button>
 
-          {route.name === 'new' && <NewChat name={session.user.name} />}
+          {/*
+            Settings opens over whatever you were doing rather than replacing
+            it, so the new-chat screen stays mounted behind the window.
+          */}
+          {(route.name === 'new' || route.name === 'settings') && (
+            <NewChat name={preferred ?? session.user.name} />
+          )}
 
           {route.name === 'chat' && (
             /*
@@ -142,8 +164,6 @@ export function App() {
             <Chat key={route.agentId} agentId={route.agentId} />
           )}
 
-          {route.name === 'settings' && <Settings />}
-
           {route.name === 'link' && <LinkDevice requestId={route.requestId} />}
 
           {route.name === 'notFound' && (
@@ -153,6 +173,8 @@ export function App() {
             </div>
           )}
         </main>
+
+        {route.name === 'settings' && <Settings onClose={() => navigate({ name: 'new' })} />}
       </div>
     </WorkingProvider>
   );
