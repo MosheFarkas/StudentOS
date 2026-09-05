@@ -169,3 +169,4 @@ export {
   type AgentRunInput,
   type AgentRunResult,
 } from './run.js';
+export { nameConversation, tidyTitle, TITLE_LIMIT } from './title.js';

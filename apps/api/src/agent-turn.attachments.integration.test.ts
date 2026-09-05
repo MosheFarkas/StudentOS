@@ -23,7 +23,14 @@ import type { AppContext } from './context.js';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
-/** Every user message the model was given, in order. */
+/**
+ * Every user message the TURN gave the model, in order.
+ *
+ * Turns are not the only model calls a first message makes any more -- naming
+ * the chat is another, running beside it -- so they are told apart by the
+ * turn context wrapper rather than by counting. Counting was what broke when
+ * naming arrived, and would break again on the next thing that runs alongside.
+ */
 let seen: string[];
 
 async function contextWith(vaultRoot: string): Promise<AppContext> {
@@ -33,7 +40,7 @@ async function contextWith(vaultRoot: string): Promise<AppContext> {
     llm: {
       chat: async ({ messages }: { messages: { role: string; content: string }[] }) => {
         const user = messages.find((m) => m.role === 'user');
-        if (user) seen.push(user.content);
+        if (user?.content.includes('<turn_context>')) seen.push(user.content);
         return { content: 'ok', toolCalls: [], usage, finishReason: 'stop' as const };
       },
     },

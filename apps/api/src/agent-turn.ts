@@ -1,10 +1,11 @@
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { agentMessages, agents, user } from '@contexto/db';
 import type { Message, MessageAttachment } from '@contexto/shared';
 import { ContextoError } from '@contexto/shared';
 import {
   Vault,
   buildToolRegistry,
+  nameConversation,
   listDocuments,
   readUserDoc,
   runAgentTurn,
@@ -54,8 +55,22 @@ export async function runTurnForAgent(
     attachments?: MessageAttachment[];
     signal?: AbortSignal;
   },
-): Promise<{ userMessage: Message; assistantMessage: Message }> {
+): Promise<{ userMessage: Message; assistantMessage: Message; agentName?: string }> {
   const { userId, agent, content, attachments, signal } = params;
+
+  /*
+   * Whether this is the conversation's first word.
+   *
+   * Counted before the insert below, so "none yet" means what it says. It
+   * decides one thing: whether to name the chat, which happens once and never
+   * again -- a title that changed as a conversation wandered would stop being
+   * a way to find it.
+   */
+  const [existing] = await ctx.db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(agentMessages)
+    .where(eq(agentMessages.agentId, agent.id));
+  const opening = (existing?.count ?? 0) === 0;
 
   const [userMessage] = await ctx.db
     .insert(agentMessages)
@@ -91,65 +106,76 @@ export async function runTurnForAgent(
       vaultFor(ctx.env?.VAULT_ROOT, userId),
     ]);
 
-    const result = await runAgentTurn(
-      {
-        llm: ctx.llm,
-        memory: ctx.memory,
-        skills: ctx.skills,
-        tools: buildToolRegistry(grant.scope, grant.disabled),
-      },
-      {
-        userId,
-        agentId: agent.id,
-        purpose: agent.purpose,
-        // What the summarisation job has learned about them, if anything yet.
-        /*
-         * Their school, in a paragraph, written when the vault was last built.
-         *
-         * Read from disk on every turn rather than cached in memory: it
-         * changes only when a vault is rebuilt, a read is one small file, and
-         * a stale copy in a long-lived process would describe last term.
-         */
-        ...(vault ? { about: (await readUserDoc(vault)) ?? undefined } : {}),
-        ...(vault ? { vault } : {}),
-        message: content,
-        /*
-         * Read now, not searched for later.
-         *
-         * The note was written moments ago by the upload the message came
-         * with, so this is a read of a file already on disk -- and it is what
-         * puts a photograph's transcription in front of the model on the turn
-         * that asked about it.
-         */
-        /*
-         * Everything attached to this conversation, not just to this message.
-         *
-         * A photograph is attached once and asked about for the rest of the
-         * afternoon. Carrying only the current message's files meant the
-         * second question about a worksheet met an agent that had never seen
-         * it -- the transcription was in the vault, and out of reach again.
-         */
-        ...(vault
-          ? {
-              attachments: await conversationAttachments(ctx, vault, agent.id, attachments ?? []),
-            }
-          : {}),
-        ...(profile?.timezone ? { timezone: profile.timezone } : {}),
-        google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
-        ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
-        youtube: ctx.youtube,
-        youtubeTranscripts: ctx.youtubeTranscripts,
-        ...(ctx.residential ? { residentialFetch: ctx.residential.fetch } : {}),
-        portals: new DbPortalSnapshots(ctx.db),
-        /*
-         * Every step the turn takes, handed to the registry the poll reads.
-         * This is the whole of what makes the line under a question say what
-         * the agent is doing rather than only that it is doing something.
-         */
-        onActivity: (activity) => setActivity(agent.id, activity),
-        ...(signal ? { signal } : {}),
-      },
-    );
+    /*
+     * The title is written beside the reply, not after it.
+     *
+     * Naming the chat is its own model call, and doing it once the answer is
+     * ready would put its whole duration between the student and their first
+     * reply. Run together, it costs nothing measurable: the turn is many
+     * times longer, and this finishes inside it.
+     */
+    const [result, named] = await Promise.all([
+      runAgentTurn(
+        {
+          llm: ctx.llm,
+          memory: ctx.memory,
+          skills: ctx.skills,
+          tools: buildToolRegistry(grant.scope, grant.disabled),
+        },
+        {
+          userId,
+          agentId: agent.id,
+          purpose: agent.purpose,
+          // What the summarisation job has learned about them, if anything yet.
+          /*
+           * Their school, in a paragraph, written when the vault was last built.
+           *
+           * Read from disk on every turn rather than cached in memory: it
+           * changes only when a vault is rebuilt, a read is one small file, and
+           * a stale copy in a long-lived process would describe last term.
+           */
+          ...(vault ? { about: (await readUserDoc(vault)) ?? undefined } : {}),
+          ...(vault ? { vault } : {}),
+          message: content,
+          /*
+           * Read now, not searched for later.
+           *
+           * The note was written moments ago by the upload the message came
+           * with, so this is a read of a file already on disk -- and it is what
+           * puts a photograph's transcription in front of the model on the turn
+           * that asked about it.
+           */
+          /*
+           * Everything attached to this conversation, not just to this message.
+           *
+           * A photograph is attached once and asked about for the rest of the
+           * afternoon. Carrying only the current message's files meant the
+           * second question about a worksheet met an agent that had never seen
+           * it -- the transcription was in the vault, and out of reach again.
+           */
+          ...(vault
+            ? {
+                attachments: await conversationAttachments(ctx, vault, agent.id, attachments ?? []),
+              }
+            : {}),
+          ...(profile?.timezone ? { timezone: profile.timezone } : {}),
+          google: new BetterAuthGoogleTokenProvider(ctx.auth, userId, grant.groups, grant.scope),
+          ...(ctx.transcriber ? { transcriber: ctx.transcriber } : {}),
+          youtube: ctx.youtube,
+          youtubeTranscripts: ctx.youtubeTranscripts,
+          ...(ctx.residential ? { residentialFetch: ctx.residential.fetch } : {}),
+          portals: new DbPortalSnapshots(ctx.db),
+          /*
+           * Every step the turn takes, handed to the registry the poll reads.
+           * This is the whole of what makes the line under a question say what
+           * the agent is doing rather than only that it is doing something.
+           */
+          onActivity: (activity) => setActivity(agent.id, activity),
+          ...(signal ? { signal } : {}),
+        },
+      ),
+      opening ? nameTheChat(ctx, agent.id, userId, content) : Promise.resolve(undefined),
+    ]);
 
     const [assistantMessage] = await ctx.db
       .insert(agentMessages)
@@ -168,7 +194,11 @@ export async function runTurnForAgent(
       throw new ContextoError('internal_error', 'Failed to save messages.');
     }
 
-    return { userMessage: toMessage(userMessage), assistantMessage: toMessage(assistantMessage) };
+    return {
+      userMessage: toMessage(userMessage),
+      assistantMessage: toMessage(assistantMessage),
+      ...(named ? { agentName: named } : {}),
+    };
   } finally {
     // In a finally: a turn that throws has stopped just as surely as one that
     // succeeded, and leaving it marked busy would spin a thinking indicator
@@ -245,4 +275,35 @@ async function readAttachments(
   return found
     .filter((note): note is NonNullable<typeof note> => note !== null)
     .map((note) => ({ name: note.name, body: note.body }));
+}
+
+/**
+ * Give the conversation a name, once.
+ *
+ * Returns what it settled on so the caller can hand it back and the rail can
+ * change without asking again. Null when the model would not produce one, in
+ * which case the provisional title -- the opening message, trimmed -- stays,
+ * which is what it is for.
+ */
+async function nameTheChat(
+  ctx: AppContext,
+  agentId: string,
+  userId: string,
+  question: string,
+): Promise<string | undefined> {
+  /*
+   * The registry, not a resolved provider. Its own chat resolves per student
+   * and bills them, which is what a turn already does -- so a title is
+   * metered against the same key and quota as the conversation it names.
+   */
+  const title = await nameConversation({ llm: ctx.llm }, { question, userId });
+  if (!title) return undefined;
+
+  /*
+   * updatedAt is left alone deliberately: the rail is ordered by when a chat
+   * was last used, and naming one is not using it. Touching it here would
+   * have every new chat jump the queue a second time for being named.
+   */
+  await ctx.db.update(agents).set({ name: title }).where(eq(agents.id, agentId));
+  return title;
 }

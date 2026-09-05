@@ -10,6 +10,7 @@ import { FilePreview } from './FilePreview.js';
 import { MessageText } from './MessageText.js';
 import { MessageFiles } from './MessageFiles.js';
 import { useAttachments } from '../lib/attachments.js';
+import { chatsChanged } from '../lib/chats.js';
 import type { Attachment as AttachmentItem } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
@@ -320,6 +321,11 @@ export function Chat({ agentId }: Props) {
       }
 
       const data = await res.json();
+      /*
+       * The chat may have just been named. The rail is what shows names, and
+       * it has no idea this happened.
+       */
+      if ('agentName' in data && data.agentName) chatsChanged();
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== pending.id),
         data.userMessage,
@@ -345,15 +351,13 @@ export function Chat({ agentId }: Props) {
   return (
     <>
       {/*
-        No way back, deliberately. The rail is always there with every chat on
-        it and New at the top, so a button here would be a second way to do
-        what is already one click away -- and it pointed at an agent list that
-        no longer exists.
-      */}
-      <div className="chat-header">
-        <strong>{agent.name}</strong>
-      </div>
+        No header at all.
 
+        The name is in the rail, highlighted, and repeating it over the
+        conversation said the same thing twice while pushing the first message
+        down the page. There is no way back here either, for the same reason:
+        every chat and New are one click away on the left.
+      */}
       <div className="workspace">
         <div className="chat-column">
           <div className="messages">

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Agent } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
 import type { Route } from '../lib/router.js';
 import { signOut } from '../lib/auth.js';
 import { initialOf } from '../lib/initial.js';
+import { onChatsChanged } from '../lib/chats.js';
 import { ConfirmDelete } from './ConfirmDelete.js';
 import { LogoMark } from './LogoMark.js';
 
@@ -43,18 +44,24 @@ export function Sidebar({ route, working, name, email }: Props) {
    */
   const at = route.name === 'chat' ? route.agentId : route.name;
 
+  const reload = useCallback(async () => {
+    try {
+      const res = await api.agents.$get();
+      if (!res.ok) return;
+      setChats((await res.json()).agents);
+    } catch {
+      // A sidebar that cannot list is still a sidebar you can start from.
+      // Failing here must not take the composer down with it.
+    }
+  }, []);
+
   useEffect(() => {
-    void (async () => {
-      try {
-        const res = await api.agents.$get();
-        if (!res.ok) return;
-        setChats((await res.json()).agents);
-      } catch {
-        // A sidebar that cannot list is still a sidebar you can start from.
-        // Failing here must not take the composer down with it.
-      }
-    })();
-  }, [at]);
+    void reload();
+  }, [at, reload]);
+
+  // A chat is named from its first message, and that name arrives with the
+  // reply -- in the conversation, which has no way to reach this list.
+  useEffect(() => onChatsChanged(() => void reload()), [reload]);
 
   /**
    * Change one chat, on the server and on screen.
