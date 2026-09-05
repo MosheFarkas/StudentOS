@@ -22,22 +22,13 @@ export function UsageBars({ usage }: { usage: UsageStatus }) {
 
   return (
     <>
-      <Bar
-        title="This session"
-        note="A five-hour window. It refills as older messages fall out of it."
-        bar={usage.limits.session}
-      />
-      <Bar title="This week" note={resetNote(usage.limits.week.resetsAt)} bar={usage.limits.week} />
-
-      <p className="muted usage-footnote">
-        Your month&apos;s allowance is spread evenly across the weeks. A session can spend faster
-        than that pace, so a long afternoon is not held back — five of them is the week.
-      </p>
+      <Bar title="This session" bar={usage.limits.session} />
+      <Bar title="This week" bar={usage.limits.week} />
     </>
   );
 }
 
-function Bar({ title, note, bar }: { title: string; note: string; bar: QuotaBar }) {
+function Bar({ title, bar }: { title: string; bar: QuotaBar }) {
   /*
    * Capped at 100. Two calls can pass the check at once by design -- see
    * assertWithinQuota -- so a student can finish a window fractionally over
@@ -48,10 +39,7 @@ function Bar({ title, note, bar }: { title: string; note: string; bar: QuotaBar 
   return (
     <div className="usage-bar">
       <div className="usage-bar-head">
-        <div>
-          <strong>{title}</strong>
-          <span className="muted">{note}</span>
-        </div>
+        <strong>{title}</strong>
         <span className="usage-percent">{percent}% used</span>
       </div>
 
@@ -68,18 +56,6 @@ function Bar({ title, note, bar }: { title: string; note: string; bar: QuotaBar 
           style={{ width: `${percent}%` }}
         />
       </div>
-
-      <p className="muted usage-numbers">
-        {bar.used.toLocaleString()} of {bar.limit.toLocaleString()} tokens
-      </p>
     </div>
   );
-}
-
-/** "Resets Monday" is something to plan around; a timestamp is not. */
-function resetNote(resetsAt: string | null): string {
-  if (!resetsAt) return 'Resets weekly.';
-  const at = new Date(resetsAt);
-  if (Number.isNaN(at.getTime())) return 'Resets weekly.';
-  return `Resets ${at.toLocaleDateString(undefined, { weekday: 'long' })}.`;
 }

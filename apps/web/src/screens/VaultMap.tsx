@@ -22,7 +22,7 @@ import { CENTRE, labelFor, neighbours } from '../lib/vaultmap.js';
 
 const VaultScene = lazy(() => import('./VaultScene.js'));
 
-export function VaultMap() {
+export function VaultMap({ onConnect }: { onConnect: () => void }) {
   const { data: session } = useSession();
   const userId = session?.user.id ?? null;
 
@@ -136,11 +136,19 @@ export function VaultMap() {
 
   if (error) return <p className="muted">{error}</p>;
 
+  /*
+   * Empty because nothing is connected, almost always. So the frame is drawn
+   * anyway, and what is in it is the way to fill it rather than a note that
+   * it has not been filled.
+   */
   if (graph && graph.nodes.length === 0) {
     return (
-      <p className="muted">
-        Nothing has been written about your school yet. Build your vault and this fills in.
-      </p>
+      <div className="vault-still vault-still-empty">
+        <p className="vault-empty">Connect everything to build your vault.</p>
+        <button type="button" className="primary vault-open" onClick={onConnect}>
+          Connect
+        </button>
+      </div>
     );
   }
 

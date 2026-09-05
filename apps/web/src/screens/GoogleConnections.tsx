@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { connectGoogleScopes } from '../lib/auth.js';
-import { ClassroomLogo, DriveLogo, GmailLogo } from './ConnectionLogos.js';
+import { ClassroomLogo, DriveLogo, GmailLogo, SparkMark } from './ConnectionLogos.js';
 import { Row } from './SettingsRow.js';
 import { Toggle } from './Toggle.js';
 
@@ -108,10 +108,24 @@ export function GoogleConnections() {
        */}
       {!allConnected && (
         <div className="connect-all">
-          <span>Connect everything</span>
-          <button className="primary" disabled={busy !== null} onClick={() => void connect('all')}>
-            {busy === 'all' ? 'Opening…' : 'Connect'}
-          </button>
+          <span className="settings-icon" aria-hidden="true">
+            <SparkMark />
+          </span>
+          <div className="settings-label">
+            <span>
+              Connect everything
+              <span className="recommended">Recommended</span>
+            </span>
+          </div>
+          <div className="settings-control">
+            <button
+              className="primary"
+              disabled={busy !== null}
+              onClick={() => void connect('all')}
+            >
+              {busy === 'all' ? 'Opening…' : 'Connect'}
+            </button>
+          </div>
         </div>
       )}
 

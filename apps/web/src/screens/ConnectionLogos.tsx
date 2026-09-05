@@ -9,6 +9,30 @@ import { api } from '../lib/api.js';
  * favicon stands in, and its initial when even that cannot be had.
  */
 
+/** The one-tap path's mark: a spark in the theme's own colours. */
+export function SparkMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="spark-mark" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#4070ff" />
+          <stop offset="0.55" stopColor="#5010d0" />
+          <stop offset="1" stopColor="#2f9bbc" />
+        </linearGradient>
+      </defs>
+      <path
+        fill="url(#spark-mark)"
+        d="M11 2c.55 4.6 2.85 7.3 7.5 8-4.65.7-6.95 3.4-7.5 8-.55-4.6-2.85-7.3-7.5-8 4.65-.7 6.95-3.4 7.5-8z"
+      />
+      <path
+        fill="url(#spark-mark)"
+        opacity="0.85"
+        d="M18.5 14c.3 2 1.3 3.2 3.5 3.5-2.2.3-3.2 1.5-3.5 3.5-.3-2-1.3-3.2-3.5-3.5 2.2-.3 3.2-1.5 3.5-3.5z"
+      />
+    </svg>
+  );
+}
+
 export function ClassroomLogo() {
   return (
     <svg viewBox="0 0 578.9 500" aria-hidden="true" focusable="false">

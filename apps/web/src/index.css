@@ -506,17 +506,88 @@ hr {
  * The one-tap path, set apart from the list of parts so it reads as the
  * recommended route rather than a fifth item in a menu.
  */
+/*
+ * The one-tap path, framed. It sits in the same three columns as the rows
+ * below it -- mark, name, control -- and the frame is pushed out past the
+ * content by exactly what its padding pulls back, so the columns line up.
+ * The frame itself is the theme's colours, slowly on the move: the one
+ * thing on the page that says "this one", and the only thing that moves.
+ */
 .connect-all {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin: 0.4rem 0 0.2rem;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
-  border: 1px solid #e4d9ff;
+  gap: 1.5rem;
+  margin: 0.5rem -0.75rem 0.35rem;
+  padding: 0.6rem 0.75rem;
   border-radius: var(--radius);
-  background: #f7f3ff;
-  font-weight: 500;
+  background: linear-gradient(
+    90deg,
+    rgba(64, 112, 255, 0.07),
+    rgba(80, 16, 208, 0.07) 50%,
+    rgba(47, 155, 188, 0.07)
+  );
+}
+
+.connect-all::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    var(--blue),
+    var(--violet),
+    var(--teal),
+    var(--lavender),
+    var(--blue)
+  );
+  background-size: 300% 100%;
+  /* Only the ring is painted: the inside is masked out of the gradient. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: connect-all-sweep 7s linear infinite;
+  pointer-events: none;
+}
+
+/* The gradient starts and ends on the same colour, so one period is seamless. */
+@keyframes connect-all-sweep {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 150% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-all::before {
+    animation: none;
+  }
+}
+
+.connect-all .settings-label > span:first-child {
+  font-weight: 600;
+}
+
+.recommended {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: linear-gradient(90deg, var(--blue), var(--violet));
+  vertical-align: 0.15em;
 }
 
 /*
@@ -2820,11 +2891,9 @@ body.dialog-open .app {
   margin-bottom: 0.55rem;
 }
 
-.usage-bar-head > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+.usage-bar-head strong {
   font-size: 0.92rem;
+  font-weight: 500;
 }
 
 .usage-percent {
@@ -2851,17 +2920,6 @@ body.dialog-open .app {
 /* The last tenth is the part worth noticing before it runs out. */
 .usage-fill.is-low {
   background: linear-gradient(90deg, var(--warn), var(--danger));
-}
-
-.usage-numbers {
-  margin: 0.4rem 0 0;
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.usage-footnote {
-  margin-top: 1rem;
-  font-size: 0.85rem;
 }
 
 @media (max-width: 760px) {
@@ -2957,6 +3015,18 @@ body.dialog-open .app {
 .vault-open {
   position: relative;
   box-shadow: 0 6px 24px rgba(5, 7, 26, 0.55);
+}
+
+/* Nothing in the vault yet: the same frame, with the way to fill it inside. */
+.vault-still-empty {
+  align-content: center;
+  gap: 0.9rem;
+}
+
+.vault-empty {
+  margin: 0;
+  color: rgba(168, 178, 212, 0.9);
+  font-size: 0.95rem;
 }
 
 /*

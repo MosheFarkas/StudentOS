@@ -96,7 +96,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
           {section === 'Account' && <Account me={me} />}
           {section === 'Usage' && <Usage />}
           {section === 'Connections' && <Connections />}
-          {section === 'Memory' && <Memory />}
+          {section === 'Memory' && <Memory onConnect={() => setSection('Connections')} />}
         </div>
       </div>
     </div>,
@@ -276,7 +276,7 @@ function Connections() {
   );
 }
 
-function Memory() {
+function Memory({ onConnect }: { onConnect: () => void }) {
   return (
     <>
       <h2 className="settings-heading">Your vault</h2>
@@ -285,7 +285,7 @@ function Memory() {
        * The vault belongs to the student, not to a chat -- an account with no
        * chats still has one, so nothing here is gated on having one.
        */}
-      <VaultMap />
+      <VaultMap onConnect={onConnect} />
 
       <ArchivedChats />
     </>
