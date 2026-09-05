@@ -186,10 +186,7 @@ export function SiteConnections() {
   return (
     <>
       <h2 className="settings-heading">Custom sites</h2>
-      <p className="settings-intro">
-        Course portals and anything else behind a sign-in.
-        {!bridge && ' Added from the desktop app.'}
-      </p>
+      {!bridge && <p className="settings-intro">Added from the desktop app.</p>}
 
       {rows.map((row) => (
         <Row

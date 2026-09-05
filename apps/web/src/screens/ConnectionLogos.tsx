@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '../lib/api.js';
 
 /**
  * The marks beside each connection.
@@ -10,16 +11,21 @@ import { useState } from 'react';
 
 export function ClassroomLogo() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="2" y="2" width="20" height="20" rx="3" fill="#0f9d58" />
-      <rect x="4" y="4" width="16" height="16" fill="#57bb8a" />
-      <circle cx="12" cy="9.6" r="2.1" fill="#f7cb4d" />
-      <path d="M8.2 16.2c0-2 1.7-3.3 3.8-3.3s3.8 1.3 3.8 3.3z" fill="#f7cb4d" />
-      <circle cx="7.4" cy="10.8" r="1.5" fill="#fff" />
-      <path d="M4.6 16.2c0-1.5 1.2-2.5 2.8-2.5s2.8 1 2.8 2.5z" fill="#fff" />
-      <circle cx="16.6" cy="10.8" r="1.5" fill="#fff" />
-      <path d="M13.8 16.2c0-1.5 1.2-2.5 2.8-2.5s2.8 1 2.8 2.5z" fill="#fff" />
-      <rect x="14" y="18.6" width="5" height="1.4" fill="#fff" />
+    <svg viewBox="0 0 578.9 500" aria-hidden="true" focusable="false">
+      <path
+        fill="#f4b400"
+        d="M539.5 0h-500C17.7 0 0 17.7 0 39.5v421.1C0 482.3 17.7 500 39.5 500h500c21.8 0 39.5-17.7 39.5-39.5V39.5C578.9 17.7 561.3 0 539.5 0z"
+      />
+      <path fill="#0f9d58" d="M52.6 52.6h473.7v394.7H52.6z" />
+      <path
+        fill="#57bb8a"
+        d="M394.7 263.2c16.4 0 29.6-13.3 29.6-29.6s-13.3-29.6-29.6-29.6-29.6 13.3-29.6 29.6 13.3 29.6 29.6 29.6zm0 19.7c-31.7 0-65.8 16.8-65.8 37.6v21.6h131.6v-21.6c0-20.8-34.1-37.6-65.8-37.6zM184.2 263.2c16.4 0 29.6-13.3 29.6-29.6s-13.3-29.6-29.6-29.6-29.6 13.3-29.6 29.6 13.3 29.6 29.6 29.6zm0 19.7c-31.7 0-65.8 16.8-65.8 37.6v21.6H250v-21.6c0-20.8-34.1-37.6-65.8-37.6z"
+      />
+      <path
+        fill="#f7f7f7"
+        d="M289.5 236.8c21.8 0 39.5-17.7 39.4-39.5 0-21.8-17.7-39.5-39.5-39.4-21.8 0-39.4 17.7-39.4 39.5 0 21.8 17.7 39.4 39.5 39.4zm0 26.4c-44.4 0-92.1 23.6-92.1 52.6v26.3h184.2v-26.3c0-29-47.7-52.6-92.1-52.6z"
+      />
+      <path fill="#f1f1f1" d="M342.1 421.1h118.4v26.3H342.1z" />
     </svg>
   );
 }
@@ -68,28 +74,43 @@ export function GmailLogo() {
 }
 
 /**
- * A custom site's own favicon, or its initial when there is none to be had.
+ * A custom site's mark: its own favicon, then a lookup, then its initial.
  *
- * Asked of the site itself rather than a lookup service: the one tried
- * answered a real school portal with its generic globe, where the portal's
- * own /favicon.ico is the actual mark. A site that answers with a login page
- * instead fails to decode, and the letter takes over.
+ * The site itself is asked first, because that involves nobody else and is
+ * right whenever it answers -- a real school portal serves its own. Plenty do
+ * not: some answer with a login page, some with nothing at all. Then a public
+ * lookup is asked, through our own API rather than directly, because from a
+ * browser its "unknown site" placeholder is indistinguishable from an icon.
+ * When that has nothing either, the letter.
  */
 export function SiteLogo({ origin, name }: { origin: string; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const source = faviconOf(origin);
+  const [attempt, setAttempt] = useState(0);
+  const sources = sourcesFor(origin);
+  const source = sources[attempt];
 
-  if (!source || failed) {
+  if (!source) {
     return <span className="settings-icon-letter">{name.charAt(0).toUpperCase()}</span>;
   }
 
-  return <img src={source} alt="" width={22} height={22} onError={() => setFailed(true)} />;
+  return (
+    <img
+      src={source}
+      alt=""
+      width={22}
+      height={22}
+      onError={() => setAttempt((current) => current + 1)}
+    />
+  );
 }
 
-function faviconOf(origin: string): string | null {
+function sourcesFor(origin: string): string[] {
   try {
-    return new URL('/favicon.ico', origin).toString();
+    const at = new URL(origin);
+    return [
+      new URL('/favicon.ico', at).toString(),
+      api.devices.sites.icon.$url({ query: { host: at.hostname } }).toString(),
+    ];
   } catch {
-    return null;
+    return [];
   }
 }

@@ -13,6 +13,7 @@ import {
 } from '@contexto/db';
 import { ContextoError } from '@contexto/shared';
 import type { AppContext } from '../context.js';
+import { HOSTNAME, lookupSiteIcon } from '../site-icon.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
 import { hashDeviceToken, requireDevice, type DeviceVariables } from '../middleware/device.js';
@@ -410,6 +411,28 @@ export function createDeviceRoutes(ctx: AppContext) {
           })),
         );
       })
+
+      /**
+       * A custom site's mark, for the settings page.
+       *
+       * Second in the chain: the browser has already asked the site itself
+       * for /favicon.ico and got nothing usable. See site-icon.ts for why
+       * the lookup has to be read from here rather than from an <img>.
+       */
+      .get(
+        '/sites/icon',
+        auth,
+        zValidator('query', z.object({ host: z.string().regex(HOSTNAME) })),
+        async (c) => {
+          const icon = await lookupSiteIcon(c.req.valid('query').host);
+          if (!icon) return c.body(null, 404);
+          return c.body(icon.bytes, 200, {
+            'Content-Type': icon.type,
+            // A day: marks change rarely, and the page is opened often.
+            'Cache-Control': 'private, max-age=86400',
+          });
+        },
+      )
 
       /** Switch a site off or back on. Off keeps the pages; remove deletes them. */
       .post(

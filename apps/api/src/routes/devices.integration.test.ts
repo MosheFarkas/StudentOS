@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
@@ -524,5 +524,53 @@ describe('linking the same machine again', () => {
 
     const bobs = (await (await app.request('/api/devices', as(bob.token))).json()) as unknown[];
     expect(bobs).toHaveLength(1);
+  });
+});
+
+describe('site icons', () => {
+  const picture = (status: number) =>
+    new Response('png-bytes', { status, headers: { 'content-type': 'image/png' } });
+
+  it('refuses anything that is not a hostname', async () => {
+    const alice = await createUser();
+    const res = await app.request('/api/devices/sites/icon?host=not%20a%20host', as(alice.token));
+    expect(res.status).toBe(400);
+  });
+
+  /**
+   * The lookup answers an unknown site with a placeholder picture and a 404.
+   * An <img> shows the picture regardless of the status, which is the whole
+   * reason this route exists: here the status is read, and nothing goes back.
+   */
+  it('sends nothing back for a site the lookup does not know', async () => {
+    const alice = await createUser();
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(picture(404));
+    try {
+      const res = await app.request(
+        '/api/devices/sites/icon?host=nowhere.example',
+        as(alice.token),
+      );
+      expect(res.status).toBe(404);
+      expect((await res.arrayBuffer()).byteLength).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('serves the icon with its type, and lets the browser keep it a while', async () => {
+    const alice = await createUser();
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(picture(200));
+    try {
+      const res = await app.request(
+        '/api/devices/sites/icon?host=portals.veracross.com',
+        as(alice.token),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      expect(res.headers.get('cache-control')).toContain('max-age');
+      expect(await res.text()).toBe('png-bytes');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
