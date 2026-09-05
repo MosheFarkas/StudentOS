@@ -108,23 +108,26 @@ export function GoogleConnections() {
        */}
       {!allConnected && (
         <div className="connect-all">
-          <span className="settings-icon" aria-hidden="true">
-            <SparkMark />
-          </span>
-          <div className="settings-label">
-            <span>
-              Connect everything
-              <span className="recommended">Recommended</span>
+          {/* The glow is on the wrapper; the card sits above it. See the CSS. */}
+          <div className="connect-all-card">
+            <span className="settings-icon" aria-hidden="true">
+              <SparkMark />
             </span>
-          </div>
-          <div className="settings-control">
-            <button
-              className="primary"
-              disabled={busy !== null}
-              onClick={() => void connect('all')}
-            >
-              {busy === 'all' ? 'Opening…' : 'Connect'}
-            </button>
+            <div className="settings-label">
+              <span>
+                Connect everything
+                <span className="recommended">Recommended</span>
+              </span>
+            </div>
+            <div className="settings-control">
+              <button
+                className="primary"
+                disabled={busy !== null}
+                onClick={() => void connect('all')}
+              >
+                {busy === 'all' ? 'Opening…' : 'Connect'}
+              </button>
+            </div>
           </div>
         </div>
       )}
