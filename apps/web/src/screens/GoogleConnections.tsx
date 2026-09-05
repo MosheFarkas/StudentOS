@@ -1,72 +1,33 @@
 import { Fragment, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { connectGoogleScopes } from '../lib/auth.js';
+import { ClassroomLogo, DriveLogo, GmailLogo } from './ConnectionLogos.js';
 import { Row } from './SettingsRow.js';
 import { Toggle } from './Toggle.js';
 
-type Group = 'calendar' | 'classroom' | 'drive' | 'gmail';
+type Group = 'classroom' | 'drive' | 'gmail';
 
 type Status = {
-  calendar: boolean;
   classroom: boolean;
   drive: boolean;
   gmail: boolean;
-  classroomWrite: boolean;
-  gmailWrite: boolean;
   disabled: string[];
-  missing: { calendar: string[]; classroom: string[]; gmail: string[] };
+  missing: { classroom: string[]; gmail: string[] };
 };
 
-interface Connection {
-  group: Group;
-  name: string;
-  blurb: string;
-  /** The write half, where one exists. */
-  sub?: { name: string; blurb: string };
-}
-
-const CONNECTIONS: Connection[] = [
-  {
-    group: 'calendar',
-    name: 'Calendar',
-    blurb: 'Plan around your real schedule, and add events when you ask.',
-  },
-  {
-    group: 'classroom',
-    name: 'Classroom',
-    blurb: 'Your classes, assignments, due dates, materials and announcements.',
-    sub: {
-      name: 'Turning work in',
-      blurb: 'Hand in and take back assignments, and attach files. Always asks first.',
-    },
-  },
-  {
-    group: 'drive',
-    name: 'Drive',
-    blurb: 'Read your documents, slides, PDFs and photographed worksheets.',
-  },
-  {
-    group: 'gmail',
-    name: 'Gmail',
-    blurb: 'Read your email and attachments, and keep your inbox tidy.',
-    sub: {
-      name: 'Sending email',
-      blurb: 'Send and reply as you. Shows you every message first, and never sends on its own.',
-    },
-  },
+const CONNECTIONS: { group: Group; name: string; logo: React.ReactNode }[] = [
+  { group: 'classroom', name: 'Classroom', logo: <ClassroomLogo /> },
+  { group: 'drive', name: 'Drive', logo: <DriveLogo /> },
+  { group: 'gmail', name: 'Gmail', logo: <GmailLogo /> },
 ];
 
 /**
  * Google connections.
  *
- * Two levels. An integration is the thing itself; beneath it sits the half
- * that WRITES -- turning work in, sending mail -- because those deserve to be
- * visible and switchable on their own.
- *
- * A parent carries its child: switching Gmail off takes sending with it,
- * since "can send email" left showing as on under a disabled Gmail is a lie
- * about the state of the system. Switching the child alone changes only the
- * child, so a student can read their mail while the agent cannot send any.
+ * One row per integration, and one decision per row. The write half of each
+ * -- turning work in, sending mail -- comes with the connection rather than
+ * as a second switch: a student connects Gmail or does not, and the switch
+ * takes reading and sending off together.
  */
 export function GoogleConnections() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -105,23 +66,22 @@ export function GoogleConnections() {
     }
   }
 
-  async function toggle(key: string, enabled: boolean) {
-    // Optimistic, and it mirrors the server's parent/child rule so the two
-    // switches never disagree for the length of a round trip.
-    setStatus((prev) => {
-      if (!prev) return prev;
-      const affected = key.includes(':') ? [key] : [key, `${key}:write`];
-      return {
-        ...prev,
-        disabled: enabled
-          ? prev.disabled.filter((d) => !affected.includes(d))
-          : [...new Set([...prev.disabled, ...affected])],
-      };
-    });
+  async function toggle(group: Group, enabled: boolean) {
+    // Optimistic: the switch moves now, and the server catches up.
+    setStatus((prev) =>
+      prev
+        ? {
+            ...prev,
+            disabled: enabled
+              ? prev.disabled.filter((d) => d !== group)
+              : [...new Set([...prev.disabled, group])],
+          }
+        : prev,
+    );
     setError(null);
 
     const res = await api.google.integrations[':group'].$put({
-      param: { group: key },
+      param: { group },
       json: { enabled },
     });
     if (!res.ok) {
@@ -132,110 +92,70 @@ export function GoogleConnections() {
 
   if (!status) return null;
 
-  const isOn = (key: string) => !status.disabled.includes(key);
-  const connected = CONNECTIONS.filter((c) => status[c.group]);
-  const allConnected = connected.length === CONNECTIONS.length;
+  const isOn = (group: Group) => !status.disabled.includes(group);
+  const allConnected = CONNECTIONS.every(({ group }) => status[group]);
+  /* A school that approved a subset. Reconnecting asks Google for the rest. */
+  const incomplete = (group: Group) => group !== 'drive' && status.missing[group].length > 0;
 
   return (
     <>
-      <h2 className="settings-heading">Google</h2>
-      <p className="settings-intro">
-        What your agent can see and do. Connect everything for the full thing, or pick what you want
-        &mdash; you can switch any of it off later.
-      </p>
+      <h2 className="settings-heading">Connections</h2>
 
       {/*
        * One tap for the whole product, before the list of parts. Someone
        * setting this up for the first time wants their agent to work, not to
-       * make four separate permission decisions before it does anything.
+       * make three separate permission decisions before it does anything.
        */}
       {!allConnected && (
         <div className="connect-all">
-          <div className="settings-label">
-            <span>Connect everything</span>
-            <span className="muted">
-              Calendar, Classroom, Drive and Gmail in one step, so your agent knows your coursework
-              from the start.
-            </span>
-          </div>
+          <span>Connect everything</span>
           <button className="primary" disabled={busy !== null} onClick={() => void connect('all')}>
             {busy === 'all' ? 'Opening…' : 'Connect'}
           </button>
         </div>
       )}
 
-      {CONNECTIONS.map(({ group, name, blurb, sub }) => {
-        const parentOn = isOn(group);
-        return (
-          <Fragment key={group}>
-            <Row label={name} hint={blurb}>
-              {status[group] ? (
+      {CONNECTIONS.map(({ group, name, logo }) => (
+        <Fragment key={group}>
+          <Row icon={logo} label={name}>
+            {status[group] ? (
+              <>
+                {incomplete(group) && (
+                  <button
+                    className="quiet"
+                    disabled={busy !== null}
+                    onClick={() => void connect(group)}
+                  >
+                    {busy === group ? 'Opening…' : 'Reconnect'}
+                  </button>
+                )}
                 <Toggle
                   label={`${name} enabled`}
-                  checked={parentOn}
+                  checked={isOn(group)}
                   onChange={(next) => void toggle(group, next)}
                 />
-              ) : (
-                <button disabled={busy !== null} onClick={() => void connect(group)}>
-                  {busy === group ? 'Opening…' : 'Connect'}
-                </button>
-              )}
-            </Row>
-
-            {/*
-             * Classroom hands back the NAME and link of every attachment but
-             * not a word of what is inside it -- reading a file is Drive's
-             * job. Without Drive the agent can tell a student a review
-             * package exists and nothing about what it says, which reads as
-             * the agent being useless rather than as a missing connection.
-             *
-             * Switched off counts as missing: the tools are deregistered
-             * either way, so the student sees the same behaviour.
-             */}
-            {group === 'classroom' && status.classroom && (!status.drive || !isOn('drive')) && (
-              <p className="notice">
-                Without <strong>Drive</strong>, your agent can see your assignments, due dates and
-                the names of files your teachers post &mdash; but it can&apos;t open those files or
-                tell you what&apos;s in them.
-              </p>
+              </>
+            ) : (
+              <button disabled={busy !== null} onClick={() => void connect(group)}>
+                {busy === group ? 'Opening…' : 'Connect'}
+              </button>
             )}
+          </Row>
 
-            {/*
-             * The write half, shown only once the integration is connected.
-             * Disabled rather than hidden when the parent is off, so the
-             * setting stays visible and its state is obvious.
-             */}
-            {sub && status[group] && (
-              <Row label={sub.name} hint={sub.blurb} sub>
-                <Toggle
-                  label={`${sub.name} enabled`}
-                  checked={parentOn && isOn(`${group}:write`)}
-                  disabled={!parentOn}
-                  onChange={(next) => void toggle(`${group}:write`, next)}
-                />
-              </Row>
-            )}
-          </Fragment>
-        );
-      })}
-
-      {/*
-       * Partial approval is a NORMAL state on a school account, not an error.
-       * Naming what is missing is the difference between "this is broken" and
-       * "my school didn't approve that part".
-       */}
-      {status.classroom && status.missing.classroom.length > 0 && (
-        <p className="settings-note">
-          Your school hasn&apos;t approved everything for Classroom, so some of it won&apos;t work.
-        </p>
-      )}
-
-      {!status.classroom && (
-        <p className="settings-note">
-          On a school account, Classroom may need an administrator to approve ContextoAgent first.
-          Everything else works either way.
-        </p>
-      )}
+          {/*
+           * Classroom hands back the NAME and link of every attachment but
+           * not a word of what is inside it -- reading a file is Drive's
+           * job. Switched off counts as missing: the tools are deregistered
+           * either way, so the student sees the same behaviour.
+           */}
+          {group === 'classroom' && status.classroom && (!status.drive || !isOn('drive')) && (
+            <p className="notice">
+              Without <strong>Drive</strong>, your agent can see your assignments and the names of
+              the files your teachers post, but not what is in them.
+            </p>
+          )}
+        </Fragment>
+      ))}
 
       {error && <p className="settings-note">{error}</p>}
     </>

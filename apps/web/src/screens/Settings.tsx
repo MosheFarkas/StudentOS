@@ -10,7 +10,6 @@ import { DeviceConnections } from './DeviceConnections.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { Row } from './SettingsRow.js';
 import { SiteConnections } from './SiteConnections.js';
-import { TelegramConnection } from './TelegramConnection.js';
 import { UsageBars } from './UsageBars.js';
 import { VaultMap } from './VaultMap.js';
 
@@ -273,7 +272,6 @@ function Connections() {
       {/* Another thing the agent can see, and the only one a browser cannot
           set up for itself. */}
       <SiteConnections />
-      <TelegramConnection />
     </>
   );
 }
@@ -282,10 +280,7 @@ function Memory() {
   return (
     <>
       <h2 className="settings-heading">Your vault</h2>
-      <p className="settings-intro">
-        Everything your agent has worked out about your school, as a shape. Built from your own
-        Classroom, Drive and mail.
-      </p>
+      <p className="settings-intro">Built from your Classroom, Drive and Gmail.</p>
       {/*
        * The vault belongs to the student, not to a chat -- an account with no
        * chats still has one, so nothing here is gated on having one.

@@ -7,9 +7,9 @@ import type { Tool, ToolContext } from './types.js';
  *
  * Deliberately per-run rather than global: which tools an agent gets depends on
  * which Google scopes that student granted, so the set is assembled per
- * request. Registering a Calendar tool for a student who never connected
- * Calendar just wastes context and invites the model to call something that
- * cannot work.
+ * request. Registering a Gmail tool for a student who never connected Gmail
+ * just wastes context and invites the model to call something that cannot
+ * work.
  */
 /**
  * What every provider accepts as a function name.

@@ -173,11 +173,11 @@ describe('the line under a question', () => {
   });
 
   it('chooses the new phrase to suit the new step', async () => {
-    reported = { kind: 'tool', name: 'google_calendar_list_events' };
+    reported = { kind: 'tool', name: 'google_drive_read_file' };
     await poll();
     const fitting = [
-      ...phrasesFor('time', BASIC_PHRASES),
-      ...phrasesFor('time', NICHE_PHRASES),
+      ...phrasesFor('files', BASIC_PHRASES),
+      ...phrasesFor('files', NICHE_PHRASES),
     ].map((p) => p.text);
     expect(fitting).toContain(line());
   });

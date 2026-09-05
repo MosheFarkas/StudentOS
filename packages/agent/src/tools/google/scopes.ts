@@ -2,8 +2,8 @@
  * Google OAuth scope groups.
  *
  * Requested as SEPARATE consents, never bundled into sign-in. A student signs
- * in first and is asked for Calendar (and later Classroom) only when they
- * choose to connect it.
+ * in first and is asked for Classroom, Drive or Gmail only when they choose
+ * to connect it.
  *
  * Each group separates REQUIRED scopes from OPTIONAL ones, and that split is
  * load-bearing rather than tidy. School Workspace admins grant scope subsets as
@@ -33,9 +33,6 @@ export interface ScopeGroupDefinition {
   readonly elective?: readonly string[];
 }
 
-export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
-export const CALENDAR_EVENTS_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
-
 export const CLASSROOM_COURSES_SCOPE = 'https://www.googleapis.com/auth/classroom.courses.readonly';
 export const CLASSROOM_COURSEWORK_SCOPE =
   'https://www.googleapis.com/auth/classroom.coursework.me.readonly';
@@ -50,9 +47,11 @@ export const CLASSROOM_MATERIALS_SCOPE =
 /**
  * Turn work in, take it back, attach files to a submission.
  *
- * The write counterpart of coursework.me.readonly, and elective rather than
- * requested by default -- see the note at the bottom of this file on what it
- * means to let an agent submit work under a student's name.
+ * The write counterpart of coursework.me.readonly, requested with the rest of
+ * Classroom: connecting it is one decision, and the switch for the whole
+ * integration is the student's control over it. See the note at the bottom
+ * of this file on what it costs to let an agent submit work under a
+ * student's name.
  */
 export const CLASSROOM_COURSEWORK_WRITE_SCOPE =
   'https://www.googleapis.com/auth/classroom.coursework.me';
@@ -97,17 +96,17 @@ export const DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.reado
  * RESTRICTED, and the most invasive scope in the product -- there is no
  * "only school mail" option, so this is the whole mailbox or nothing. Offered
  * as its own connection precisely so a student can have Classroom and
- * Calendar without it.
+ * Drive without it.
  */
 export const GMAIL_READ_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 /**
  * Send, reply, label, archive and trash.
  *
- * RESTRICTED, and a superset of gmail.readonly. Elective: an agent that can
- * send mail as a student, to their teachers, is a different proposition from
- * one that can read it, and that should never arrive as a side effect of
- * connecting to read.
+ * RESTRICTED, and a superset of gmail.readonly. Requested with reading:
+ * connecting Gmail is one decision, and sending is part of what it means.
+ * The student's control over it is the Gmail switch, which takes reading
+ * and sending off together.
  *
  * Note what is NOT here: https://mail.google.com/, the only scope that can
  * permanently delete. Google's own guidance is to request it only if you must
@@ -119,7 +118,7 @@ export const GMAIL_MODIFY_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
 /** Non-sensitive, and the only Gmail scope that is. */
 export const GMAIL_LABELS_SCOPE = 'https://www.googleapis.com/auth/gmail.labels';
 
-export type ScopeGroup = 'identity' | 'calendar' | 'classroom' | 'drive' | 'gmail';
+export type ScopeGroup = 'identity' | 'classroom' | 'drive' | 'gmail';
 
 export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   /** Always requested. The minimum to create an account and nothing more. */
@@ -133,22 +132,11 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   },
 
   /**
-   * Full calendar access -- read, create, update, delete events, and manage
-   * calendars. Still a SENSITIVE scope, the same review tier as the narrower
-   * calendar.events, so the broader grant costs nothing extra in verification.
-   * No Calendar scope is restricted.
-   */
-  calendar: {
-    required: [CALENDAR_SCOPE],
-    optional: [],
-  },
-
-  /**
-   * Read-only, and deliberately so -- see the note at the bottom of this file.
-   *
    * Only the course list is required: without it there is nothing to hang
    * anything else off. Everything else is optional, so a school that approves
-   * a subset still gets a working integration.
+   * a subset still gets a working integration -- turning work in included,
+   * which is requested alongside rather than as a second consent. See the
+   * note at the bottom of this file on what that costs.
    */
   classroom: {
     required: [CLASSROOM_COURSES_SCOPE],
@@ -158,8 +146,8 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
       CLASSROOM_ANNOUNCEMENTS_SCOPE,
       CLASSROOM_TOPICS_SCOPE,
       CLASSROOM_MATERIALS_SCOPE,
+      CLASSROOM_COURSEWORK_WRITE_SCOPE,
     ],
-    elective: [CLASSROOM_COURSEWORK_WRITE_SCOPE],
   },
 
   /**
@@ -177,16 +165,15 @@ export const SCOPE_GROUPS: Record<ScopeGroup, ScopeGroupDefinition> = {
   },
 
   /**
-   * Mail.
+   * Mail, reading and sending together.
    *
-   * Reading is the connection; writing is a separate, explicit decision. See
-   * the note at the bottom of this file on why sending is treated differently
-   * from every other write in this product.
+   * See the note at the bottom of this file on why sending still deserves
+   * more care than every other write in this product, and what holds now
+   * that it is not a separate decision.
    */
   gmail: {
     required: [GMAIL_READ_SCOPE],
-    optional: [GMAIL_LABELS_SCOPE],
-    elective: [GMAIL_MODIFY_SCOPE],
+    optional: [GMAIL_LABELS_SCOPE, GMAIL_MODIFY_SCOPE],
   },
 };
 
@@ -199,13 +186,10 @@ export const ELECTIVE_SCOPES: readonly string[] = Object.values(SCOPE_GROUPS).fl
  * Narrower scopes that still satisfy a broader requirement.
  *
  * Google's scopes are hierarchical, and widening what we REQUEST must not
- * disconnect students who already granted something sufficient. Someone who
- * connected before we asked for full calendar access holds calendar.events,
- * which covers every event tool we ship. Reconnecting upgrades them; it is
- * not required.
+ * disconnect students who already granted something sufficient. Reconnecting
+ * upgrades them; it is not required.
  */
 const ALSO_SATISFIED_BY: Record<string, readonly string[]> = {
-  [CALENDAR_SCOPE]: [CALENDAR_EVENTS_SCOPE],
   // Reading everything covers reading a picked file. A student who granted
   // full Drive access must not be told Drive is disconnected.
   [DRIVE_FILE_SCOPE]: [DRIVE_READONLY_SCOPE],
@@ -298,21 +282,29 @@ export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []
 
 /*
  * ===========================================================================
- * WHY CLASSROOM IS READ-ONLY
+ * WHAT TURNING WORK IN COSTS
  * ===========================================================================
+ *
+ * Requested with the rest of Classroom, because connecting Classroom is one
+ * decision and the product does not ask it twice. The costs of that are
+ * real, and they are these:
  *
  * COST. Classroom write scopes (submitting coursework, modifying courses) and
  * roster/profile scopes are RESTRICTED, not sensitive. Restricted scopes
  * require a CASA security assessment that must be REDONE ANNUALLY -- an
- * ongoing cost and review cycle, not a one-time hurdle. Every scope above is
- * sensitive, the same tier as Calendar, and adds no new review burden.
+ * ongoing cost and review cycle, not a one-time hurdle. The read scopes
+ * above are sensitive and add no such burden; coursework.me is the one that
+ * does.
  *
  * ADMIN APPROVAL. School admins grant specific scope lists. A read-only
  * request is a far easier yes than one that can submit work, and admin
- * approval gates the entire under-18 segment.
+ * approval gates the entire under-18 segment. A school that withholds the
+ * write scope still gets a working, read-only integration, because it is
+ * optional rather than required.
  *
  * ACADEMIC INTEGRITY. An agent that can turn in coursework can turn in the
- * wrong thing, at the wrong time, under a student's name.
+ * wrong thing, at the wrong time, under a student's name. The tool asks
+ * first, every time.
  *
  * ===========================================================================
  * READ THIS BEFORE BUILDING ANY CLASSROOM FEATURE
@@ -368,11 +360,10 @@ export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []
  * WHY SENDING MAIL IS TREATED DIFFERENTLY FROM EVERY OTHER WRITE
  * ===========================================================================
  *
- * Calendar writes are recoverable and private. Turning in coursework is
- * consequential but bounded, and the student sees it in Classroom. Sending
- * mail is neither: it leaves the student's control the instant it goes, it
- * arrives under their name, and the recipient is often a teacher or a
- * university.
+ * Turning in coursework is consequential but bounded, and the student sees
+ * it in Classroom. Sending mail is neither: it leaves the student's control
+ * the instant it goes, it arrives under their name, and the recipient is
+ * often a teacher or a university.
  *
  * PROMPT INJECTION MAKES THIS SHARPER. Every other source this agent reads is
  * chosen by the student. Mail is the first where an ATTACKER CHOOSES THE
@@ -382,7 +373,9 @@ export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []
  *
  * Three things follow, and all three are load-bearing:
  *
- *   1. gmail.modify is ELECTIVE. Reading never implies sending.
+ *   1. Sending is part of the Gmail connection, so the Gmail switch is the
+ *      control: off takes reading and sending together, and the tools are
+ *      not registered at all while it is.
  *   2. Message bodies are labelled as untrusted data, and the send tool is
  *      told never to act on instructions found inside mail.
  *   3. https://mail.google.com/ is never requested, so permanent deletion is
@@ -390,7 +383,7 @@ export function scopesFor(groups: ScopeGroup[], elective: readonly string[] = []
  *      everything" can at worst move mail to the trash, where the student can
  *      get it back.
  *
- * Prompts reduce this risk. They do not eliminate it. The scope being off by
- * default is the control that actually holds.
+ * Prompts reduce this risk. They do not eliminate it. The switch, and the
+ * absence of permanent delete, are the controls that actually hold.
  * ===========================================================================
  */

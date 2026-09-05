@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { desktop, type LocalSite } from '../lib/desktop.js';
 import { MAC_DOWNLOAD } from '../lib/download.js';
+import { SiteLogo } from './ConnectionLogos.js';
 import { Row } from './SettingsRow.js';
 import { Toggle } from './Toggle.js';
 
@@ -17,6 +18,8 @@ export interface ServerSite {
 export interface Row {
   id: string;
   label: string;
+  /** Where it lives, for its logo. */
+  origin: string;
   detail: string;
   enabled: boolean;
   signedIn: boolean;
@@ -29,6 +32,7 @@ export function merge(server: ServerSite[], local: LocalSite[]): Row[] {
     byId.set(site.portalId, {
       id: site.portalId,
       label: site.origin.replace(/^https?:\/\//, ''),
+      origin: site.origin,
       detail: site.needsLogin
         ? 'needs signing in again'
         : site.pages === 0
@@ -51,6 +55,7 @@ export function merge(server: ServerSite[], local: LocalSite[]): Row[] {
     byId.set(site.id, {
       id: site.id,
       label: site.name,
+      origin: site.origin,
       detail: signedIn ? 'signed in, not synced yet' : 'not signed in yet',
       enabled: true,
       signedIn,
@@ -180,14 +185,19 @@ export function SiteConnections() {
 
   return (
     <>
-      <h2 className="settings-heading">Sites that need a login</h2>
+      <h2 className="settings-heading">Custom sites</h2>
       <p className="settings-intro">
         Course portals and anything else behind a sign-in.
         {!bridge && ' Added from the desktop app.'}
       </p>
 
       {rows.map((row) => (
-        <Row key={row.id} label={row.label} hint={row.detail}>
+        <Row
+          key={row.id}
+          icon={<SiteLogo origin={row.origin} name={row.label} />}
+          label={row.label}
+          hint={row.detail}
+        >
           <Toggle
             checked={row.enabled}
             disabled={busy === row.id}
@@ -296,10 +306,7 @@ export function SiteConnections() {
           </div>
         </div>
       ) : (
-        <Row
-          label="ContextoAgent for Mac"
-          hint="Signs into your course portals on your computer and keeps your agent up to date with them."
-        >
+        <Row label="ContextoAgent for Mac">
           <a className="button blue" href={MAC_DOWNLOAD}>
             Download for macOS
           </a>

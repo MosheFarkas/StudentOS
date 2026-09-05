@@ -40,7 +40,7 @@ describe('parse', () => {
 
   /**
    * The one that matters most. A bot added to a group would otherwise answer
-   * with one student's agent -- their calendar, their coursework, their memory
+   * with one student's agent -- their mail, their coursework, their memory
    * -- in front of everyone else in the room.
    */
   it('ignores group and supergroup chats', () => {

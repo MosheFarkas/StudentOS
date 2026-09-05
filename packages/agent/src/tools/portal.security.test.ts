@@ -31,7 +31,7 @@ const page = (content: unknown) => ({
 
 /**
  * Portal content is written by the school, which is not the same as safe. It
- * reaches a model that can write to a calendar and send mail, so the question
+ * reaches a model that can turn work in and send mail, so the question
  * is not whether an injection attempt can appear -- it is whether the model is
  * told what it is looking at every single time.
  */

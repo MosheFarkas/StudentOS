@@ -1,12 +1,12 @@
 import { ToolRegistry } from './registry.js';
-import { SCOPE_GROUPS, hasScope, parseGrantedScopes, type ScopeGroup } from './google/scopes.js';
-import type { Tool } from './types.js';
 import {
-  createCalendarEvent,
-  deleteCalendarEvent,
-  listCalendarEvents,
-  updateCalendarEvent,
-} from './google/calendar.js';
+  SCOPE_GROUPS,
+  hasScope,
+  parseGrantedScopes,
+  type ScopeGroup,
+  type ScopeGroupDefinition,
+} from './google/scopes.js';
+import type { Tool } from './types.js';
 import {
   attachToSubmission,
   listAnnouncements,
@@ -41,10 +41,6 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   searchMemory as Tool<never, unknown>,
   searchVault as Tool<never, unknown>,
   openVaultDocument as Tool<never, unknown>,
-  listCalendarEvents,
-  createCalendarEvent,
-  updateCalendarEvent,
-  deleteCalendarEvent,
   listCourses,
   listCoursework,
   listCourseMaterials,
@@ -87,13 +83,13 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
  * the registry being built and the tool being called.
  */
 /**
- * An integration, or just the write half of one.
+ * An integration a student can switch off.
  *
- * 'gmail' switches everything Gmail off; 'gmail:write' leaves reading alone
- * and removes only sending and tidying. That split is what lets a student
- * keep the useful half of an integration without the half they are wary of.
+ * Once this was also 'gmail:write', the write half on its own. Sending now
+ * follows Gmail and turning work in follows Classroom, so a key of that
+ * shape -- still present in older rows -- switches nothing off.
  */
-export type IntegrationKey = ScopeGroup | `${ScopeGroup}:write`;
+export type IntegrationKey = ScopeGroup;
 
 export function buildToolRegistry(
   grantedScope: string | null | undefined,
@@ -108,14 +104,11 @@ export function buildToolRegistry(
    * refusing at call time would burn a turn and read to the student as the
    * product being broken rather than as their own setting.
    */
+  const groups = SCOPE_GROUPS as Record<string, ScopeGroupDefinition | undefined>;
   const off = new Set(
     disabled.flatMap((key) => {
-      const [name, part] = key.split(':') as [ScopeGroup, string | undefined];
-      const definition = SCOPE_GROUPS[name];
+      const definition = groups[key];
       if (!definition) return [];
-
-      // ':write' removes only the elective scopes, leaving reading intact.
-      if (part === 'write') return [...(definition.elective ?? [])];
       return [...definition.required, ...definition.optional, ...(definition.elective ?? [])];
     }),
   );

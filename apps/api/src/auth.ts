@@ -16,8 +16,8 @@ import type { Env } from './env.js';
  *    with cookies and trivial with a bearer token. Removing this plugin closes
  *    the door on the Mac app.
  *
- * 2. Google sign-in requests IDENTITY SCOPES ONLY. Calendar and Classroom are
- *    requested later, separately, when a student actually connects them --
+ * 2. Google sign-in requests IDENTITY SCOPES ONLY. Classroom, Drive and Gmail
+ *    are requested later, separately, when a student actually connects them --
  *    see requestAdditionalScopes below. Adding them here would put every scope
  *    on the first-run consent screen, which converts badly and, for managed
  *    under-18 accounts, can block sign-in outright.
@@ -36,7 +36,7 @@ export function createAuth(db: Database, env: Env) {
         clientSecret: env.GOOGLE_CLIENT_SECRET,
         scope: [...SCOPE_GROUPS.identity.required],
         // Required to receive a refresh token. Without both of these, the
-        // access token expires in an hour and background jobs (calendar sync,
+        // access token expires in an hour and background jobs (mail collection,
         // memory summarisation) stop working with no obvious cause.
         accessType: 'offline',
         prompt: 'consent',

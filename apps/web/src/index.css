@@ -510,12 +510,13 @@ hr {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  margin: 0.6rem 0 0.4rem;
-  padding: 0.85rem 1rem;
+  gap: 1rem;
+  margin: 0.4rem 0 0.2rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
   border: 1px solid #e4d9ff;
   border-radius: var(--radius);
   background: #f7f3ff;
+  font-weight: 500;
 }
 
 /*
@@ -2613,10 +2614,44 @@ body.dialog-open .app {
 
 .settings-label {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.15rem;
   font-size: 0.92rem;
   min-width: 0;
+}
+
+/* The mark beside a connection: Google's own, or a site's favicon. */
+.settings-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-right: -0.4rem;
+}
+
+.settings-icon svg,
+.settings-icon img {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.settings-icon img {
+  border-radius: 5px;
+}
+
+.settings-icon-letter {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--wash);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .settings-label > span:first-child {

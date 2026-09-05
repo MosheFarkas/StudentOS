@@ -49,27 +49,31 @@ describe('toResponsesInput', () => {
    */
   it('replays tool calls before their results', () => {
     const messages: ChatMessage[] = [
-      { role: 'user', content: 'what is on my calendar?' },
+      { role: 'user', content: 'what is due this week?' },
       {
         role: 'assistant',
         content: 'Let me check.',
         toolCalls: [
-          { id: 'call_abc', name: 'google_calendar_list_events', arguments: '{"startIso":"x"}' },
+          {
+            id: 'call_abc',
+            name: 'google_classroom_list_coursework',
+            arguments: '{"courseId":"x"}',
+          },
         ],
       },
-      { role: 'tool', toolCallId: 'call_abc', content: '{"events":[]}' },
+      { role: 'tool', toolCallId: 'call_abc', content: '{"coursework":[]}' },
     ];
 
     expect(toResponsesInput(messages).input).toEqual([
-      { role: 'user', content: 'what is on my calendar?' },
+      { role: 'user', content: 'what is due this week?' },
       { role: 'assistant', content: 'Let me check.' },
       {
         type: 'function_call',
         call_id: 'call_abc',
-        name: 'google_calendar_list_events',
-        arguments: '{"startIso":"x"}',
+        name: 'google_classroom_list_coursework',
+        arguments: '{"courseId":"x"}',
       },
-      { type: 'function_call_output', call_id: 'call_abc', output: '{"events":[]}' },
+      { type: 'function_call_output', call_id: 'call_abc', output: '{"coursework":[]}' },
     ]);
   });
 

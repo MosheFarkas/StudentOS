@@ -428,9 +428,9 @@ export function buildTurnContext(
      * Temporal grounding.
      *
      * A model has no clock and no location. Without this it cannot resolve
-     * "tomorrow", "this week", or "3pm" into the ISO timestamps the calendar
-     * tools require -- so it asks the student what timezone they are in, every
-     * time, which reads as the agent being broken.
+     * "tomorrow", "this week", or "3pm" into the dates its tools and the
+     * student's coursework use -- so it asks the student what timezone they
+     * are in, every time, which reads as the agent being broken.
      */
     currentTimeSection(timezone),
   ];

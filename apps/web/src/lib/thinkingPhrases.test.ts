@@ -39,8 +39,6 @@ describe('reading the theme off what the agent is doing', () => {
   });
 
   it.each([
-    ['google_calendar_list_events', 'time'],
-    ['google_calendar_create_event', 'writing'],
     ['google_classroom_list_coursework', 'coursework'],
     ['google_classroom_turn_in', 'writing'],
     ['google_drive_read_file', 'files'],

@@ -28,7 +28,7 @@ const PROVIDER_SAFE = /^[a-zA-Z0-9_-]{1,64}$/;
 
 describe('tool name constraints', () => {
   it('every built-in tool has a provider-safe id', () => {
-    // The regression: ids used dots (google_calendar.list_events), which every
+    // The regression: ids used dots (google_classroom.list_courses), which every
     // provider rejects. It stayed invisible because the registry was empty
     // until a student actually connected Google.
     const registry = buildToolRegistry(ALL_GRANTED);
@@ -51,7 +51,7 @@ describe('tool name constraints', () => {
 
   it('accepts ordinary ids', () => {
     const registry = new ToolRegistry();
-    expect(() => registry.register(tool('google_calendar_list_events'))).not.toThrow();
+    expect(() => registry.register(tool('google_classroom_list_courses'))).not.toThrow();
     expect(() => registry.register(tool('some-tool-2'))).not.toThrow();
   });
 
@@ -155,51 +155,33 @@ describe('switched-off integrations', () => {
   it('leaves every other integration alone', () => {
     const off = buildToolRegistry(ALL_GRANTED, ['gmail']).ids();
 
-    expect(off.some((id) => id.startsWith('google_calendar_'))).toBe(true);
     expect(off.some((id) => id.startsWith('google_classroom_'))).toBe(true);
     expect(off.some((id) => id.startsWith('google_drive_'))).toBe(true);
   });
 
   it('can switch several off at once', () => {
-    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'calendar']).ids();
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive']).ids();
 
     expect(ids.some((id) => id.startsWith('gmail_'))).toBe(false);
     expect(ids.some((id) => id.startsWith('google_drive_'))).toBe(false);
-    expect(ids.some((id) => id.startsWith('google_calendar_'))).toBe(false);
     expect(ids.some((id) => id.startsWith('google_classroom_'))).toBe(true);
   });
 
   /**
-   * The write half on its own. A student wary of an agent sending mail should
-   * be able to switch that off and keep reading -- if the only choice were
-   * all-or-nothing they would turn the whole thing off, and lose the useful
-   * part to avoid the risky one.
+   * The write half comes with the integration: sending follows Gmail, turning
+   * work in follows Classroom. A 'gmail:write' key left over from when those
+   * had switches of their own is ignored rather than honoured -- a student
+   * who turned sending off then has it back, which is what the change means.
    */
-  it('removes only the write tools for a :write key', () => {
-    const ids = buildToolRegistry(ALL_GRANTED, ['gmail:write']).ids();
+  it('keeps the write tools when only a stale write key is present', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail:write', 'classroom:write'] as never).ids();
 
-    expect(ids).toContain('gmail_search');
-    expect(ids).toContain('gmail_read_message');
-    expect(ids).not.toContain('gmail_send_message');
-    expect(ids).not.toContain('gmail_trash_message');
-    expect(ids).not.toContain('gmail_modify_message');
+    expect(ids).toContain('gmail_send_message');
+    expect(ids).toContain('google_classroom_turn_in');
   });
 
-  it('does the same for classroom', () => {
-    const ids = buildToolRegistry(ALL_GRANTED, ['classroom:write']).ids();
-
-    expect(ids).toContain('google_classroom_list_coursework');
-    expect(ids).not.toContain('google_classroom_turn_in');
-    expect(ids).not.toContain('google_classroom_unsubmit');
-  });
-
-  /**
-   * A parent switched off must take its child with it. The API enforces this
-   * by writing both keys, and this pins the registry end: reading off while
-   * sending somehow stayed on would be the worst possible combination.
-   */
-  it('removes the write tools when the whole integration is off', () => {
-    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'gmail:write']).ids();
+  it('removes the write tools with the whole integration', () => {
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail']).ids();
     expect(ids.some((id) => id.startsWith('gmail_'))).toBe(false);
   });
 
@@ -210,7 +192,7 @@ describe('switched-off integrations', () => {
 
   /** Tools needing no Google grant are unaffected by any of this. */
   it('keeps scope-free tools regardless', () => {
-    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'calendar', 'classroom']).ids();
+    const ids = buildToolRegistry(ALL_GRANTED, ['gmail', 'drive', 'classroom']).ids();
     expect(ids).toContain('web_read_link');
   });
 });

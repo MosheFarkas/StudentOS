@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Database } from '@contexto/db';
 import { account, disabledIntegrations } from '@contexto/db';
 import {
+  SCOPE_GROUPS,
   grantedScopeGroups,
   type IntegrationKey,
   hasScope,
@@ -27,8 +28,7 @@ export interface GoogleGrant {
   /** Groups whose required scopes are all present. */
   groups: ScopeGroup[];
   /**
-   * What the student has switched off -- a whole integration, or just its
-   * write half ('gmail:write').
+   * What the student has switched off, by integration.
    *
    * Separate from the grant: turning something off should not mean walking
    * through Google's consent screen again to turn it back on.
@@ -59,8 +59,14 @@ export async function getGoogleGrant(db: Database, userId: string): Promise<Goog
   return {
     scope,
     groups: grantedScopeGroups(scope),
-    disabled: off.map((row) => row.integration as IntegrationKey),
+    // Older rows can still say 'gmail:write', from when the write half had a
+    // switch of its own. They mean nothing now and are not passed on.
+    disabled: off.map((row) => row.integration).filter(isIntegration),
   };
+}
+
+function isIntegration(key: string): key is IntegrationKey {
+  return key in SCOPE_GROUPS;
 }
 
 /**

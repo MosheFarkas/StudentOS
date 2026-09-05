@@ -90,7 +90,7 @@ export const session = pgTable('session', {
  *
  * For Google this is where the OAuth tokens live, and -- importantly for us --
  * `scope` records which scopes the student actually granted. That is how we
- * answer "has this student connected Calendar?" and "...Classroom?" without a
+ * answer "has this student connected Gmail?" and "...Classroom?" without a
  * separate grants table. See packages/agent/src/tools/google/scopes.ts.
  */
 export const account = pgTable('account', {

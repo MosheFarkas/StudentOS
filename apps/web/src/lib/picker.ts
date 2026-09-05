@@ -8,7 +8,7 @@
  *
  * The token used below is requested fresh from Google for drive.file ALONE,
  * rather than reusing the server's Google token. The server's token carries
- * every scope the student has granted -- calendar write included -- and
+ * every scope the student has granted -- sending mail included -- and
  * handing that to the browser would widen what an XSS in this app could do,
  * for no benefit. This token can do nothing but read picked files.
  */

@@ -22,6 +22,12 @@ const local = (over: Partial<LocalSite> = {}): LocalSite => ({
 });
 
 describe('merge', () => {
+  it('keeps the address a site lives at, for its logo', () => {
+    expect(merge([server()], [])[0]?.origin).toBe('https://portals.veracross.com');
+    expect(merge([], [local({ id: 'moodle', name: 'Moodle' })])[0]?.origin).toBe(
+      'https://portals.veracross.com',
+    );
+  });
   it('shows a site the app knows about but the server has never seen', () => {
     // Added in the app and not yet synced: the server list alone would show
     // nothing, which reads as the Add button having silently failed.

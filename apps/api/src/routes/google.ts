@@ -2,9 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import {
-  CLASSROOM_COURSEWORK_WRITE_SCOPE,
   DRIVE_READONLY_SCOPE,
-  GMAIL_MODIFY_SCOPE,
   ELECTIVE_SCOPES,
   SCOPE_GROUPS,
   listAccessibleFiles,
@@ -41,20 +39,14 @@ export function createGoogleRoutes(ctx: AppContext) {
         // rather than meeting a tool that silently never fires.
         return c.json({
           disabled: grant.disabled,
-          calendar: grant.groups.includes('calendar'),
           classroom: grant.groups.includes('classroom'),
           // Drive being connected means "ready to be given files", not "can
-          // read your Drive" -- access is per file. The UI has to say so.
+          // read your Drive" -- access is per file.
           drive: grant.groups.includes('drive'),
           gmail: grant.groups.includes('gmail'),
-          // Elective, so it needs reporting separately -- the classroom group
-          // is "connected" without it.
-          classroomWrite: parseGrantedScopes(grant.scope).has(CLASSROOM_COURSEWORK_WRITE_SCOPE),
-          // Sending is elective, so the classroom group reads as connected
-          // without it -- the UI has to report it separately.
-          gmailWrite: parseGrantedScopes(grant.scope).has(GMAIL_MODIFY_SCOPE),
+          // The write halves are optional scopes now, so a school that
+          // withheld one shows up here rather than as a flag of its own.
           missing: {
-            calendar: missingOptionalScopes('calendar', grant.scope),
             classroom: missingOptionalScopes('classroom', grant.scope),
             gmail: missingOptionalScopes('gmail', grant.scope),
           },
@@ -69,9 +61,9 @@ export function createGoogleRoutes(ctx: AppContext) {
        *
        * Google issues an access token carrying exactly the scopes the
        * authorisation request asked for. Re-authorising with only the Classroom
-       * scopes therefore returns a token that can no longer read Calendar, and
+       * scopes therefore returns a token that can no longer read Gmail, and
        * Better Auth overwrites the stored token with it. The student sees
-       * Calendar spontaneously disconnect the moment they connect Classroom.
+       * Gmail spontaneously disconnect the moment they connect Classroom.
        *
        * Asking for the union every time makes that impossible regardless of
        * whether include_granted_scopes is set on the authorisation URL.
@@ -108,16 +100,14 @@ export function createGoogleRoutes(ctx: AppContext) {
           /*
            * Elective scopes follow the same union rule as groups, for the same
            * reason. A student who granted full Drive access and then connects
-           * Calendar must not have that quietly downgraded to per-file, so
+           * Classroom must not have that quietly downgraded to per-file, so
            * everything already held is re-requested alongside anything new.
            */
           const held = parseGrantedScopes(grant.scope);
           const alreadyElective = ELECTIVE_SCOPES.filter((scope) => held.has(scope));
           /*
-           * The write half comes WITH the integration rather than as a second
-           * trip through consent. The student still controls it -- the switch
-           * in Settings turns it off, and the tools disappear when it is off
-           * -- but they are not asked twice for one decision.
+           * What is elective for the group -- full Drive access -- comes with
+           * the connection unless the caller says otherwise.
            */
           const requested =
             c.req.valid('query').elective === 'false' ? [] : (SCOPE_GROUPS[group].elective ?? []);
@@ -135,6 +125,9 @@ export function createGoogleRoutes(ctx: AppContext) {
        * it immediately, and turning it back on does not mean another trip
        * through Google's consent screen. Revoking properly is still available
        * to the student at Google itself, and is the heavier action.
+       *
+       * The write half goes with it. Sending follows Gmail and turning work
+       * in follows Classroom; neither has a switch of its own any more.
        */
       .put(
         '/integrations/:group',
@@ -142,42 +135,32 @@ export function createGoogleRoutes(ctx: AppContext) {
         zValidator('json', z.object({ enabled: z.boolean() })),
         async (c) => {
           const key = c.req.param('group');
-          const [name, part] = key.split(':');
-          if (!name || !isConnectableGroup(name) || (part && part !== 'write')) {
+          if (!isConnectableGroup(key)) {
             return c.json({ error: 'Unknown integration' }, 400);
           }
           const userId = c.get('userId');
           const { enabled } = c.req.valid('json');
 
-          /*
-           * A parent carries its child. Switching Gmail off must take sending
-           * with it -- leaving "can send email" on under a disabled Gmail
-           * would be a setting that reads as active and is not. Switching the
-           * parent back on restores the child too, which is what a student
-           * means by turning something back on.
-           *
-           * The child on its own changes only itself, so sending can be off
-           * while reading stays on.
-           */
-          const affected = part === 'write' ? [key] : [name, `${name}:write`];
-
           if (enabled) {
+            // The ':write' row is from when the write half had a switch of
+            // its own. Turning the integration on sweeps it up, so a student
+            // who once turned sending off is not left with it silently off.
             await ctx.db
               .delete(disabledIntegrations)
               .where(
                 and(
                   eq(disabledIntegrations.userId, userId),
-                  inArray(disabledIntegrations.integration, affected),
+                  inArray(disabledIntegrations.integration, [key, `${key}:write`]),
                 ),
               );
           } else {
             await ctx.db
               .insert(disabledIntegrations)
-              .values(affected.map((integration) => ({ userId, integration })))
+              .values({ userId, integration: key })
               .onConflictDoNothing();
           }
 
-          return c.json({ integration: key, enabled, affected });
+          return c.json({ integration: key, enabled });
         },
       )
 

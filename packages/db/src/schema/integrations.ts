@@ -19,7 +19,7 @@ export const disabledIntegrations = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    /** A ScopeGroup: 'calendar' | 'classroom' | 'drive' | 'gmail'. */
+    /** A ScopeGroup: 'classroom' | 'drive' | 'gmail'. */
     integration: text('integration').notNull(),
     createdAt: timestamp('created_at')
       .$defaultFn(() => new Date())

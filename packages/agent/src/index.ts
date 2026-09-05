@@ -91,13 +91,6 @@ export * from './tools/types.js';
 export { ToolRegistry } from './tools/registry.js';
 export { buildToolRegistry } from './tools/builtin.js';
 export {
-  listCalendarEvents,
-  createCalendarEvent,
-  updateCalendarEvent,
-  deleteCalendarEvent,
-  type CalendarEvent,
-} from './tools/google/calendar.js';
-export {
   listCoursework,
   listCourses,
   listCourseMaterials,

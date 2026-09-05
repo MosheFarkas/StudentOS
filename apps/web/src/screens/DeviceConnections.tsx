@@ -58,13 +58,10 @@ export function DeviceConnections() {
 
   return (
     <>
-      <h2 className="settings-heading">Linked computers</h2>
+      <h2 className="settings-heading">Linked devices</h2>
 
       {devices.length === 0 ? (
-        <p className="settings-empty">
-          No computers linked yet. Link one from the desktop app and it will keep your agent up to
-          date with the sites you sign into there.
-        </p>
+        <p className="settings-empty">No devices linked yet. Link one from the desktop app.</p>
       ) : (
         devices.map((device) => (
           <Row key={device.id} label={device.name} hint={lastSynced(device.lastSeenAt)}>

@@ -25,7 +25,7 @@ import {
  * This is the test the product cannot ship without. Every route here is scoped
  * by user id, and a single missing `eq(agents.userId, ...)` would let any
  * student read any other student's agent, conversation history, and -- through
- * the agent -- their calendar.
+ * the agent -- their mail.
  */
 
 let app: Hono;

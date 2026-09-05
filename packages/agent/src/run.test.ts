@@ -319,11 +319,11 @@ describe('reporting activity', () => {
   it('names each tool before running it', async () => {
     const seen: unknown[] = [];
     await runAgentTurn(
-      depsCalling(['google_calendar_list']),
+      depsCalling(['google_classroom_list_courses']),
       input((a: unknown) => seen.push(a)),
     );
 
-    expect(seen).toContainEqual({ kind: 'tool', name: 'google_calendar_list' });
+    expect(seen).toContainEqual({ kind: 'tool', name: 'google_classroom_list_courses' });
   });
 
   it('reports tools in the order the model asked for them', async () => {
