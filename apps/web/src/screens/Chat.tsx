@@ -466,6 +466,17 @@ export function Chat({ agentId }: Props) {
               </button>
             </div>
           </form>
+
+          {/*
+            The floor under the bar.
+            
+            The bar is held off the bottom edge, and that gap was a window: the
+            transcript kept scrolling through it, so a line of text sat below
+            the composer in the corner of the eye. Opaque rather than faded,
+            because there is nothing down there worth half-seeing -- the fade
+            belongs above the bar, where text is on its way under.
+          */}
+          <div className="composer-floor" aria-hidden="true" />
         </div>
 
         {preview && <FilePreview target={preview} onClose={() => setPreview(null)} />}

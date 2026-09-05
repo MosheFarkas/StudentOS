@@ -876,6 +876,32 @@ hr {
 }
 
 /*
+ * Under the bar, opaque.
+ *
+ * The bar floats clear of the bottom edge, and that gap let the transcript
+ * keep scrolling through it -- a line of text visible below the composer, in
+ * the corner of the eye, going nowhere.
+ *
+ * A sibling rather than a pseudo-element on the bar. Inside the bar's own
+ * stacking context a negative z-index child paints ABOVE the bar's background
+ * rather than below it, so it would have to be placed not to overlap -- which
+ * is exactly the sliver behind the rounded corners that needs covering. As a
+ * sibling it simply sits a layer under the bar and over the messages.
+ *
+ * Pulled up by its own height, so it costs the column no space: it is a lid,
+ * not a row.
+ */
+.composer-floor {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  height: 1.6rem;
+  margin: -1.6rem -0.75rem 0;
+  background: var(--page);
+  pointer-events: none;
+}
+
+/*
  * The way back down, offered only when it is needed.
  *
  * Sits above the bar and centred on the column, so it reads as belonging to
