@@ -106,11 +106,11 @@ export function Sidebar({ route, working, name, email, onOpenSettings }: Props) 
     <aside className="sidebar">
       <button
         className="sidebar-brand"
-        aria-label="ContextoAgent"
+        aria-label="Contexto Agent"
         onClick={() => go({ name: 'new' })}
       >
         <LogoMark size={30} working={working} />
-        <img className="sidebar-wordmark" src="/wordmark.png" alt="ContextoAgent" />
+        <img className="sidebar-wordmark" src="/wordmark.png" alt="Contexto Agent" />
       </button>
 
       <button

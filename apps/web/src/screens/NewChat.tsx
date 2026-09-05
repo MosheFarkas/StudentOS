@@ -114,7 +114,7 @@ export function NewChat({ name }: Props) {
             placeholder="How can I help you today?"
             rows={1}
             disabled={starting}
-            aria-label="Message ContextoAgent"
+            aria-label="Message Contexto Agent"
           />
 
           <div className="newchat-tools">

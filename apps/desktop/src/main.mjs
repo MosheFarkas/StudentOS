@@ -104,7 +104,7 @@ function showWindow() {
   mainWindow = new BrowserWindow({
     width: linked ? 1100 : 760,
     height: linked ? 820 : 660,
-    title: 'ContextoAgent',
+    title: 'Contexto Agent',
     webPreferences: {
       preload: join(here, linked ? 'web-preload.cjs' : 'preload.cjs'),
       contextIsolation: true,
@@ -177,7 +177,7 @@ function showWindow() {
  */
 function buildTray() {
   tray = new Tray(join(here, 'assets', 'tray.png'));
-  tray.setToolTip('ContextoAgent');
+  tray.setToolTip('Contexto Agent');
   refreshTrayMenu();
   tray.on('click', () => showWindow());
 }
@@ -202,7 +202,7 @@ function refreshTrayMenu() {
         enabled: false,
       },
       { type: 'separator' },
-      { label: 'Open ContextoAgent', click: () => showWindow() },
+      { label: 'Open Contexto Agent', click: () => showWindow() },
       {
         label: syncing ? 'Syncing…' : 'Sync now',
         // Nothing to sync without a linked account or a signed-in portal, and
@@ -211,7 +211,7 @@ function refreshTrayMenu() {
         click: () => void syncAll(),
       },
       { type: 'separator' },
-      { label: 'Quit ContextoAgent', click: () => app.quit() },
+      { label: 'Quit Contexto Agent', click: () => app.quit() },
     ]),
   );
 }

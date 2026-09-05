@@ -194,7 +194,7 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
     if (!ctx.portals) {
       return unavailable(
         'No computer of theirs is linked, so there is nothing that can sign in. Tell them to ' +
-          'open the ContextoAgent app and link this computer -- not that you are unable to do it.',
+          'open the Contexto Agent app and link this computer -- not that you are unable to do it.',
       );
     }
 
@@ -235,7 +235,7 @@ export const refreshSchoolPortal: Tool<z.infer<typeof refreshInput>, unknown> = 
         signedIn: false,
         note:
           `Their computer tried ${portalId} and the site would not accept the saved sign-in. ` +
-          'Say so directly. They can fix it in the ContextoAgent app under Settings, ' +
+          'Say so directly. They can fix it in the Contexto Agent app under Settings, ' +
           'Connections, Sites. Do not tell them to sign in by hand elsewhere -- there is no ' +
           'such thing here.',
       };
@@ -307,7 +307,7 @@ export const browseWithAgent: Tool<z.infer<typeof browseInput>, unknown> = {
     if (!ctx.portals) {
       return unavailable(
         'No computer of theirs is linked, so there is no browser to open. Tell them to link ' +
-          'one in the ContextoAgent app -- not that you are unable to browse.',
+          'one in the Contexto Agent app -- not that you are unable to browse.',
       );
     }
 

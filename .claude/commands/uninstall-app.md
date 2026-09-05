@@ -1,5 +1,5 @@
 ---
-description: Remove every copy of the ContextoAgent desktop app from this machine
+description: Remove every copy of the Contexto Agent desktop app from this machine
 argument-hint: [--all]
 allowed-tools: Bash(./scripts/uninstall-desktop.sh:*)
 ---

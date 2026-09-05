@@ -279,7 +279,7 @@ export const SIGN_IN_SECTION =
   'in the conversation while you use it.\n' +
   'Never say you cannot handle a password, cannot log in, or that they must sign in by hand. ' +
   'None of it is true here and there is no manual sign-in to send them to. If a site genuinely ' +
-  'has no saved sign-in, say so plainly and tell them where to add it: the ContextoAgent app, ' +
+  'has no saved sign-in, say so plainly and tell them where to add it: the Contexto Agent app, ' +
   'Settings, Connections, Sites.';
 
 /**

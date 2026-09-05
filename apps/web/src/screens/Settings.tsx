@@ -166,7 +166,7 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
         <span className="settings-static">{me.name}</span>
       </Row>
 
-      <Row label="What should ContextoAgent call you?">
+      <Row label="What should Contexto Agent call you?">
         <input
           className="settings-input"
           value={name}

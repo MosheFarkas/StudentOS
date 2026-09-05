@@ -457,7 +457,7 @@ export function Chat({ agentId }: Props) {
                  * first thing they said reads as nonsense in its place:
                  * "Message What is due friday".
                  */
-                placeholder="Message ContextoAgent"
+                placeholder="Message Contexto Agent"
                 disabled={sending}
               />
               <button

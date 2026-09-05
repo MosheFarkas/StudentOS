@@ -208,7 +208,7 @@ async function render() {
   if (!linked) {
     return app.replaceChildren(
       el('div', {}, [
-        el('h1', { text: 'ContextoAgent' }),
+        el('h1', { text: 'Contexto Agent' }),
         el('p', {
           class: 'muted',
           text: 'Reads the school portals that have no API, using the logins you complete yourself.',
@@ -234,7 +234,7 @@ async function render() {
 
   app.replaceChildren(
     el('div', {}, [
-      el('h1', { text: 'ContextoAgent' }),
+      el('h1', { text: 'Contexto Agent' }),
       el('p', { class: 'muted small', text: `Linked as ${deviceName ?? 'this computer'}` }),
       portals.length > 0
         ? el('div', { class: 'panel' }, [el('h2', { text: 'Portals' }), ...portals.map(portalRow)])

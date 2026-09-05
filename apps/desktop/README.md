@@ -1,4 +1,4 @@
-# ContextoAgent desktop companion
+# Contexto Agent desktop companion
 
 Reads school portals that have no API — Veracross, Mozaïk — using logins the
 student completes themselves, and pushes what it finds to their account.

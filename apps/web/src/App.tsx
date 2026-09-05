@@ -65,7 +65,7 @@ export function App() {
     return (
       <main>
         <div className="signin">
-          <img src="/logo.png" alt="ContextoAgent" />
+          <img src="/logo.png" alt="Contexto Agent" />
           <p className="muted">An AI agent that knows your coursework.</p>
           <div className="panel">
             <p>Sign in with your educational Google account to get started.</p>
@@ -101,7 +101,7 @@ export function App() {
           */}
           {!desktop() && (
             <>
-              <p className="muted download-label">Download ContextoAgent desktop app</p>
+              <p className="muted download-label">Download Contexto Agent desktop app</p>
               <a className="button blue" href={MAC_DOWNLOAD}>
                 Download for macOS
               </a>

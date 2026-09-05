@@ -226,7 +226,7 @@ export function SiteConnections() {
       {editing && (
         <div className="saved-signin">
           <p className="muted small">
-            Kept in your Mac&rsquo;s keychain on this computer. It is never sent to ContextoAgent,
+            Kept in your Mac&rsquo;s keychain on this computer. It is never sent to Contexto Agent,
             and only works for sites with a normal username and password &mdash; not ones behind
             Google.
           </p>
@@ -264,7 +264,7 @@ export function SiteConnections() {
       {bridge ? (
         <div className="saved-signin">
           <p className="muted small">
-            Your sign-in is kept in this Mac&rsquo;s keychain and never sent to ContextoAgent. It
+            Your sign-in is kept in this Mac&rsquo;s keychain and never sent to Contexto Agent. It
             works for sites with a normal username and password &mdash; not ones behind Google.
           </p>
           <div className="add-site">
@@ -303,7 +303,7 @@ export function SiteConnections() {
           </div>
         </div>
       ) : (
-        <Row label="ContextoAgent for Mac">
+        <Row label="Contexto Agent for Mac">
           <a className="button blue" href={MAC_DOWNLOAD}>
             Download for macOS
           </a>

@@ -128,7 +128,7 @@ async function exploreCommand([portalId, startUrl, ...flags]) {
   }
 }
 
-/** Link this machine to the student's ContextoAgent account. */
+/** Link this machine to the student's Contexto Agent account. */
 async function linkCommand() {
   const existing = readConfig();
   if (existing.token) {

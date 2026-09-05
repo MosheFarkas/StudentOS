@@ -1,5 +1,5 @@
 /*
- * ContextoAgent.
+ * Contexto Agent.
  *
  * The palette is sampled from the wordmark rather than chosen alongside it:
  * navy #001040, violet #5010d0, royal blue #4070ff, lavender #c090ff, teal
@@ -979,8 +979,9 @@ dd {
   gap: 0.4rem;
 }
 
+/* Widened with the image: the name gained a space, and the mark should not shrink for it. */
 .signin img {
-  width: min(320px, 78vw);
+  width: min(338px, 78vw);
   margin-bottom: 0.75rem;
 }
 
