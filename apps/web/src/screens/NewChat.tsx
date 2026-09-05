@@ -118,7 +118,7 @@ export function NewChat({ name }: Props) {
           />
 
           <div className="newchat-tools">
-            <AttachButton onChosen={attachments.add} disabled={starting} />
+            <AttachButton onChosen={attachments.add} disabled={starting} opens="down" />
 
             <button
               className="composer-send primary"

@@ -2457,6 +2457,21 @@ a.button {
   z-index: 20;
 }
 
+/*
+ * Opening downward, under the whole bar rather than under the +. The wrapper
+ * stops being the containing block, so the menu hangs off the composer card
+ * itself: flush with its left edge, just below its bottom one.
+ */
+.attach.opens-down {
+  position: static;
+}
+
+.attach-menu.opens-down {
+  bottom: auto;
+  top: calc(100% + 0.5rem);
+  left: 0;
+}
+
 .attach-menu button {
   text-align: left;
   white-space: nowrap;

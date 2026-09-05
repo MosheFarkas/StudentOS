@@ -5,6 +5,13 @@ interface Props {
   /** Called with the files chosen. Nothing is sent anywhere yet. */
   onChosen: (files: File[]) => void;
   disabled?: boolean;
+  /**
+   * Which way the menu opens. Up, unless told otherwise: a composer at the
+   * foot of the window has no room below it. The new-chat screen, whose
+   * composer sits mid-screen, asks for down so the menu hangs under the bar
+   * instead of covering the prompt.
+   */
+  opens?: 'up' | 'down';
 }
 
 /**
@@ -18,7 +25,7 @@ interface Props {
  * lands, and a button that silently changes into a menu later is a worse
  * introduction than a menu that grows an entry.
  */
-export function AttachButton({ onChosen, disabled }: Props) {
+export function AttachButton({ onChosen, disabled, opens = 'up' }: Props) {
   const [open, setOpen] = useState(false);
   const chooser = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -40,10 +47,12 @@ export function AttachButton({ onChosen, disabled }: Props) {
     };
   }, [open]);
 
+  const down = opens === 'down' ? ' opens-down' : '';
+
   return (
-    <div className="attach" ref={box}>
+    <div className={`attach${down}`} ref={box}>
       {open && (
-        <div className="attach-menu" role="menu">
+        <div className={`attach-menu${down}`} role="menu">
           <button role="menuitem" type="button" onClick={() => chooser.current?.click()}>
             Upload from this computer
           </button>
