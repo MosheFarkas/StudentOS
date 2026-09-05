@@ -2,7 +2,14 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { createPortal } from 'react-dom';
 import { api } from '../lib/api.js';
 import { parseMarkdown, type Span } from '../lib/markdown.js';
-import { CENTRE, KEY, labelFor, neighbours, type DocEdge, type DocNode } from '../lib/vaultmap.js';
+import {
+  CENTRE,
+  colourFor,
+  labelFor,
+  neighbours,
+  type DocEdge,
+  type DocNode,
+} from '../lib/vaultmap.js';
 
 /**
  * The vault, and the page you are reading out of it.
@@ -127,17 +134,6 @@ export function VaultMap() {
     );
   }
 
-  const legend = (
-    <div className="vault-key">
-      {KEY.map((entry) => (
-        <span key={entry.label}>
-          <i style={{ background: entry.colour }} />
-          {entry.label}
-        </span>
-      ))}
-    </div>
-  );
-
   const ball = (
     <Stage>
       {(width, height) => (
@@ -157,12 +153,20 @@ export function VaultMap() {
   );
 
   if (!inside) {
+    /*
+     * A still, not the vault itself.
+     *
+     * The scene is three thousand nodes and a physics simulation behind a lazy
+     * chunk; running it to fill a card in settings meant a second of nothing
+     * followed by something you were not meant to touch. This is drawn from
+     * the same node colours in one pass of SVG, blurred, and it is on screen
+     * with the panel rather than after it.
+     */
     return (
-      <div className="vault-outside">
-        {legend}
-        <div className="vault-frame">{ball}</div>
-        <button type="button" className="ghost" onClick={() => setInside(true)}>
-          Enter vault
+      <div className="vault-still">
+        <VaultThumbnail nodes={graph.nodes} />
+        <button type="button" className="primary vault-open" onClick={() => setInside(true)}>
+          Open vault
         </button>
       </div>
     );
@@ -179,7 +183,6 @@ export function VaultMap() {
   return createPortal(
     <div className="vault-inside">
       <header className="vault-inside-bar">
-        {legend}
         <button type="button" className="ghost" onClick={() => setInside(false)}>
           Leave vault
         </button>
@@ -272,4 +275,52 @@ function inline(spans: Span[], go: (name: string) => void) {
     }
     return span.bold ? <strong key={i}>{span.text}</strong> : <span key={i}>{span.text}</span>;
   });
+}
+
+/**
+ * The vault as a still picture.
+ *
+ * Positions are hashed from node ids rather than simulated, so it is stable
+ * between renders -- a thumbnail that rearranged itself every time settings
+ * opened would look like it was loading when it was not. Blurred hard, because
+ * what it is for is recognising the shape of the thing, not reading it.
+ */
+function VaultThumbnail({ nodes }: { nodes: DocNode[] }) {
+  const dots = useMemo(() => {
+    // A cap, not a sample of everything: past a few hundred the blur merges
+    // them anyway and the only difference is the work.
+    return nodes.slice(0, 260).map((node) => {
+      const seed = hash(node.name);
+      // Polar, so they land in a disc rather than a square.
+      const angle = ((seed % 3600) / 3600) * Math.PI * 2;
+      const radius = Math.sqrt(((seed >> 12) % 1000) / 1000) * 46;
+      return {
+        id: node.name,
+        // The resting colour, which is what the vault looks like when nothing
+        // is selected -- selection is the only thing that changes it.
+        colour: colourFor(node, null),
+        cx: 50 + Math.cos(angle) * radius,
+        cy: 50 + Math.sin(angle) * radius,
+        r: 1.1 + ((seed >> 5) % 20) / 12,
+      };
+    });
+  }, [nodes]);
+
+  return (
+    <svg className="vault-thumb" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+      {dots.map((dot) => (
+        <circle key={dot.id} cx={dot.cx} cy={dot.cy} r={dot.r} fill={dot.colour} />
+      ))}
+    </svg>
+  );
+}
+
+/** FNV-1a, so a node lands in the same place every time it is drawn. */
+function hash(text: string): number {
+  let value = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    value ^= text.charCodeAt(i);
+    value = Math.imul(value, 16777619);
+  }
+  return value >>> 0;
 }

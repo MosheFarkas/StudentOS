@@ -132,7 +132,15 @@ export function App() {
           aria-hidden="true"
         />
 
-        <main className={route.name === 'new' ? 'app-main is-new' : 'app-main'}>
+        {/*
+          Centred for settings too: the new-chat screen stays mounted behind
+          the window, and dropping the class dropped it into the corner.
+        */}
+        <main
+          className={
+            route.name === 'new' || route.name === 'settings' ? 'app-main is-new' : 'app-main'
+          }
+        >
           <button
             className="nav-toggle"
             aria-label="Chats"

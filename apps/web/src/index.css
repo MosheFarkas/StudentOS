@@ -1577,12 +1577,6 @@ a.button {
 /* On the settings page: the legend, a wide picture of your school, and the way
    in. No reader beside it -- a graph in a column and a panel in a column left
    neither of them enough room to be worth having. */
-.vault-outside {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-  align-items: flex-start;
-}
 
 .vault-frame {
   width: 100%;
@@ -1600,10 +1594,6 @@ a.button {
   cursor: grabbing;
 }
 
-.vault-outside .vault-frame {
-  height: 22rem;
-}
-
 .vault-stage {
   width: 100%;
   height: 100%;
@@ -1619,25 +1609,6 @@ a.button {
 
 /* The colour key. Without it, ten colours of dot and no way to know which is
    which -- a picture nobody can read, however true its geometry. */
-.vault-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.9rem;
-  font-size: 0.78rem;
-  color: var(--ink-faint);
-}
-
-.vault-key span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.vault-key i {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-}
 
 /* Inside: the vault has the window. Rendered onto the body rather than where it
    sits in the tree, because a fixed overlay is only fixed to the window when no
@@ -1664,9 +1635,7 @@ a.button {
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
 }
 
-.vault-inside-bar .vault-key {
-  color: rgba(200, 208, 232, 0.7);
-}
+.vault-inside-bar 
 
 /* The way out.
    A button here is the app's own button, and the app's own button carries a
@@ -2956,4 +2925,50 @@ body.dialog-open .app {
     align-items: flex-start;
     gap: 0.5rem;
   }
+}
+
+/* ---------- the vault, from settings ---------- */
+
+/*
+ * A still of the vault with one thing to do to it.
+ *
+ * Blurred hard and inert: what it is for is recognising the shape of your own
+ * vault, not reading it. Everything readable is inside, behind the button.
+ */
+.vault-still {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 13rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--page);
+  overflow: hidden;
+}
+
+.vault-thumb {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  filter: blur(9px);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.vault-open {
+  position: relative;
+}
+
+/*
+ * Above the settings window, not inside it.
+ *
+ * Both are portalled onto the body, so without this the settings scrim -- and
+ * the window itself -- painted over the vault, which is what made opening it
+ * from here look broken. Leaving closes only the vault, so settings is still
+ * open on the section it was left on.
+ */
+.vault-inside {
+  z-index: 200;
 }

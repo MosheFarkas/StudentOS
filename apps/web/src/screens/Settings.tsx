@@ -9,7 +9,6 @@ import { DeviceConnections } from './DeviceConnections.js';
 import { GoogleConnections } from './GoogleConnections.js';
 import { TelegramConnection } from './TelegramConnection.js';
 import { UsageBars } from './UsageBars.js';
-import { VaultBuild } from './VaultBuild.js';
 import { VaultMap } from './VaultMap.js';
 
 /**
@@ -144,7 +143,7 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
     }
   }
 
-  async function setAppearance(value: 'light' | 'dark' | 'system') {
+  async function setAppearance(value: 'light' | 'dark') {
     if (!me) return;
     await api.me.$patch({ json: { appearance: value } });
     onChange({ ...me, appearance: value });
@@ -177,10 +176,7 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
         <span className="settings-static">{me.name}</span>
       </Row>
 
-      <Row
-        label="What should ContextoAgent call you?"
-        hint="Used when it greets you and when it talks about you."
-      >
+      <Row label="What should ContextoAgent call you?">
         <input
           className="settings-input"
           value={name}
@@ -199,13 +195,20 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
 
       <Row label="Appearance">
         <div className="segmented">
-          {(['system', 'light', 'dark'] as const).map((option) => (
+          {/*
+            Two states, not three. Following the system is only meaningful
+            once there is a dark theme to follow it into, and offering it now
+            would be offering a choice between light and light.
+          */}
+          {(['light', 'dark'] as const).map((option) => (
             <button
               key={option}
-              className={me.appearance === option ? 'is-current' : ''}
+              className={
+                (me.appearance === 'dark' ? 'dark' : 'light') === option ? 'is-current' : ''
+              }
               onClick={() => void setAppearance(option)}
             >
-              {option === 'system' ? 'System' : option === 'light' ? 'Light' : 'Dark'}
+              {option === 'light' ? 'Light' : 'Dark'}
             </button>
           ))}
         </div>
@@ -237,7 +240,6 @@ function Account() {
         </button>
       </Row>
 
-      <h2 className="settings-heading">Connected devices</h2>
       <DeviceConnections />
     </>
   );
@@ -266,7 +268,6 @@ function Usage() {
 function Connections() {
   return (
     <>
-      <h2 className="settings-heading">Connections</h2>
       <GoogleConnections />
       <TelegramConnection />
     </>
@@ -285,7 +286,6 @@ function Memory() {
        * The vault belongs to the student, not to a chat -- an account with no
        * chats still has one, so nothing here is gated on having one.
        */}
-      <VaultBuild />
       <VaultMap />
 
       <ArchivedChats />
