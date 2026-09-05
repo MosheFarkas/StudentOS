@@ -51,6 +51,9 @@ export class OpenAiProvider implements LlmProvider {
     const response = await this.#client.responses.create(
       {
         model: this.model,
+        // Pinned rather than left to the API default: every agent turn is
+        // multi-step tool work, which is where extra reasoning pays most.
+        reasoning: { effort: 'xhigh' },
         input,
         ...(instructions ? { instructions } : {}),
         ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),

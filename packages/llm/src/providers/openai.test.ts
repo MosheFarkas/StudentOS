@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { toResponsesInput, toolsFor } from './openai.js';
+import { describe, expect, it, vi } from 'vitest';
+import { OpenAiProvider, toResponsesInput, toolsFor } from './openai.js';
 import type { ChatMessage } from '../types.js';
+
+// The SDK is the boundary: capture what chat() hands it instead of dialling out.
+const create = vi.hoisted(() => vi.fn());
+vi.mock('openai', () => ({
+  default: class {
+    responses = { create };
+  },
+}));
 
 /**
  * The Responses API request shape.
@@ -145,5 +153,16 @@ describe('the tools OpenAI receives', () => {
     );
 
     expect(tools?.map((tool) => tool.type)).toEqual(['function', 'web_search']);
+  });
+});
+
+describe('the reasoning OpenAI is asked for', () => {
+  it('runs every turn at xhigh effort', async () => {
+    create.mockResolvedValueOnce({ output: [], output_text: '', status: 'completed' });
+    const provider = new OpenAiProvider({ apiKey: 'k', model: 'gpt-5.6-luna' });
+
+    await provider.chat({ messages: [{ role: 'user', content: 'hi' }] }, { userId: 'u1' });
+
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ reasoning: { effort: 'xhigh' } });
   });
 });
