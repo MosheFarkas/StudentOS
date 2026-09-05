@@ -13,6 +13,7 @@ import { Settings } from './screens/Settings.js';
 
 export function App() {
   const { data: session, isPending } = useSession();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   /*
    * Set by whichever screen is open. Only the sidebar reads it, and only to
    * decide whether its mark is folding.
@@ -119,6 +120,7 @@ export function App() {
           working={working}
           name={preferred ?? session.user.name}
           email={session.user.email}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
 
         {/*
@@ -182,7 +184,21 @@ export function App() {
           )}
         </main>
 
-        {route.name === 'settings' && <Settings onClose={() => navigate({ name: 'new' })} />}
+        {/*
+          A window over wherever you are, not a place you go: opened from the
+          rail it changes nothing behind it, and closing it leaves you where
+          you were. /settings still works as an address -- the link screen
+          sends people there -- and then there is nothing behind it but the
+          new-chat screen, so closing goes there.
+        */}
+        {(settingsOpen || route.name === 'settings') && (
+          <Settings
+            onClose={() => {
+              setSettingsOpen(false);
+              if (route.name === 'settings') navigate({ name: 'new' });
+            }}
+          />
+        )}
       </div>
     </WorkingProvider>
   );

@@ -75,7 +75,15 @@ const text = (selector: string) =>
 describe('the rail', () => {
   async function show(name?: string | null, email?: string | null) {
     await act(async () => {
-      root.render(<Sidebar route={{ name: 'new' }} working={false} name={name} email={email} />);
+      root.render(
+        <Sidebar
+          route={{ name: 'new' }}
+          working={false}
+          onOpenSettings={() => {}}
+          name={name}
+          email={email}
+        />,
+      );
     });
     await settle();
   }
@@ -92,7 +100,14 @@ describe('the rail', () => {
 
   it('marks the screen you are on', async () => {
     await act(async () => {
-      root.render(<Sidebar route={{ name: 'chat', agentId: 'a2' }} working={false} name="Lucas" />);
+      root.render(
+        <Sidebar
+          route={{ name: 'chat', agentId: 'a2' }}
+          working={false}
+          onOpenSettings={() => {}}
+          name="Lucas"
+        />,
+      );
     });
     await settle();
     expect(text('.sidebar-chat.is-current .sidebar-chat-open')).toEqual(['Essay outline']);
@@ -118,6 +133,37 @@ describe('the rail', () => {
       container.querySelector<HTMLButtonElement>('.account-button')?.click();
     });
     expect(text('.account-menu button')).toEqual(['Settings', 'Sign out']);
+  });
+
+  /**
+   * The bug: settings was a place you went, so opening it from a chat left
+   * the chat -- the new-chat screen appeared behind the window, and closing
+   * it landed there. It is a window over wherever you are.
+   */
+  it('opens settings over the chat rather than leaving it', async () => {
+    window.history.replaceState({}, '', '/chats/a2');
+    const onOpenSettings = vi.fn();
+    await act(async () => {
+      root.render(
+        <Sidebar
+          route={{ name: 'chat', agentId: 'a2' }}
+          working={false}
+          name="Lucas"
+          onOpenSettings={onOpenSettings}
+        />,
+      );
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('.account-button')?.click();
+    });
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>('.account-menu button')]
+        .find((button) => button.textContent === 'Settings')
+        ?.click();
+    });
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/chats/a2');
   });
 
   it('still draws when the chat list cannot be fetched', async () => {
@@ -178,7 +224,9 @@ describe('what a chat row can do', () => {
   async function railWith(...rows: Parameters<typeof listing>) {
     vi.stubGlobal('fetch', listing(...rows));
     await act(async () => {
-      root.render(<Sidebar route={{ name: 'new' }} working={false} name="Lucas" />);
+      root.render(
+        <Sidebar route={{ name: 'new' }} working={false} onOpenSettings={() => {}} name="Lucas" />,
+      );
     });
     await settle();
   }
@@ -244,7 +292,9 @@ describe('what a chat row can do', () => {
         ),
     );
     await act(async () => {
-      root.render(<Sidebar route={{ name: 'new' }} working={false} name="Lucas" />);
+      root.render(
+        <Sidebar route={{ name: 'new' }} working={false} onOpenSettings={() => {}} name="Lucas" />,
+      );
     });
     await settle();
     expect(text('.sidebar-chat-open')).toEqual(['No flags']);

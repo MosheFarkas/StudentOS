@@ -16,6 +16,8 @@ interface Props {
   /** The signed-in student, for the footer. Either may be missing. */
   name?: string | null;
   email?: string | null;
+  /** Opens the settings window over whatever is on screen. */
+  onOpenSettings: () => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface Props {
  * the idea that you build an agent before you can talk to one: New opens a
  * chat, and the agent behind it is plumbing the student never meets.
  */
-export function Sidebar({ route, working, name, email }: Props) {
+export function Sidebar({ route, working, name, email, onOpenSettings }: Props) {
   const [chats, setChats] = useState<Agent[] | null>(null);
   /** Which row's menu is open. Only ever one. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -148,7 +150,7 @@ export function Sidebar({ route, working, name, email }: Props) {
         ))}
       </nav>
 
-      <Account name={name} email={email} />
+      <Account name={name} email={email} onOpenSettings={onOpenSettings} />
 
       {deleting && (
         <ConfirmDelete
@@ -310,7 +312,15 @@ function go(route: Route): void {
  * worth a row in the rail -- so they live behind the name, which is where a
  * student already looks for their own account.
  */
-function Account({ name, email }: { name?: string | null; email?: string | null }) {
+function Account({
+  name,
+  email,
+  onOpenSettings,
+}: {
+  name?: string | null;
+  email?: string | null;
+  onOpenSettings: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
@@ -341,7 +351,9 @@ function Account({ name, email }: { name?: string | null; email?: string | null 
             role="menuitem"
             onClick={() => {
               setOpen(false);
-              go({ name: 'settings' });
+              // Not go(): settings is a window over this screen, not another one.
+              document.body.classList.remove('nav-open');
+              onOpenSettings();
             }}
           >
             Settings
