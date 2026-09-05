@@ -50,7 +50,7 @@ export function AttachButton({ onChosen, disabled, opens = 'up' }: Props) {
   const down = opens === 'down' ? ' opens-down' : '';
 
   return (
-    <div className={`attach${down}`} ref={box}>
+    <div className="attach" ref={box}>
       {open && (
         <div className={`attach-menu${down}`} role="menu">
           <button role="menuitem" type="button" onClick={() => chooser.current?.click()}>

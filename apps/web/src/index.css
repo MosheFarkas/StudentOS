@@ -2458,18 +2458,14 @@ a.button {
 }
 
 /*
- * Opening downward, under the whole bar rather than under the +. The wrapper
- * stops being the containing block, so the menu hangs off the composer card
- * itself: flush with its left edge, just below its bottom one.
+ * Opening downward: dropping from the + itself, the same small gap as the
+ * upward menu keeps, so it reads as the button's own. It clears the bar's
+ * bottom edge by a little, which is what says it hangs from the button and
+ * not from the bar.
  */
-.attach.opens-down {
-  position: static;
-}
-
 .attach-menu.opens-down {
   bottom: auto;
-  top: calc(100% + 0.5rem);
-  left: 0;
+  top: calc(100% + 0.3rem);
 }
 
 .attach-menu button {
