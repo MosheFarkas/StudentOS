@@ -16,6 +16,7 @@ import {
   type CourseVerdict,
 } from './courses.js';
 import type { ClassroomSnapshot } from './classroom.js';
+import { KEPT_LOOSE } from './drive.js';
 
 /**
  * Deciding which courses belong in a vault at all.
@@ -1068,6 +1069,13 @@ describe('sweeping out files that belong to no course', () => {
 
     await sweepUnattachedFiles(vault);
     expect(await vault.read('entity', 'mme-rivard')).not.toBeNull();
+  });
+
+  it('keeps a file judged to be about their schooling, filed under no course', async () => {
+    // Judged in on its listing, and kept on that verdict rather than on a link.
+    await file('cas-project-brainstorming', `CAS project brainstorming.\n${KEPT_LOOSE}`);
+    await sweepUnattachedFiles(vault);
+    expect(await vault.read('entity', 'cas-project-brainstorming')).not.toBeNull();
   });
 
   it('takes nothing twice', async () => {

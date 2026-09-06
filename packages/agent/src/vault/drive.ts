@@ -1,6 +1,6 @@
 import { courseForFolder } from './collapse.js';
 import { slugForNote } from './slug.js';
-import type { Vault } from './vault.js';
+import type { Vault, VaultNote } from './vault.js';
 
 /**
  * The student's own Drive, as notes.
@@ -44,30 +44,58 @@ export interface DriveFile {
 
 export interface DriveImportResult {
   written: number;
-  /** Files Classroom already gave us, which know more than Drive does. */
+  /** Files Classroom already gave us, and files nothing has judged in. */
   skipped: number;
 }
+
+/**
+ * What was decided about a file a folder did not place. See drive-triage.
+ *
+ * `course` is a note name, or null for a file that is about school without
+ * being one course's -- a CAS project, an application, a club's plans.
+ */
+export interface DriveVerdict {
+  keep: boolean;
+  course: string | null;
+}
+
+/**
+ * The line a kept file carries when it belongs to no course.
+ *
+ * The loose-file sweep takes any file that names no course and that nothing
+ * points at. This is how a file judged in on its own account tells the sweep
+ * it was wanted.
+ */
+export const KEPT_LOOSE = "About your schooling, though not one course's.";
 
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
-export async function importDrive(vault: Vault, files: DriveFile[]): Promise<DriveImportResult> {
-  const existing = await vault.list('entity');
-  const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
-  const takenNames = new Set(existing.map((note) => note.name));
-
-  /*
-   * The courses still in the vault, by the title the school gave them.
-   *
-   * By title rather than by note name, because a folder is matched on the words
-   * that say what a subject is -- and the title is where those words are
-   * written the way a person writes them.
-   */
-  const courses = new Map(
+/**
+ * The courses still in the vault, by the title the school gave them.
+ *
+ * By title rather than by note name, because a folder is matched on the words
+ * that say what a subject is -- and the title is where those words are
+ * written the way a person writes them. The triage shows the same titles to
+ * its model, and links back through the same map.
+ */
+export function courseTitles(existing: readonly VaultNote[]): Map<string, string> {
+  return new Map(
     existing
       .filter((note) => note.description === 'Course')
       .map((note) => [(note.body.split('\n')[0] ?? '').split(', on Google')[0] ?? '', note.name]),
   );
+}
+
+export async function importDrive(
+  vault: Vault,
+  files: DriveFile[],
+  judged: ReadonlyMap<string, DriveVerdict> = new Map(),
+): Promise<DriveImportResult> {
+  const existing = await vault.list('entity');
+  const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
+  const takenNames = new Set(existing.map((note) => note.name));
+  const courses = courseTitles(existing);
 
   const result: DriveImportResult = { written: 0, skipped: 0 };
 
@@ -110,30 +138,31 @@ export async function importDrive(vault: Vault, files: DriveFile[]): Promise<Dri
      * literally left five hundred files of design coursework belonging to
      * nothing at all.
      */
-    const course = (file.path ?? [])
-      .map((folder) => courseForFolder(folder, courses))
-      .find(Boolean);
+    const filed = (file.path ?? []).map((folder) => courseForFolder(folder, courses)).find(Boolean);
 
     /*
-     * And a file that belongs to no course they take does not come in.
+     * And what no folder places is in only if it was judged in.
      *
-     * Left out rather than brought in and swept afterwards, because reading one
-     * is a model call: importing and then removing pays that on every build for
-     * ever, for a file nobody wanted kept. The same reason last year's courses
-     * are filtered before the import rather than after it.
+     * Every other file in a Drive is put in front of a model on its listing
+     * -- see drive-triage -- and arrives here with a verdict, or without one
+     * because nothing has judged it yet. Silence is not an answer: a file with
+     * no verdict waits for the next refresh rather than coming in or being
+     * refused on nothing.
      *
-     * It costs the personal half of a Drive -- music, photographs, an
-     * application to another school -- which is a real loss and a deliberate
-     * one. A vault is what an agent reads about somebody's schooling, and a
-     * thousand files it can say nothing about are a thousand ways for a search
-     * to answer with the wrong thing.
+     * Left out rather than brought in and swept afterwards, because reading
+     * one is a model call, and importing then removing pays that on every
+     * build for ever. What is refused here is the personal half of a Drive --
+     * photographs, music -- and that is the half a study agent has no use for.
      */
-    if (!course) {
+    const verdict = judged.get(file.fileId);
+    if (!filed && !verdict?.keep) {
       result.skipped += 1;
       continue;
     }
+    const course = filed ?? verdict?.course ?? null;
 
-    lines.push(`Part of [[${course}]].`);
+    if (course) lines.push(`Part of [[${course}]].`);
+    else lines.push(KEPT_LOOSE);
 
     /*
      * And where it lives, which is more than the course alone says.

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Vault } from './vault.js';
-import { importDrive, type DriveFile } from './drive.js';
+import { KEPT_LOOSE, importDrive, type DriveFile } from './drive.js';
 
 /**
  * The student's own Drive.
@@ -250,5 +250,73 @@ describe('a file has to belong to a course they still take', () => {
 
     await importDrive(vault, [loose({ fileId: 'f-6' })]);
     expect(await vault.read('entity', 'handout')).not.toBeNull();
+  });
+});
+
+describe('files that were judged rather than filed', () => {
+  /*
+   * A folder places a file for free. Everything else in a Drive is judged on
+   * its listing, and the verdict arrives here: keep it, and under which
+   * course if any. A file nobody has judged yet is left for the next refresh.
+   */
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-drive-judged-'));
+    vault = new Vault(root, 'student-1');
+    await vault.write({
+      name: 'history',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      body: 'History, on Google Classroom.',
+    });
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const loose = file({ name: 'cas project brainstorming', path: [] });
+
+  it('keeps a judged file under the course it was judged to belong to', async () => {
+    await importDrive(vault, [loose], new Map([['d1', { keep: true, course: 'history' }]]));
+
+    expect((await vault.read('entity', 'cas-project-brainstorming'))?.body).toContain(
+      'Part of [[history]]',
+    );
+  });
+
+  it('keeps a judged file that belongs to no course, and says so', async () => {
+    await importDrive(vault, [loose], new Map([['d1', { keep: true, course: null }]]));
+
+    const body = (await vault.read('entity', 'cas-project-brainstorming'))?.body ?? '';
+    expect(body).toContain(KEPT_LOOSE);
+    expect(body).not.toContain('Part of');
+  });
+
+  it('leaves out a file judged out', async () => {
+    const result = await importDrive(
+      vault,
+      [loose],
+      new Map([['d1', { keep: false, course: null }]]),
+    );
+
+    expect(result.written).toBe(0);
+    expect(await vault.read('entity', 'cas-project-brainstorming')).toBeNull();
+  });
+
+  it('leaves a file nobody has judged for the next refresh', async () => {
+    const result = await importDrive(vault, [loose], new Map());
+
+    expect(result.written).toBe(0);
+    expect(await vault.read('entity', 'cas-project-brainstorming')).toBeNull();
+  });
+
+  it('still files by folder without asking anybody', async () => {
+    await importDrive(vault, [file({ path: ['History'] })], new Map());
+
+    expect((await vault.read('entity', 'grade-10-history-outline-2025'))?.body).toContain(
+      'Part of [[history]]',
+    );
   });
 });

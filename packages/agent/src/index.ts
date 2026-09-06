@@ -56,7 +56,14 @@ export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
 export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
 export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
-export { importDrive, type DriveFile, type DriveImportResult } from './vault/drive.js';
+export {
+  importDrive,
+  KEPT_LOOSE,
+  type DriveFile,
+  type DriveImportResult,
+  type DriveVerdict,
+} from './vault/drive.js';
+export { judgeDriveFiles } from './vault/drive-triage.js';
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
 export { writeClassDocs, type ClassDocResult } from './vault/class-doc.js';
 export { writePersonDocs, type PersonDocResult } from './vault/person-doc.js';

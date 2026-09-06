@@ -5,6 +5,7 @@ import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
 import { buildGraph } from './graph.js';
 import { namesCourse } from './mail.js';
+import { KEPT_LOOSE } from './drive.js';
 import { retrying } from './retry.js';
 import type { Vault, VaultNote } from './vault.js';
 
@@ -800,6 +801,8 @@ export async function sweepUnattachedFiles(vault: Vault): Promise<{ removed: num
     // Points at a course, or something points at it: either way it belongs.
     if (/^Part of \[\[/m.test(note.body)) continue;
     if (referenced.has(note.name)) continue;
+    // Judged in on its own account, under no course. See drive-triage.
+    if (note.body.includes(KEPT_LOOSE)) continue;
 
     if (await vault.remove('entity', note.name)) removed += 1;
   }

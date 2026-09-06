@@ -9,6 +9,7 @@ import {
   writeUserDoc,
   collectDriveFiles,
   importDrive,
+  judgeDriveFiles,
   domainOf,
   importClassroom,
   importMail,
@@ -267,11 +268,19 @@ async function refreshOne(
    * The student's own Drive: their essays, their revision, their project.
    *
    * Listing is free and needs no model, so it happens every refresh and picks
-   * up whatever is new. What each file is actually about is settled by the
-   * reading pass below, which has to open it anyway.
+   * up whatever is new. A folder that names a course places a file for
+   * nothing; everything else is judged on its listing, fifty at a time,
+   * against the courses and the school page -- and the verdict is kept, so a
+   * file is asked about once. What each kept file is actually about is
+   * settled by the reading pass below, which has to open it anyway.
    */
   onPhase?.({ phase: 'drive', done: 0, total: 0 });
-  const drive = await importDrive(vault, await collectDriveFiles(toolContext));
+  const listed = await collectDriveFiles(toolContext);
+  const judged = await judgeDriveFiles(
+    { llm: await ctx.llm.resolve(userId) },
+    { vault, files: listed, today, yearStart, ...(school ? { school } : {}), userId },
+  );
+  const drive = await importDrive(vault, listed, judged);
 
   /*
    * And read some of the files, a few at a time.
