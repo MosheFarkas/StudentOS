@@ -252,20 +252,18 @@ export function createAgentRoutes(ctx: AppContext) {
         const agent = await ownedAgent(userId, c.req.param('id'));
 
         const vault = vaultFor(ctx.env?.VAULT_ROOT, userId);
-        const said = vault
-          ? (
-              await ctx.db
-                .select({ content: agentMemories.content })
-                .from(agentMemories)
-                .where(eq(agentMemories.agentId, agent.id))
-                .orderBy(asc(agentMemories.occurredAt))
-            ).map((row) => row.content)
+        const memories = vault
+          ? await ctx.db
+              .select({ id: agentMemories.id, content: agentMemories.content })
+              .from(agentMemories)
+              .where(eq(agentMemories.agentId, agent.id))
+              .orderBy(asc(agentMemories.occurredAt))
           : [];
 
         await ctx.db.delete(agents).where(eq(agents.id, agent.id));
 
-        if (vault && said.length > 0) {
-          void forgetChat(ctx, { vault, userId, exchanges: said }).catch((error: unknown) => {
+        if (vault && memories.length > 0) {
+          void forgetChat(ctx, { vault, userId, memories }).catch((error: unknown) => {
             console.error(`Forgetting a deleted chat failed for student ${userId}`, error);
           });
         }
@@ -343,11 +341,30 @@ function vaultFor(root: string | undefined, ownerId: string): Vault | undefined 
   return root ? new Vault(root, ownerId) : undefined;
 }
 
-/** The chats page without a deleted conversation, and the page written from it. */
+/**
+ * Everything a deleted chat left in the vault, taken out.
+ *
+ * Its episodes first: a conversation worth keeping was written in as one,
+ * carrying the id of the memory it was written from, and that id is the only
+ * link back to the chat. No model needed, so it happens before the part that
+ * needs one and cannot be lost to it.
+ *
+ * Then the chats page without it, and the page written from that one.
+ */
 async function forgetChat(
   ctx: AppContext,
-  { vault, userId, exchanges }: { vault: Vault; userId: string; exchanges: string[] },
+  {
+    vault,
+    userId,
+    memories,
+  }: { vault: Vault; userId: string; memories: { id: string; content: string }[] },
 ): Promise<void> {
+  const ids = new Set(memories.map((memory) => memory.id));
+  for (const note of await vault.list('episode')) {
+    if (note.externalId && ids.has(note.externalId)) await vault.remove('episode', note.name);
+  }
+
+  const exchanges = memories.map((memory) => memory.content);
   const llm = await ctx.llm.resolve(userId);
   const { changed } = await forgetChatInChatsDoc({ llm }, { vault, exchanges, userId });
   // The user page describes this one, so it moves when this one does -- the

@@ -299,6 +299,59 @@ describe('deleting an agent', () => {
     });
     expect(JSON.stringify(modelSaw)).toContain('hockey at weekends');
   });
+
+  /*
+   * And its episodes.
+   *
+   * A conversation worth keeping is written into the vault as an episode,
+   * carrying the id of the memory it was written from. That is the only link
+   * back to the chat, and the cascade cannot follow it onto disk.
+   */
+  it('takes its episodes out of the vault', async () => {
+    const alice = await createUser();
+    const doomed = await createAgent(alice.id);
+    const db = await testDb();
+    const [memory] = await db
+      .insert(agentMemories)
+      .values({
+        agentId: doomed.id,
+        kind: 'conversation',
+        content: 'Student: i have not started the essay\nAgent: Where are you stuck?',
+        source: 'agent_run',
+      })
+      .returning();
+
+    const vault = new Vault(vaultRoot, alice.id);
+    await vault.write({
+      name: '2026-09-06-had-not-started-the-essay',
+      kind: 'episode',
+      source: 'student',
+      description: 'Had not started the essay',
+      externalId: memory?.id ?? '',
+      occurred: '2026-09-06T10:00:00.000Z',
+      actor: 'The student',
+      event: 'conversation',
+      body: 'Had not started the essay.',
+    });
+    await vault.write({
+      name: '2026-09-01-teacher-moved-the-test',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'The test moved',
+      externalId: 'gmail-123',
+      occurred: '2026-09-01T10:00:00.000Z',
+      body: 'The test moved to Friday.',
+    });
+    modelSays = 'UNCHANGED';
+
+    await withVaults.request(`/api/agents/${doomed.id}`, { method: 'DELETE', ...as(alice.token) });
+
+    await vi.waitFor(async () => {
+      expect(await vault.read('episode', '2026-09-06-had-not-started-the-essay')).toBeNull();
+    });
+    // Somebody else's episode is not the chat's to take.
+    expect(await vault.read('episode', '2026-09-01-teacher-moved-the-test')).not.toBeNull();
+  });
 });
 
 /**
