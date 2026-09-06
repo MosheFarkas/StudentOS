@@ -72,6 +72,7 @@ export { classroomCourse, classroomEvent } from './vault/mail.js';
 export {
   classifyCourses,
   describeCourses,
+  describeOrphanCourses,
   filterSnapshot,
   lastActivityByCourse,
   academicYearStart,

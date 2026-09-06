@@ -7,6 +7,7 @@ import {
   classifyCourses,
   filterSnapshot,
   describeCourses,
+  describeOrphanCourses,
   lastActivityByCourse,
   sweepDroppedCourses,
   sweepCourseMail,
@@ -1183,5 +1184,220 @@ describe('what the classifier is told to weigh', () => {
   it('still says such a room belongs in the vault', async () => {
     // It is something the student is in. What it is not is a subject.
     expect(await brief()).toMatch(/still belongs in their vault/i);
+  });
+});
+
+describe('courses Classroom no longer returns', () => {
+  /*
+   * The filter judges the roster Classroom hands back, and only that. A course
+   * the school deletes, or takes the student out of, stops being handed back
+   * and so stops being judged -- and a course nothing judges is one nothing can
+   * drop. On a real account that made last year's history exam prep, ninety
+   * three notes, immortal.
+   */
+  let root: string;
+  let vault: Vault;
+
+  const listing = (...courses: { id: string; name: string }[]): ClassroomSnapshot => ({
+    courses,
+    coursework: [],
+    topics: [],
+    submissions: [],
+    announcements: [],
+    materials: [],
+  });
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-orphans-'));
+    vault = new Vault(root, 'student-1');
+
+    await vault.write({
+      name: 'exam-prep-history-10',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      externalId: 'c-gone',
+      body: 'Exam Prep History 10 2025/2026, on Google Classroom.\nArchived by the school.',
+    });
+    await vault.write({
+      name: 'chapter-3-questions',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Chapter 3 questions.\nPart of [[exam-prep-history-10]].\nDue: 2026-02-20T04:59:00.000Z',
+    });
+    await vault.write({
+      name: 'chapter-4-questions',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Chapter 4 questions.\nPart of [[exam-prep-history-10]].\nDue: 2026-05-01T03:59:00.000Z',
+    });
+    await vault.write({
+      name: 'nationalisms',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Topic',
+      body: 'Nationalisms and Canadian autonomy.\nPart of [[exam-prep-history-10]].',
+    });
+    await vault.write({
+      name: '2026-04-23-ch-4-slides',
+      kind: 'episode',
+      source: 'classroom',
+      description: 'Announcement in Exam Prep History 10 2025/2026',
+      occurred: '2026-04-23T17:31:06.000Z',
+      body: 'Ch. 4 slides are up.\nIn [[exam-prep-history-10]].',
+    });
+    await vault.write({
+      name: 'french',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Course',
+      externalId: 'c-1',
+      body: 'French 11, on Google Classroom.',
+    });
+    await vault.write({
+      name: 'band',
+      kind: 'entity',
+      source: 'gmail',
+      description: 'Course',
+      body: 'Band, on Google Classroom.\nKnown only from mail about it.',
+    });
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('describes a course Classroom no longer returns, from its own notes', async () => {
+    const [orphan, ...rest] = await describeOrphanCourses(
+      vault,
+      listing({ id: 'c-1', name: 'French 11' }),
+      TODAY,
+    );
+
+    expect(rest).toEqual([]);
+    expect(orphan?.name).toBe('Exam Prep History 10 2025/2026');
+    expect(orphan?.gone).toBe(true);
+    expect(orphan?.lastActivity).toBe('2026-05-01T03:59:00.000Z');
+    expect(orphan?.work).toEqual(['Chapter 3 questions.', 'Chapter 4 questions.']);
+    expect(orphan?.workCount).toBe(2);
+    expect(orphan?.topics).toEqual(['Nationalisms and Canadian autonomy.']);
+    expect(orphan?.announcements).toEqual(['Ch. 4 slides are up.']);
+  });
+
+  it('leaves a course Classroom still returns alone, whatever it is called now', async () => {
+    const orphans = await describeOrphanCourses(
+      vault,
+      listing({ id: 'c-1', name: 'French 11' }, { id: 'c-gone', name: 'History 10 Exam Prep' }),
+      TODAY,
+    );
+
+    expect(orphans).toEqual([]);
+  });
+
+  it('ignores a course known only from its mail', async () => {
+    /*
+     * Recovered from mail, so it never had a Classroom id and was already
+     * bounded to this year by the pass that made it.
+     */
+    const orphans = await describeOrphanCourses(
+      vault,
+      listing(
+        { id: 'c-1', name: 'French 11' },
+        { id: 'c-gone', name: 'Exam Prep History 10 2025/2026' },
+      ),
+      TODAY,
+    );
+
+    expect(orphans.map((course) => course.name)).not.toContain('Band');
+  });
+
+  it('describes nothing when Classroom returned nothing', async () => {
+    // Classroom being unreachable, not a student dropping every course they take.
+    expect(await describeOrphanCourses(vault, listing(), TODAY)).toEqual([]);
+  });
+
+  it('does not read a deadline still ahead as activity', async () => {
+    await vault.write({
+      name: 'summer-reading',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'Assignment',
+      body: 'Summer reading.\nPart of [[exam-prep-history-10]].\nDue: 2027-01-01T04:59:00.000Z',
+    });
+
+    const [orphan] = await describeOrphanCourses(
+      vault,
+      listing({ id: 'c-1', name: 'French 11' }),
+      TODAY,
+    );
+
+    expect(orphan?.lastActivity).toBe('2026-05-01T03:59:00.000Z');
+  });
+});
+
+describe('judging a course Classroom no longer returns', () => {
+  it('drops a subject that is gone from Classroom, on the evidence its notes hold', async () => {
+    const llm = saying({
+      course: 'Exam Prep History 10 2025/2026',
+      academic: true,
+      subject: 'history',
+      year: '2025-2026',
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([{ id: 'c-gone', name: 'Exam Prep History 10 2025/2026', gone: true }]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(false);
+  });
+
+  it('keeps a club that is gone from Classroom, like any club from last year', async () => {
+    const llm = saying({
+      course: 'Le parlement des jeunes 2026',
+      academic: false,
+      subject: 'parlement-des-jeunes',
+      year: '2025-2026',
+    });
+
+    const verdicts = await classifyCourses(
+      { llm },
+      opts([{ id: 'c-gone', name: 'Le parlement des jeunes 2026', gone: true }]),
+    );
+
+    expect(verdicts[0]?.keep).toBe(true);
+  });
+
+  it('tells the classifier when Classroom no longer lists a course', async () => {
+    const llm = saying({ course: 'Old', academic: false, subject: 'old', year: null });
+    await classifyCourses({ llm }, opts([{ id: 'c-gone', name: 'Old', gone: true }]));
+
+    expect(String(llm.chat.mock.calls[0]?.[0]?.messages?.at(-1)?.content)).toContain(
+      'no longer lists',
+    );
+  });
+});
+
+describe('what the classifier is told a subject is', () => {
+  it('counts an assessed project for a qualification as a subject', async () => {
+    /*
+     * The IB Personal Project on a real account: marked, supervised, over in
+     * June, and called not-taught on one build and a subject on the next. It
+     * is nothing a student belongs to. It ends, and it goes on their record.
+     */
+    const llm = saying({
+      course: 'IB MYP Personal Project 2025/2026',
+      academic: true,
+      subject: 'personal-project',
+      year: '2025-2026',
+    });
+    await classifyCourses(
+      { llm },
+      opts([{ id: 'c-1', name: 'IB MYP Personal Project 2025/2026' }]),
+    );
+
+    expect(String(llm.chat.mock.calls[0]?.[0]?.messages?.[0]?.content)).toContain(
+      'Personal Project',
+    );
   });
 });

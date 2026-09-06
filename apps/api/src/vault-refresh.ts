@@ -19,6 +19,7 @@ import {
   academicYearStart,
   FALLBACK_YEAR_END,
   describeCourses,
+  describeOrphanCourses,
   filterSnapshot,
   writeClassDocs,
   writePersonDocs,
@@ -179,10 +180,21 @@ async function refreshOne(
   const school = (await readDocument(vault, SCHOOL_DOC_NAME))?.body;
   const yearStart = academicYearStart(today, yearEnd ?? FALLBACK_YEAR_END);
 
+  /*
+   * The roster, and what the vault holds that is no longer on it.
+   *
+   * A course the school deletes, or takes the student out of, stops coming
+   * back from Classroom -- and a course the classifier never sees is one the
+   * sweep below can never drop. Last year's exam prep sat in a real vault on
+   * exactly those terms, so those are judged too, from their own notes.
+   */
   const verdicts = await classifyCourses(
     { llm: await ctx.llm.resolve(userId) },
     {
-      courses: describeCourses(snapshot, today),
+      courses: [
+        ...describeCourses(snapshot, today),
+        ...(await describeOrphanCourses(vault, snapshot, today)),
+      ],
       today,
       ...(yearEnd ? { yearEnd } : {}),
       ...(school ? { school } : {}),

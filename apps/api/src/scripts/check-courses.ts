@@ -6,6 +6,7 @@ import {
   classifyCourses,
   collectClassroomSnapshot,
   describeCourses,
+  describeOrphanCourses,
   type ToolContext,
 } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from '../google/connections.js';
@@ -55,12 +56,16 @@ async function main(): Promise<void> {
   for (const missing of skipped) console.warn(`skipped: ${missing}`);
 
   // The researched calendar where there is a vault to have researched one.
-  const yearEnd = env.VAULT_ROOT
-    ? await academicYearEnd(new Vault(env.VAULT_ROOT, owner.id))
-    : null;
+  const vault = env.VAULT_ROOT ? new Vault(env.VAULT_ROOT, owner.id) : null;
+  const yearEnd = vault ? await academicYearEnd(vault) : null;
 
   const today = new Date().toISOString().slice(0, 10);
-  const described = describeCourses(snapshot, today);
+  // And the courses the vault still holds that Classroom no longer returns,
+  // which the build judges alongside the roster.
+  const described = [
+    ...describeCourses(snapshot, today),
+    ...(vault ? await describeOrphanCourses(vault, snapshot, today) : []),
+  ];
   const verdicts = await classifyCourses(
     { llm: await ctx.llm.resolve(owner.id) },
     { courses: described, today, ...(yearEnd ? { yearEnd } : {}), userId: owner.id },
@@ -81,7 +86,8 @@ async function main(): Promise<void> {
         `${(verdict.subject ?? '----').padEnd(16)}  ${verdict.year ?? '----'}  ` +
         `${about?.workCount ?? 0} pieces of work, ${about?.graded ? 'marked' : 'unmarked'}` +
         `${about?.lastActivity ? `, last ${about.lastActivity}` : ', undated'}` +
-        `${about?.courseState === 'ARCHIVED' ? ', archived' : ''}`,
+        `${about?.courseState === 'ARCHIVED' ? ', archived' : ''}` +
+        `${about?.gone ? ', GONE from Classroom' : ''}`,
     );
   }
 
@@ -100,3 +106,7 @@ async function main(): Promise<void> {
 }
 
 await main();
+// The context keeps a database pool alive, and with the verdicts printed there
+// is nothing left to wait for -- without this it sat idle until somebody
+// killed it, with its output stuck behind whatever was reading it.
+process.exit(0);

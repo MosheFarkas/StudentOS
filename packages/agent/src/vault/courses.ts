@@ -64,6 +64,14 @@ export interface ClassifiableCourse {
   materials?: string[];
   /** Whether anything here is marked. The clearest line between a subject and a room. */
   graded?: boolean;
+  /**
+   * Classroom no longer returns this course; the vault still holds it.
+   *
+   * The school deleted it, or took the student out of it. Over by any reading
+   * -- at least as finished as one the school archived -- and judged here
+   * because a course nothing judges is one nothing can drop.
+   */
+  gone?: boolean;
 }
 
 export interface ClassifyOptions {
@@ -192,6 +200,11 @@ const ASK = [
   '',
   'Marks do not settle it either way: a robotics team marks work, and a house can set',
   'a graded reflection.',
+  '',
+  'A supervised, assessed piece of work a student completes for a qualification -- an',
+  'IB Personal Project, an extended essay, a capstone -- is academic. It is set and',
+  'marked like a subject, it ends when its year does, and it goes on their record. It',
+  'is not something they belong to.',
   '',
   'subject is a short lowercase slug naming the class a student would say they have:',
   '"french", "math", "history", "model-un". It must come from THIS course\'s own name --',
@@ -333,7 +346,7 @@ export async function classifyCourses(
     const begun = academicYearStart(today, ends);
     const over = course.lastActivity
       ? course.lastActivity < begun
-      : course.courseState === 'ARCHIVED' || hasEnded(year, today, ends);
+      : course.courseState === 'ARCHIVED' || course.gone === true || hasEnded(year, today, ends);
 
     /*
      * Older than last year, which nothing survives.
@@ -376,6 +389,11 @@ function describe(course: ClassifiableCourse, listedAs: number): string {
     `${listedAs}. ${defang(course.name)}`,
     ...(course.section ? [`  Section: ${defang(course.section)}`] : []),
     ...(course.courseState === 'ARCHIVED' ? ['  The school has archived this one.'] : []),
+    ...(course.gone
+      ? [
+          '  Classroom no longer lists this one: the school removed it, or removed the student from it.',
+        ]
+      : []),
     ...(course.lastActivity ? [`  Last dated activity: ${course.lastActivity}`] : []),
     `  Anything in it marked: ${course.graded ? 'yes' : 'no'}`,
     ...some('Units', course.topics),
@@ -461,15 +479,6 @@ export function describeCourses(snapshot: ClassroomSnapshot, today: string): Cla
   const forCourse = <T extends { course: string }>(items: T[], name: string): T[] =>
     items.filter((item) => item.course === name);
 
-  /** Angle brackets folded, so nothing in a teacher's text can close the wrapper. */
-  const trim = (text: string): string =>
-    text
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, SAMPLE.brief)
-      .replaceAll('<', '‹')
-      .replaceAll('>', '›');
-
   return snapshot.courses.map((course) => {
     const work = forCourse(snapshot.coursework, course.name);
     const marked = forCourse(snapshot.submissions, course.name).some(
@@ -488,16 +497,101 @@ export function describeCourses(snapshot: ClassroomSnapshot, today: string): Cla
       work: work
         .slice(0, SAMPLE.work)
         .map((item) =>
-          trim(item.description ? `${item.title} -- ${item.description}` : item.title),
+          brief(item.description ? `${item.title} -- ${item.description}` : item.title),
         ),
       workCount: work.length,
       announcements: forCourse(snapshot.announcements, course.name)
         .slice(0, SAMPLE.announcements)
-        .map((announcement) => trim(announcement.text)),
+        .map((announcement) => brief(announcement.text)),
       materials: forCourse(snapshot.materials, course.name)
         .slice(0, SAMPLE.materials)
-        .map((material) => trim(material.title)),
+        .map((material) => brief(material.title)),
       graded: marked,
+    };
+  });
+}
+
+/** One line of a teacher's text, angle brackets folded so nothing in it can close the wrapper. */
+function brief(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, SAMPLE.brief)
+    .replaceAll('<', '‹')
+    .replaceAll('>', '›');
+}
+
+/** `Due: <date>` in an assignment note, as the importer writes it. */
+const DUE_LINE = /^Due: (.+)$/m;
+
+/**
+ * Courses the vault holds that Classroom no longer returns, described from
+ * what is on disk.
+ *
+ * The filter judges the roster Classroom hands back, and only that. A course
+ * the school deletes, or takes the student out of, stops being handed back and
+ * so stops being judged -- and a course nothing judges is one nothing can
+ * drop. On a real account that made last year's history exam prep immortal:
+ * ninety-three notes, off the roster on the third day of September, and every
+ * build since walked past it.
+ *
+ * So these go in front of the classifier beside the roster, built from their
+ * own notes: the work filed under one says what it is, and the newest dated
+ * thing under it says when it was last alive, on the same terms as the
+ * snapshot -- deadlines and announcements, and nothing still ahead.
+ *
+ * Only ones Classroom wrote. A course recovered from mail carries no Classroom
+ * id and was bounded to this year by the pass that made it. And nothing at all
+ * when the roster is empty: that is Classroom being unreachable, not a student
+ * dropping every course they take.
+ */
+export async function describeOrphanCourses(
+  vault: Vault,
+  snapshot: ClassroomSnapshot,
+  today: string,
+): Promise<ClassifiableCourse[]> {
+  if (snapshot.courses.length === 0) return [];
+  const listed = new Set(snapshot.courses.map((course) => course.id));
+
+  const [entities, episodes] = await Promise.all([vault.list('entity'), vault.list('episode')]);
+  const orphans = entities.filter(
+    (note) =>
+      note.description === 'Course' &&
+      note.source === 'classroom' &&
+      note.externalId !== undefined &&
+      !listed.has(note.externalId),
+  );
+
+  return orphans.map((course) => {
+    const under = [...entities, ...episodes].filter((note) =>
+      note.body.includes(`[[${course.name}]]`),
+    );
+    const titled = (description: string): string[] =>
+      under
+        .filter((note) => note.description === description)
+        .map((note) => brief(note.body.split('\n')[0] ?? ''));
+
+    let newest: string | undefined;
+    for (const note of under) {
+      const date = note.occurred ?? DUE_LINE.exec(note.body)?.[1];
+      if (!date || date.slice(0, 10) > today) continue;
+      if (!newest || date > newest) newest = date;
+    }
+
+    const work = titled('Assignment');
+    return {
+      id: course.externalId as string,
+      name: titleOf(course),
+      gone: true,
+      ...(newest ? { lastActivity: newest } : {}),
+      topics: titled('Topic').slice(0, SAMPLE.topics),
+      work: work.slice(0, SAMPLE.work),
+      workCount: work.length,
+      announcements: under
+        .filter((note) => note.description.startsWith('Announcement in '))
+        .slice(0, SAMPLE.announcements)
+        .map((note) => brief(note.body.split('\n')[0] ?? '')),
+      materials: titled('Material').slice(0, SAMPLE.materials),
     };
   });
 }
