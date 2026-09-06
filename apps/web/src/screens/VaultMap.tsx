@@ -5,7 +5,7 @@ import { useSession } from '../lib/auth.js';
 import { parseMarkdown, type Span } from '../lib/markdown.js';
 import { loadGraph, type Graph } from '../lib/vaultGraph.js';
 import { drawStill, recallStill, rememberStill, type Still } from '../lib/vaultStill.js';
-import { CENTRE, labelFor, neighbours } from '../lib/vaultmap.js';
+import { CENTRE, find, labelFor, neighbours } from '../lib/vaultmap.js';
 
 /**
  * The vault, and the page you are reading out of it.
@@ -36,6 +36,7 @@ export function VaultMap({ onConnect }: { onConnect: () => void }) {
   const [held, setHeld] = useState<string | null>(null);
   const [reading, setReading] = useState<{ title: string; body: string } | null>(null);
   const [inside, setInside] = useState(false);
+  const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -113,6 +114,12 @@ export function VaultMap({ onConnect }: { onConnect: () => void }) {
     [graph, held],
   );
 
+  /* What the search lit up. Decided from the picture itself, so it answers as you type. */
+  const found = useMemo(
+    () => (graph ? find(graph.nodes, query) : new Set<string>()),
+    [graph, query],
+  );
+
   /*
    * Escape leaves, and the page behind stops scrolling while you are in here.
    *
@@ -180,6 +187,7 @@ export function VaultMap({ onConnect }: { onConnect: () => void }) {
             nodes={graph.nodes}
             edges={graph.edges}
             held={held}
+            found={found}
             width={width}
             height={height}
             onHold={setHeld}
@@ -203,6 +211,35 @@ export function VaultMap({ onConnect }: { onConnect: () => void }) {
   return createPortal(
     <div className="vault-inside">
       <header className="vault-inside-bar">
+        {/*
+         * Looking for something. Everything it finds lights up in the ball
+         * and says its name; click one to read it. Escape clears the search
+         * first, and only leaves the vault once there is nothing to clear --
+         * the key that empties a field must not also close the window it is in.
+         */}
+        <label className="vault-search-box">
+          <input
+            className="vault-search"
+            type="search"
+            placeholder="Search your vault"
+            aria-label="Search your vault"
+            autoComplete="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && query !== '') {
+                event.stopPropagation();
+                setQuery('');
+              }
+            }}
+          />
+          {query.trim() !== '' && (
+            <span className="vault-search-count" aria-live="polite">
+              {found.size} found
+            </span>
+          )}
+        </label>
         <button type="button" className="ghost" onClick={() => setInside(false)}>
           Leave vault
         </button>

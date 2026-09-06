@@ -1614,14 +1614,58 @@ a.button {
   color: #e8ecff;
 }
 
-/* The way out sits at the right, where the close of a window is. */
+/* The search at the left, the way out at the right, where the close of a window is. */
 .vault-inside-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 1rem;
   padding: 0.7rem 0.9rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+/* Looking for something.
+   The app's own input carries a white surface, like its button -- on this
+   dark it has to be told its ground and its ink, on rest and on focus both. */
+.vault-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: 1;
+  min-width: 0;
+  max-width: 26rem;
+}
+
+.vault-search {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.45rem 0.75rem;
+  background: rgba(232, 236, 255, 0.07);
+  border-color: rgba(148, 163, 184, 0.45);
+  color: #e8ecff;
+}
+
+.vault-search::placeholder {
+  color: rgba(232, 236, 255, 0.5);
+}
+
+.vault-search:focus {
+  outline: none;
+  background: rgba(232, 236, 255, 0.12);
+  border-color: var(--lavender);
+}
+
+.vault-search::-webkit-search-cancel-button {
+  filter: invert(1) opacity(0.6);
+}
+
+.vault-search-count {
+  flex: none;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  color: rgba(232, 236, 255, 0.6);
 }
 
 /* The way out.

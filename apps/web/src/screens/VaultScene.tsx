@@ -1,7 +1,7 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph3D from 'react-force-graph-3d';
 import { forceCollide, forceRadial } from 'd3-force-3d';
-import { CanvasTexture, Sprite, SpriteMaterial } from 'three';
+import { CanvasTexture, Group, Sprite, SpriteMaterial } from 'three';
 import {
   colourFor,
   importantNames,
@@ -49,13 +49,15 @@ interface Props {
   nodes: DocNode[];
   edges: DocEdge[];
   held: string | null;
+  /** What the search at the top found. Lit, and named, until the search is cleared. */
+  found: ReadonlySet<string>;
   width: number;
   height: number;
   onHold: (name: string) => void;
   onClear: () => void;
 }
 
-function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Props) {
+function VaultScene({ nodes, edges, held, found, width, height, onHold, onClear }: Props) {
   const engine = useRef<Engine | null>(null);
 
   /*
@@ -84,27 +86,72 @@ function VaultScene({ nodes, edges, held, width, height, onHold, onClear }: Prop
     };
   }, [nodes, edges]);
 
-  const lit = useMemo(() => litBy(edges, hovered ?? held), [edges, hovered, held]);
+  const lit = useMemo(() => litBy(edges, hovered ?? held, found), [edges, hovered, held, found]);
 
   /** Which names are worth drawing. Decided once, from the graph itself. */
   const names = useMemo(() => importantNames(nodes), [nodes]);
 
   /*
-   * The labels, built once and never rebuilt.
+   * A place for each node's name to hang, made once and never replaced.
    *
-   * This accessor's identity is what the renderer watches to decide whether
-   * every node's 3d object needs making again. Written inline it was a new
-   * function on every render, so a hover rebuilt three and a half thousand
-   * sprites -- which is why clicking the dark flashed the names up and dropped
-   * them. Held apart from the highlight, which changes colours and nothing else.
+   * The accessor below is what the renderer watches to decide whether every
+   * node's 3d object needs making again: a new function means every sphere
+   * and every name is thrown away and built afresh, which is what made a
+   * click on the dark flash the names up and drop them. So what it hands
+   * back for a node is the same empty group every time, and the name goes
+   * inside that group -- at the start for the landmarks, and later, as a
+   * search finds things, without the renderer ever noticing.
    */
+  const holders = useRef(new Map<string, Group>());
+  const sprites = useRef(new Map<string, Sprite>());
+
+  const holderFor = useCallback((name: string): Group => {
+    let holder = holders.current.get(name);
+    if (!holder) {
+      holder = new Group();
+      holders.current.set(name, holder);
+    }
+    return holder;
+  }, []);
+
+  /** The name drawn, the first time it is wanted, and kept. */
+  const nameFor = useCallback(
+    (at: Sim): Sprite | undefined => {
+      let sprite = sprites.current.get(at.name);
+      if (!sprite) {
+        sprite = label(labelFor(at.name), labelHeight(at));
+        if (!sprite) return undefined;
+        sprites.current.set(at.name, sprite);
+        holderFor(at.name).add(sprite);
+      }
+      return sprite;
+    },
+    [holderFor],
+  );
+
   const labels = useCallback(
     (node: unknown) => {
       const at = node as Sim;
-      return labelled(at, names, null) ? label(labelFor(at.name), labelHeight(at)) : undefined;
+      if (labelled(at, names, null)) nameFor(at);
+      return holderFor(at.name);
     },
-    [names],
+    [names, nameFor, holderFor],
   );
+
+  /*
+   * What a search found says its name, and stops when the search is cleared.
+   *
+   * Shown or hidden in place rather than through the accessor, for the reason
+   * above: this runs on every keystroke, and rebuilding the scene on each one
+   * is a picture that flickers while you type.
+   */
+  useEffect(() => {
+    for (const at of data.nodes) {
+      const wanted = labelled(at, names, null, found);
+      const sprite = wanted ? nameFor(at) : sprites.current.get(at.name);
+      if (sprite) sprite.visible = wanted;
+    }
+  }, [data, names, found, nameFor]);
 
   /*
    * The colours, held steady between clicks.

@@ -237,9 +237,53 @@ export function importantNames(nodes: readonly DocNode[], most = NAMES_SHOWN): S
   return names;
 }
 
-/** Whether this one says what it is: because it matters, or because you are on it. */
-export function labelled(node: DocNode, names: ReadonlySet<string>, held: string | null): boolean {
-  return names.has(node.name) || node.name === held;
+/** Whether this one says what it is: because it matters, you are on it, or you looked for it. */
+export function labelled(
+  node: DocNode,
+  names: ReadonlySet<string>,
+  held: string | null,
+  found: ReadonlySet<string> = NONE,
+): boolean {
+  return names.has(node.name) || node.name === held || found.has(node.name);
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * Which notes a search lights up.
+ *
+ * Decided from what the picture already knows about every note -- its name
+ * and the one line describing it -- so it answers as you type, with nothing
+ * fetched. For a note from mail or Classroom that line is a sentence naming
+ * the teacher and the work, which is most of what anybody looks for.
+ *
+ * Every word typed has to be there. One of them matching is a search for
+ * "cold war" that lights up every note with "war" in it.
+ */
+export function find(nodes: readonly DocNode[], query: string): Set<string> {
+  const words = terms(query);
+  if (words.length === 0) return new Set();
+
+  const found = new Set<string>();
+  for (const note of nodes) {
+    const text = plain(`${labelFor(note.name)} ${note.description}`);
+    if (words.every((word) => text.includes(word))) found.add(note.name);
+  }
+  return found;
+}
+
+/** Lowercase, without accents: "Québec" and "quebec" are the same word to a search. */
+function plain(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function terms(query: string): string[] {
+  return plain(query)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== '');
 }
 
 /** Every note directly joined to this one, in either direction. */
@@ -253,20 +297,25 @@ export function neighbours(edges: readonly DocEdge[], name: string): Set<string>
 }
 
 /**
- * What is lit when something is held: the thing, and what it touches.
+ * What is lit: the thing held and what it touches, and whatever a search found.
  *
- * Nothing held means everything is lit, which is what stops a resting graph
- * looking like it is switched off.
+ * Nothing held and nothing found means everything is at rest, which is what
+ * stops a resting graph looking like it is switched off.
  */
-export type Lit = { name: string; joined: Set<string> } | null;
+export type Lit = { name: string | null; joined: Set<string>; found?: ReadonlySet<string> } | null;
 
-export function litBy(edges: readonly DocEdge[], held: string | null): Lit {
-  return held ? { name: held, joined: neighbours(edges, held) } : null;
+export function litBy(
+  edges: readonly DocEdge[],
+  held: string | null,
+  found: ReadonlySet<string> = NONE,
+): Lit {
+  if (!held && found.size === 0) return null;
+  return { name: held, joined: held ? neighbours(edges, held) : new Set(), found };
 }
 
 export function isLit(node: DocNode, lit: Lit): boolean {
   if (!lit) return false;
-  return lit.name === node.name || lit.joined.has(node.name);
+  return lit.name === node.name || lit.joined.has(node.name) || lit.found?.has(node.name) === true;
 }
 
 /**

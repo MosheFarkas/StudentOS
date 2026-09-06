@@ -4,6 +4,7 @@ import {
   NAMES_SHOWN,
   importantNames,
   colourFor,
+  find,
   isLit,
   RESTING,
   labelFor,
@@ -350,5 +351,83 @@ describe('nothing sitting inside anything else', () => {
 
   it('claims more room for a bigger node', () => {
     expect(collideRadiusFor(page)).toBeGreaterThan(collideRadiusFor(small));
+  });
+});
+
+describe('finding things by what they are called', () => {
+  /*
+   * The search bar at the top of the vault. What it lights up is decided
+   * here, from what the picture already knows about every note: its name and
+   * the one line describing it. Instant, because nothing is fetched.
+   */
+  const notes = [
+    node({ name: 'cold-war-essay', description: 'Assignment' }),
+    node({
+      name: '2026-04-29-new-assignment-2-activities-chapter-4',
+      kind: 'episode',
+      source: 'gmail',
+      description: 'Melissa Leiter posted the assignment "2. Activities - Chapter 4".',
+    }),
+    node({ name: 'assemblee-nationale-du-quebec', description: 'Topic' }),
+    node({ name: 'vectors', description: 'Assignment' }),
+  ];
+
+  it('finds a note whose name carries every word typed', () => {
+    expect(find(notes, 'cold war')).toEqual(new Set(['cold-war-essay']));
+  });
+
+  it('finds a note by what its description says', () => {
+    expect(find(notes, 'leiter')).toEqual(
+      new Set(['2026-04-29-new-assignment-2-activities-chapter-4']),
+    );
+  });
+
+  it('wants every word, not any one of them', () => {
+    expect(find(notes, 'cold vectors')).toEqual(new Set());
+    expect(find(notes, 'essay cold')).toEqual(new Set(['cold-war-essay']));
+  });
+
+  it('finds nothing for an empty search', () => {
+    expect(find(notes, '')).toEqual(new Set());
+    expect(find(notes, '   ')).toEqual(new Set());
+  });
+
+  it('reads past case and accents', () => {
+    expect(find(notes, 'QUEBEC')).toEqual(new Set(['assemblee-nationale-du-quebec']));
+    expect(find(notes, 'Québec')).toEqual(new Set(['assemblee-nationale-du-quebec']));
+  });
+});
+
+describe('lighting up what was found', () => {
+  const edges: DocEdge[] = [
+    { from: 'user', to: 'class-french' },
+    { from: 'class-french', to: 'french-a' },
+  ];
+
+  it('lights what a search found and nothing else', () => {
+    const lit = litBy(edges, null, new Set(['french-a']));
+
+    expect(isLit(node({ name: 'french-a' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'class-french' }), lit)).toBe(false);
+    expect(colourFor(node({ name: 'user', kind: 'document' }), lit)).toBe(RESTING);
+  });
+
+  it('lights both the thing held and what was found', () => {
+    const lit = litBy(edges, 'user', new Set(['french-a']));
+
+    expect(isLit(node({ name: 'user' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'class-french' }), lit)).toBe(true);
+    expect(isLit(node({ name: 'french-a' }), lit)).toBe(true);
+  });
+
+  it('lights nothing when nothing is held and nothing was found', () => {
+    expect(litBy(edges, null, new Set())).toBeNull();
+  });
+
+  it('names what a search found, however unimportant it is', () => {
+    const leaf = node({ name: 'cold-war-essay' });
+
+    expect(labelled(leaf, new Set(), null, new Set(['cold-war-essay']))).toBe(true);
+    expect(labelled(leaf, new Set(), null, new Set(['vectors']))).toBe(false);
   });
 });
