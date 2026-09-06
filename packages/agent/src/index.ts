@@ -58,12 +58,22 @@ export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export {
   importDrive,
+  courseTitles,
   KEPT_LOOSE,
   type DriveFile,
   type DriveImportResult,
   type DriveVerdict,
 } from './vault/drive.js';
-export { judgeDriveFiles } from './vault/drive-triage.js';
+export {
+  judgeDriveFiles,
+  readLedger as readDriveLedger,
+  standingOf,
+  knownFiles,
+  driveKind,
+  yearBeforeStart,
+  type DriveLedger,
+  type DriveStanding,
+} from './vault/drive-triage.js';
 export { readUserDoc, writeUserDoc, USER_DOC_LIMIT } from './vault/user-doc.js';
 export { writeClassDocs, type ClassDocResult } from './vault/class-doc.js';
 export { writePersonDocs, type PersonDocResult } from './vault/person-doc.js';

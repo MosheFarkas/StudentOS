@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
 import type { DriveFile } from './drive.js';
-import { judgeDriveFiles } from './drive-triage.js';
+import { judgeDriveFiles, standingOf, type DriveLedger } from './drive-triage.js';
 
 /**
  * Deciding about every file in a Drive, not only the ones in a course folder.
@@ -205,5 +205,60 @@ describe('judging the files in a Drive', () => {
     expect(sent).toContain('History');
     expect(sent).toContain('including CAS');
     expect(sent).toContain('cas project brainstorming');
+  });
+});
+
+describe('where a file stands, before anybody is asked', () => {
+  /*
+   * One rule for the judge and for the script that explains the judge, so the
+   * two cannot disagree about why a file is where it is.
+   */
+  const courses = new Map([['History', 'history']]);
+  const known = new Map([
+    ['d-known', 'classroom'],
+    ['d-kept', 'drive'],
+  ]);
+  const ledger: DriveLedger = {
+    'd-out': { keep: false, course: null, modifiedAt: '2026-09-01T10:00:00.000Z' },
+  };
+  const at = (over: Partial<DriveFile> = {}) =>
+    standingOf(file(over), { known, courses, lastYearBegan: '2025-06-19', ledger });
+
+  it('says a folder or a shortcut is not a file', () => {
+    expect(at({ mimeType: 'application/vnd.google-apps.folder' })).toEqual({ why: 'not-a-file' });
+    expect(at({ mimeType: 'application/vnd.google-apps.shortcut' })).toEqual({ why: 'not-a-file' });
+  });
+
+  it('says Classroom already has it', () => {
+    expect(at({ fileId: 'd-known' })).toEqual({ why: 'classroom' });
+  });
+
+  it('says an earlier pass already kept it', () => {
+    expect(at({ fileId: 'd-kept' })).toEqual({ why: 'kept' });
+  });
+
+  it('says a folder placed it, and under what', () => {
+    expect(at({ path: ['Gr 10', 'History'] })).toEqual({ why: 'folder', course: 'history' });
+  });
+
+  it('says it is too old to be judged', () => {
+    expect(at({ modifiedAt: '2024-11-03T10:00:00.000Z' })).toEqual({ why: 'too-old' });
+  });
+
+  it('says what was remembered about it', () => {
+    expect(at({ fileId: 'd-out' })).toEqual({
+      why: 'remembered',
+      verdict: { keep: false, course: null },
+    });
+  });
+
+  it('says a changed file is no longer remembered', () => {
+    expect(at({ fileId: 'd-out', modifiedAt: '2026-09-05T10:00:00.000Z' })).toEqual({
+      why: 'unjudged',
+    });
+  });
+
+  it('says nobody has judged it yet', () => {
+    expect(at()).toEqual({ why: 'unjudged' });
   });
 });

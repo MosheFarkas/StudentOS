@@ -6,7 +6,7 @@ import { untrustedNote } from '../untrusted.js';
 import { courseForFolder } from './collapse.js';
 import { courseTitles, type DriveFile, type DriveVerdict } from './drive.js';
 import { retrying } from './retry.js';
-import type { Vault } from './vault.js';
+import type { Vault, VaultNote } from './vault.js';
 
 /**
  * Deciding about every file in a Drive, not only the ones in a course folder.
@@ -56,7 +56,76 @@ const LEDGER = 'drive-judged.json';
 const FOLDER = 'application/vnd.google-apps.folder';
 const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
-type Ledger = Record<string, DriveVerdict & { modifiedAt: string }>;
+/** What is remembered per file: the verdict, and the change time it was given for. */
+export type DriveLedger = Record<string, DriveVerdict & { modifiedAt: string }>;
+
+/**
+ * Where a file stands before anybody is asked about it.
+ *
+ * One rule, shared by the judge and by the script that explains the judge,
+ * so the two cannot disagree about why a file is where it is.
+ */
+export type DriveStanding =
+  /** A folder or a shortcut: structure, not content. */
+  | { why: 'not-a-file' }
+  /** Classroom already gave us this one, and knows more about it. */
+  | { why: 'classroom' }
+  /** Already in the vault from an earlier pass over the Drive. */
+  | { why: 'kept' }
+  /** A folder on its path names a course the student takes. */
+  | { why: 'folder'; course: string }
+  /** Last changed before last school year began. Nothing that old is kept. */
+  | { why: 'too-old' }
+  /** Asked about before, and unchanged since. */
+  | { why: 'remembered'; verdict: DriveVerdict }
+  /** Nobody has judged it yet, or it has changed since somebody did. */
+  | { why: 'unjudged' };
+
+export function standingOf(
+  file: DriveFile,
+  {
+    known,
+    courses,
+    lastYearBegan,
+    ledger,
+  }: {
+    /** File id to the source of the note that already carries it. */
+    known: ReadonlyMap<string, string>;
+    courses: ReadonlyMap<string, string>;
+    lastYearBegan: string;
+    ledger: DriveLedger;
+  },
+): DriveStanding {
+  if (file.mimeType === FOLDER || file.mimeType === SHORTCUT) return { why: 'not-a-file' };
+  const source = known.get(file.fileId);
+  if (source === 'drive') return { why: 'kept' };
+  if (source !== undefined) return { why: 'classroom' };
+
+  const filed = (file.path ?? [])
+    .map((folder) => courseForFolder(folder, courses))
+    .find((course): course is string => course !== null);
+  if (filed) return { why: 'folder', course: filed };
+
+  if (file.modifiedAt && file.modifiedAt.slice(0, 10) < lastYearBegan) return { why: 'too-old' };
+
+  const remembered = ledger[file.fileId];
+  if (remembered && remembered.modifiedAt === (file.modifiedAt ?? '')) {
+    return { why: 'remembered', verdict: { keep: remembered.keep, course: remembered.course } };
+  }
+  return { why: 'unjudged' };
+}
+
+/** Every file the vault already holds a note for, and where that note came from. */
+export function knownFiles(existing: readonly VaultNote[]): Map<string, string> {
+  const known = new Map<string, string>();
+  for (const note of existing) if (note.externalId) known.set(note.externalId, note.source);
+  return known;
+}
+
+/** The date the year before this one began. Last year is as far back as anything is kept. */
+export function yearBeforeStart(yearStart: string): string {
+  return `${Number(yearStart.slice(0, 4)) - 1}${yearStart.slice(4)}`;
+}
 
 const verdicts = z.object({
   files: z
@@ -108,30 +177,18 @@ export async function judgeDriveFiles(
   { vault, files, today, yearStart, school, userId }: DriveTriageOptions,
 ): Promise<Map<string, DriveVerdict>> {
   const existing = await vault.list('entity');
-  const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
+  const known = knownFiles(existing);
   const courses = courseTitles(existing);
-
-  // Last year is as far back as anything is kept, files included.
-  const lastYearBegan = `${Number(yearStart.slice(0, 4)) - 1}${yearStart.slice(4)}`;
+  const lastYearBegan = yearBeforeStart(yearStart);
 
   const ledger = await readLedger(vault);
   const judged = new Map<string, DriveVerdict>();
   const asking: DriveFile[] = [];
 
   for (const file of files) {
-    if (file.mimeType === FOLDER || file.mimeType === SHORTCUT) continue;
-    // Classroom knows more about this one, and its note is already written.
-    if (known.has(file.fileId)) continue;
-    // A folder that names a course has already decided.
-    if ((file.path ?? []).some((folder) => courseForFolder(folder, courses))) continue;
-    if (file.modifiedAt && file.modifiedAt.slice(0, 10) < lastYearBegan) continue;
-
-    const remembered = ledger[file.fileId];
-    if (remembered && remembered.modifiedAt === (file.modifiedAt ?? '')) {
-      judged.set(file.fileId, { keep: remembered.keep, course: remembered.course });
-      continue;
-    }
-    asking.push(file);
+    const standing = standingOf(file, { known, courses, lastYearBegan, ledger });
+    if (standing.why === 'remembered') judged.set(file.fileId, standing.verdict);
+    else if (standing.why === 'unjudged') asking.push(file);
   }
 
   let changed = false;
@@ -223,7 +280,7 @@ async function ask(
 /** One file, as much as a listing knows about it. */
 function describe(file: DriveFile, listedAs: number): string {
   const facts = [
-    kindOf(file.mimeType),
+    driveKind(file.mimeType),
     file.ownedByStudent ? 'theirs' : file.owner ? `shared by ${defang(file.owner)}` : 'shared',
     ...(file.path && file.path.length > 0 ? [`in ${defang(file.path.join('/'))}`] : []),
     ...(file.modifiedAt ? [`changed ${file.modifiedAt.slice(0, 10)}`] : []),
@@ -231,7 +288,7 @@ function describe(file: DriveFile, listedAs: number): string {
   return `${listedAs}. ${defang(file.name)} -- ${facts.join(', ')}`;
 }
 
-function kindOf(mimeType: string): string {
+export function driveKind(mimeType: string): string {
   if (mimeType === 'application/vnd.google-apps.document') return 'document';
   if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'spreadsheet';
   if (mimeType === 'application/vnd.google-apps.presentation') return 'slides';
@@ -264,17 +321,17 @@ function parse(content: unknown): z.infer<typeof verdicts> | null {
   }
 }
 
-async function readLedger(vault: Vault): Promise<Ledger> {
+export async function readLedger(vault: Vault): Promise<DriveLedger> {
   try {
     const parsed: unknown = JSON.parse(await readFile(join(vault.directory, LEDGER), 'utf8'));
-    return parsed && typeof parsed === 'object' ? (parsed as Ledger) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as DriveLedger) : {};
   } catch {
     // Missing, or unreadable: either way nothing is remembered.
     return {};
   }
 }
 
-async function writeLedger(vault: Vault, ledger: Ledger): Promise<void> {
+async function writeLedger(vault: Vault, ledger: DriveLedger): Promise<void> {
   await mkdir(vault.directory, { recursive: true });
   await writeFile(join(vault.directory, LEDGER), JSON.stringify(ledger, null, 2));
 }
