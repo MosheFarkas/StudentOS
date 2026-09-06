@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
-import { agentMessages, agents } from '@contexto/db';
+import { agentMemories, agentMessages, agents } from '@contexto/db';
 import {
   createAgentSchema,
   sendMessageSchema,
@@ -11,7 +11,7 @@ import {
 } from '@contexto/shared';
 import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
-import { Vault, buildGraph } from '@contexto/agent';
+import { Vault, buildGraph, forgetChatInChatsDoc, writeUserDoc } from '@contexto/agent';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
 import { turnActivity, turnRunning } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
@@ -231,10 +231,44 @@ export function createAgentRoutes(ctx: AppContext) {
         });
       })
 
+      /**
+       * Gone, and off the page it taught.
+       *
+       * Messages, memories and skills cascade -- see the FKs in packages/db.
+       * What the cascade cannot reach is chats.md: it is rewritten whole and
+       * keeps no record of which chat said what, so the memories are read
+       * before the row goes and the page is rewritten without them after the
+       * response. After, because that is a model call and a student pressing
+       * Delete should not wait on one. A failure there is logged, and the chat
+       * is still gone, which is the half they asked for first.
+       *
+       * This rewrites the page while the student may be mid-conversation
+       * elsewhere, which the background job is careful never to do: the page
+       * sits in the cached prefix, so that other conversation loses its cache
+       * for the rest of its turns. A one-off cost of an action they chose.
+       */
       .delete('/:id', auth, async (c) => {
-        await ownedAgent(c.get('userId'), c.req.param('id'));
-        // Messages, memories, and skills cascade -- see the FKs in packages/db.
-        await ctx.db.delete(agents).where(eq(agents.id, c.req.param('id')));
+        const userId = c.get('userId');
+        const agent = await ownedAgent(userId, c.req.param('id'));
+
+        const vault = vaultFor(ctx.env?.VAULT_ROOT, userId);
+        const said = vault
+          ? (
+              await ctx.db
+                .select({ content: agentMemories.content })
+                .from(agentMemories)
+                .where(eq(agentMemories.agentId, agent.id))
+                .orderBy(asc(agentMemories.occurredAt))
+            ).map((row) => row.content)
+          : [];
+
+        await ctx.db.delete(agents).where(eq(agents.id, agent.id));
+
+        if (vault && said.length > 0) {
+          void forgetChat(ctx, { vault, userId, exchanges: said }).catch((error: unknown) => {
+            console.error(`Forgetting a deleted chat failed for student ${userId}`, error);
+          });
+        }
         return c.body(null, 204);
       })
 
@@ -307,6 +341,18 @@ export function createAgentRoutes(ctx: AppContext) {
 /** The student's vault, when this deployment has vaults configured. */
 function vaultFor(root: string | undefined, ownerId: string): Vault | undefined {
   return root ? new Vault(root, ownerId) : undefined;
+}
+
+/** The chats page without a deleted conversation, and the page written from it. */
+async function forgetChat(
+  ctx: AppContext,
+  { vault, userId, exchanges }: { vault: Vault; userId: string; exchanges: string[] },
+): Promise<void> {
+  const llm = await ctx.llm.resolve(userId);
+  const { changed } = await forgetChatInChatsDoc({ llm }, { vault, exchanges, userId });
+  // The user page describes this one, so it moves when this one does -- the
+  // same rule the background job follows.
+  if (changed) await writeUserDoc({ llm }, { vault, userId });
 }
 
 function toAgent(row: typeof agents.$inferSelect): Agent {

@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
 import { readDocument, writeDocument } from './documents.js';
-import { NOTHING_KEPT_YET, ensureChatsDoc, updateChatsDoc } from './chats-doc.js';
+import {
+  NOTHING_KEPT_YET,
+  ensureChatsDoc,
+  forgetChatInChatsDoc,
+  updateChatsDoc,
+} from './chats-doc.js';
 
 /**
  * What is kept from a student's conversations once they are over.
@@ -241,5 +246,102 @@ describe('the page existing before there is anything on it', () => {
     });
 
     expect((await readDocument(vault, 'chats'))?.body).toBe('They read on a phone.');
+  });
+});
+
+describe('taking a deleted conversation back off the page', () => {
+  /*
+   * The page has no memory of which conversation taught it what. So when a
+   * student deletes one, the only way to honour it is to show the writer the
+   * conversation and ask for the page as it would stand had it never happened.
+   */
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-chatsforget-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  const standing = (body: string) =>
+    writeDocument(vault, { name: 'chats', description: 'What they have said', body });
+
+  const forget = (llm: unknown, exchanges = EXCHANGES) =>
+    forgetChatInChatsDoc({ llm } as never, { vault, exchanges, userId: 'u-1' });
+
+  it('takes off what the conversation taught', async () => {
+    await standing('# Them\n\nShort answers. Revises late. Plays hockey.');
+
+    const result = await forget(llmSaying('# Them\n\nPlays hockey.'));
+
+    expect(result.changed).toBe(true);
+    expect((await readDocument(vault, 'chats'))?.body).toBe('# Them\n\nPlays hockey.');
+  });
+
+  it('shows the writer the page as it stands and the conversation being deleted', async () => {
+    await standing('Plays hockey.');
+    const llm = llmSaying('UNCHANGED');
+
+    await forget(llm);
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('Plays hockey');
+    expect(sent).toContain('always on my phone');
+  });
+
+  it('leaves the page alone when nothing on it came from that conversation', async () => {
+    await standing('Plays hockey.');
+
+    const result = await forget(llmSaying('UNCHANGED'));
+
+    expect(result.changed).toBe(false);
+    expect((await readDocument(vault, 'chats'))?.body).toBe('Plays hockey.');
+  });
+
+  it('puts the placeholder back when nothing is left', async () => {
+    /*
+     * The opposite of the writer's rule. There, a model narrating an absence
+     * must never be saved as the page; here, an absence is the truthful
+     * outcome of deleting the only conversation that taught anything, and
+     * the page goes back to saying so in the words a new vault uses.
+     */
+    await standing('Short answers. Revises late.');
+
+    const result = await forget(llmSaying('NOTHING'));
+
+    expect(result.changed).toBe(true);
+    expect((await readDocument(vault, 'chats'))?.body).toBe(NOTHING_KEPT_YET);
+  });
+
+  it('does not call a model when the page has nothing on it', async () => {
+    await ensureChatsDoc(vault);
+    const llm = llmSaying('NOTHING');
+
+    const result = await forget(llm);
+
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(result.changed).toBe(false);
+    expect((await readDocument(vault, 'chats'))?.body).toBe(NOTHING_KEPT_YET);
+  });
+
+  it('does not call a model for a conversation that said nothing', async () => {
+    await standing('Plays hockey.');
+    const llm = llmSaying('NOTHING');
+
+    const result = await forget(llm, []);
+
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(result.changed).toBe(false);
+  });
+
+  it('does not blank the page on an empty answer', async () => {
+    await standing('Plays hockey.');
+
+    const result = await forget(llmSaying('   '));
+
+    expect(result.changed).toBe(false);
+    expect((await readDocument(vault, 'chats'))?.body).toBe('Plays hockey.');
   });
 });

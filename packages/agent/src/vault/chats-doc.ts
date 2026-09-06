@@ -165,3 +165,101 @@ export async function updateChatsDoc(
 
   return { changed: true };
 }
+
+export interface ForgetChatOptions {
+  vault: Vault;
+  /** Everything the deleted conversation said, oldest first. */
+  exchanges: string[];
+  userId: string;
+}
+
+/**
+ * The most of a deleted conversation the writer is shown, in characters.
+ *
+ * The page was written from at most forty exchanges per pass, but over a long
+ * chat's life a fact could have come from any of them, so the whole thing is
+ * the honest input. Bounded because a chat that ran for a term is a prompt that
+ * does not fit; the newest exchanges are the ones kept, since a page rewritten
+ * whole each pass is most shaped by what was said last.
+ */
+const FORGET_BUDGET = 150_000;
+
+/**
+ * Take a deleted conversation back off the page.
+ *
+ * The page has no memory of which conversation taught it what -- it is
+ * rewritten whole, and a fact said in one chat is simply on the page after.
+ * That is right while the chat exists and wrong the moment a student deletes
+ * it: the transcript and the memories go, and what they taught has to go too,
+ * or deleting a chat quietly leaves the part of it that is read on every turn.
+ *
+ * So the writer is shown the page and the conversation, and asked for the page
+ * as it would stand had that conversation never happened. Judgement, not
+ * bookkeeping, because bookkeeping is what the page does not have.
+ *
+ * Unlike the writer this may leave nothing behind. There, a model narrating an
+ * absence must never be saved as the page; here, an absence is the truthful
+ * outcome of deleting the only conversation that taught anything, and the page
+ * goes back to the words a new vault uses.
+ */
+export async function forgetChatInChatsDoc(
+  { llm }: ChatsDocDeps,
+  { vault, exchanges, userId }: ForgetChatOptions,
+): Promise<{ changed: boolean }> {
+  if (exchanges.length === 0) return { changed: false };
+
+  const existing = await readDocument(vault, CHATS_DOC_NAME);
+  const standing = existing?.body?.trim() ?? '';
+  if (standing === '' || standing === NOTHING_KEPT_YET) return { changed: false };
+
+  const shown: string[] = [];
+  let size = 0;
+  for (const exchange of [...exchanges].reverse()) {
+    size += exchange.length;
+    if (size > FORGET_BUDGET && shown.length > 0) break;
+    shown.unshift(exchange);
+  }
+
+  const answer = await retrying(() =>
+    llm.chat(
+      {
+        messages: [
+          { role: 'system', content: CHATS_DOC.body },
+          {
+            role: 'user',
+            content: [
+              `The page as it stands:\n\n${standing}`,
+              '',
+              'The student has deleted one of their conversations. This is it, oldest first:',
+              '',
+              shown.join('\n\n'),
+              '',
+              'Write the page again as it would stand if that conversation had never happened.',
+              'Take off whatever the page learned from it. Leave everything else exactly as it is.',
+              'If nothing on the page came from this conversation, reply with the single word',
+              '`UNCHANGED`. If nothing would be left on the page, reply with the single word',
+              '`NOTHING`.',
+              '',
+              `The page may be at most ${CHATS_DOC_LIMIT} characters.`,
+            ].join('\n'),
+          },
+        ],
+      },
+      { userId },
+    ),
+  );
+
+  const said = typeof answer.content === 'string' ? answer.content.trim() : '';
+  if (said === '' || said.toUpperCase().startsWith(NOTHING)) return { changed: false };
+
+  const body = DESCRIBES_NOTHING.test(said) ? NOTHING_KEPT_YET : capDocument(said, CHATS_DOC_LIMIT);
+  if (body === '' || body === standing) return { changed: false };
+
+  await writeDocument(vault, {
+    name: CHATS_DOC_NAME,
+    description: 'What this student has told you, across every conversation',
+    body,
+  });
+
+  return { changed: true };
+}

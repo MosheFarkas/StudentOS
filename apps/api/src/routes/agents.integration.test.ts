@@ -1,11 +1,11 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
-import { Vault } from '@contexto/agent';
+import { Vault, readDocument, writeDocument } from '@contexto/agent';
 import { eq } from 'drizzle-orm';
-import { agentMessages } from '@contexto/db';
+import { agentMemories, agentMessages } from '@contexto/db';
 import { createAuth } from '../auth.js';
 import { handleError } from '../errors.js';
 import { createRoutes } from './index.js';
@@ -40,6 +40,27 @@ let app: Hono;
 let withVaults: Hono;
 let vaultRoot: string;
 
+/*
+ * The one model call these routes make, faked.
+ *
+ * Deleting a chat rewrites the page it taught, and that is a model call. It
+ * answers with whatever a test set, and keeps what it was shown so a test can
+ * check the deleted conversation actually reached it.
+ */
+let modelSays = 'UNCHANGED';
+let modelSaw: unknown;
+const model = {
+  chat: async (request: unknown) => {
+    modelSaw = request;
+    return {
+      content: modelSays,
+      toolCalls: [],
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
+      finishReason: 'stop' as const,
+    };
+  },
+};
+
 beforeAll(async () => {
   const db = await testDb();
 
@@ -69,7 +90,11 @@ beforeAll(async () => {
   app = new Hono().route('/api', createRoutes(ctx)).onError(handleError);
 
   vaultRoot = mkdtempSync(join(tmpdir(), 'contexto-routes-vault-'));
-  const vaultCtx = { ...ctx, env: { ...env, VAULT_ROOT: vaultRoot } } as unknown as AppContext;
+  const vaultCtx = {
+    ...ctx,
+    env: { ...env, VAULT_ROOT: vaultRoot },
+    llm: { resolve: async () => model },
+  } as unknown as AppContext;
   withVaults = new Hono().route('/api', createRoutes(vaultCtx)).onError(handleError);
 });
 
@@ -233,6 +258,46 @@ describe('deleting an agent', () => {
     await app.request(`/api/agents/${doomed.id}`, { method: 'DELETE', ...as(alice.token) });
 
     expect((await app.request(`/api/agents/${keeper.id}`, as(alice.token))).status).toBe(200);
+  });
+
+  /*
+   * And off the page it taught.
+   *
+   * chats.md is rewritten whole and remembers nothing about which chat said
+   * what, so this is the one part of a deletion the cascade cannot do. The
+   * memories are read before the row goes, and the page is rewritten without
+   * them after the response -- a model call is not something a delete should
+   * make a student wait on.
+   */
+  it('takes what it taught off the chats page', async () => {
+    const alice = await createUser();
+    const doomed = await createAgent(alice.id);
+    const db = await testDb();
+    await db.insert(agentMemories).values({
+      agentId: doomed.id,
+      kind: 'conversation',
+      content: 'Student: i play hockey at weekends\nAgent: Noted.',
+      source: 'agent_run',
+    });
+
+    const vault = new Vault(vaultRoot, alice.id);
+    await writeDocument(vault, {
+      name: 'chats',
+      description: 'What they have said',
+      body: 'Plays hockey at weekends. Reads on a phone.',
+    });
+    modelSays = 'Reads on a phone.';
+
+    const res = await withVaults.request(`/api/agents/${doomed.id}`, {
+      method: 'DELETE',
+      ...as(alice.token),
+    });
+    expect(res.status).toBe(204);
+
+    await vi.waitFor(async () => {
+      expect((await readDocument(vault, 'chats'))?.body).toBe('Reads on a phone.');
+    });
+    expect(JSON.stringify(modelSaw)).toContain('hockey at weekends');
   });
 });
 
