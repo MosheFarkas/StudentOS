@@ -979,9 +979,9 @@ dd {
   gap: 0.4rem;
 }
 
-/* Widened with the image: the name gained a space, and the mark should not shrink for it. */
+/* Sized so the type stays the same on screen as the image's proportions change. */
 .signin img {
-  width: min(338px, 78vw);
+  width: min(292px, 78vw);
   margin-bottom: 0.75rem;
 }
 
