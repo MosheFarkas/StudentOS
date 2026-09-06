@@ -84,30 +84,52 @@
 }
 
 :root {
-  --ink: #0a1045;
-  --ink-soft: #3d4470;
-  --ink-faint: #6b7194;
+  --ink: light-dark(#0a1045, #e8eaff);
+  --ink-soft: light-dark(#3d4470, #b4b9dc);
+  --ink-faint: light-dark(#6b7194, #8a90bb);
 
-  --violet: #5010d0;
-  --violet-dark: #3f0ba6;
-  --blue: #4070ff;
-  --blue-dark: #2f5ce6;
-  --lavender: #c090ff;
-  --teal: #2f9bbc;
+  --violet: light-dark(#5010d0, #6c3ef5);
+  --violet-dark: light-dark(#3f0ba6, #7d55ff);
+  --blue: light-dark(#4070ff, #3d6fe6);
+  --blue-dark: light-dark(#2f5ce6, #5583f0);
+  --lavender: light-dark(#c090ff, #c4b5fd);
+  --teal: light-dark(#2f9bbc, #5cc8e0);
 
-  --page: #faf9fd;
-  --surface: #ffffff;
-  --line: #e3e4ee;
-  --line-strong: #cdcfe0;
-  --wash: #f4f4f9;
+  --page: light-dark(#faf9fd, #0c0f2a);
+  --surface: light-dark(#ffffff, #151a3e);
+  --line: light-dark(#e3e4ee, #262b55);
+  --line-strong: light-dark(#cdcfe0, #383e70);
+  --wash: light-dark(#f4f4f9, #1c2148);
 
-  --ok: #12805c;
-  --warn: #8a5a00;
-  --danger: #b3261e;
+  --ok: light-dark(#12805c, #58c99a);
+  --warn: light-dark(#8a5a00, #f0b35a);
+  --danger: light-dark(#b3261e, #ff7b72);
 
+  /*
+   * Dark is not light inverted. The page is navy-tinted dark grey, never
+   * black; surfaces step lighter as they rise; text is off-white; the
+   * accents are lighter and less saturated so they do not vibrate. Fills and
+   * text need different violets on dark, hence -ink twins.
+   */
+  --violet-ink: light-dark(#5010d0, #b39aff);
+  --blue-ink: light-dark(#2f5ce6, #8fb0ff);
+  --focus: light-dark(#4070ff, #8fb0ff);
+  --tint: light-dark(var(--tint), rgba(255, 255, 255, 0.06));
+  --tint-strong: light-dark(var(--tint-strong), rgba(255, 255, 255, 0.1));
+  --accent-wash: light-dark(var(--accent-wash), rgba(179, 154, 255, 0.12));
+  --accent-wash-strong: light-dark(var(--accent-wash-strong), rgba(179, 154, 255, 0.18));
+  --danger-wash: light-dark(#fdf3f2, rgba(255, 123, 114, 0.12));
+  --warn-line: light-dark(#e0a53a, #f0b35a);
+  --warn-wash: light-dark(#fdf8ee, rgba(240, 179, 90, 0.12));
+  --thumb: light-dark(#ffffff, #e8eaff);
+  --scrim: light-dark(rgba(10, 16, 69, 0.22), rgba(0, 0, 0, 0.6));
+  --shadow-soft: 0 1px 2px rgba(10, 16, 69, 0.04), 0 6px 20px rgba(10, 16, 69, 0.06);
+  --shadow-float: 0 1px 2px var(--tint-strong), 0 24px 60px rgba(10, 16, 69, 0.22);
+  /* System by default; a pinned choice is stamped on the root by lib/theme.ts. */
+  color-scheme: light dark;
   --radius: 10px;
   --radius-lg: 14px;
-  --shadow: 0 1px 2px rgba(10, 16, 69, 0.06), 0 8px 24px rgba(10, 16, 69, 0.05);
+  --shadow: 0 1px 2px rgba(10, 16, 69, 0.06), 0 8px 24px var(--tint);
 
   /* The agent's voice, and nowhere else. */
   --serif: 'PT Serif', ui-serif, Georgia, 'Iowan Old Style', 'Times New Roman', serif;
@@ -123,6 +145,33 @@
   -webkit-font-smoothing: antialiased;
 }
 
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/*
+ * Shadows do not read on a dark ground; a shadow is a darker patch and the
+ * ground is already dark. What separates a raised surface there is its
+ * lighter colour and a faint edge, so the shadow tokens become edges.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --shadow: 0 0 0 1px var(--line);
+    --shadow-soft: 0 0 0 1px var(--line);
+    --shadow-float: 0 0 0 1px var(--line-strong), 0 30px 90px rgba(0, 0, 0, 0.6);
+  }
+}
+
+:root[data-theme='dark'] {
+  --shadow: 0 0 0 1px var(--line);
+  --shadow-soft: 0 0 0 1px var(--line);
+  --shadow-float: 0 0 0 1px var(--line-strong), 0 30px 90px rgba(0, 0, 0, 0.6);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -131,6 +180,7 @@ body {
   margin: 0;
   min-height: 100dvh;
   background: var(--page);
+  color: var(--ink);
 }
 
 main {
@@ -170,7 +220,7 @@ p {
 }
 
 a {
-  color: var(--violet);
+  color: var(--violet-ink);
   text-underline-offset: 2px;
 }
 
@@ -272,7 +322,7 @@ button:disabled {
 button.primary,
 a.button.primary {
   background: var(--violet);
-  border-color: var(--violet);
+  border-color: var(--violet-ink);
   color: #fff;
 }
 
@@ -296,12 +346,12 @@ button.danger {
 }
 
 button.danger:hover:not(:disabled) {
-  background: #fdf3f2;
+  background: var(--danger-wash);
   border-color: var(--danger);
 }
 
 :where(button, input, select, textarea, a):focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -590,9 +640,9 @@ hr {
 .notice {
   margin: 0 0 0.75rem;
   padding: 0.6rem 0.75rem;
-  border-left: 3px solid #e0a53a;
+  border-left: 3px solid var(--warn-line);
   border-radius: 0 var(--radius) var(--radius) 0;
-  background: #fdf8ee;
+  background: var(--warn-wash);
   color: var(--ink-soft);
   font-size: 0.86rem;
   line-height: 1.5;
@@ -642,7 +692,7 @@ hr {
   width: 1.1rem;
   height: 1.1rem;
   border-radius: 50%;
-  background: #fff;
+  background: var(--thumb);
   box-shadow: 0 1px 3px rgba(10, 16, 69, 0.35);
   transition: transform 0.15s ease;
   pointer-events: none;
@@ -661,7 +711,7 @@ hr {
 }
 
 .switch input:focus-visible ~ .switch-track {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -710,7 +760,7 @@ hr {
   max-width: 78%;
   padding: 0.6rem 0.9rem;
   border-radius: 15px;
-  background: rgba(10, 16, 69, 0.05);
+  background: var(--tint);
   color: var(--ink);
 }
 
@@ -781,7 +831,7 @@ hr {
 .message.user .message-said {
   padding: 0.6rem 0.9rem;
   border-radius: 15px;
-  background: rgba(10, 16, 69, 0.05);
+  background: var(--tint);
   white-space: pre-wrap;
 }
 
@@ -810,9 +860,7 @@ hr {
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow:
-    0 1px 2px rgba(10, 16, 69, 0.04),
-    0 6px 20px rgba(10, 16, 69, 0.06);
+  box-shadow: var(--shadow-soft);
 }
 
 .composer-row {
@@ -917,12 +965,12 @@ hr {
   background: var(--surface);
   color: var(--ink-soft);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(10, 16, 69, 0.1);
+  box-shadow: var(--shadow-soft);
 }
 
 .to-bottom:hover {
-  color: var(--violet);
-  border-color: var(--violet);
+  color: var(--violet-ink);
+  border-color: var(--violet-ink);
 }
 
 /* An arrow, not the word. The field is the sentence; this is the full stop. */
@@ -942,7 +990,7 @@ hr {
 
 .composer-send:hover:not(:disabled) {
   background: var(--wash);
-  color: var(--violet);
+  color: var(--violet-ink);
 }
 
 .composer-send:disabled {
@@ -1016,7 +1064,7 @@ dd {
    appears both signed out and in Settings, and they must not drift apart. */
 a.button.blue {
   background: var(--blue);
-  border-color: var(--blue);
+  border-color: var(--blue-ink);
   color: #fff;
 }
 
@@ -1062,7 +1110,7 @@ main:has(.preview-pane) .workspace {
   border-radius: 6px;
   text-decoration: none;
   background: var(--wash);
-  color: var(--violet);
+  color: var(--violet-ink);
 }
 
 .message.user a.chip {
@@ -1078,7 +1126,7 @@ main:has(.preview-pane) .workspace {
 }
 
 .message a.chip:hover {
-  border-color: var(--violet);
+  border-color: var(--violet-ink);
 }
 
 .preview-pane {
@@ -1293,7 +1341,7 @@ a.button {
   margin: 0;
   box-shadow:
     inset 0 0 0 1px var(--line),
-    0 30px 90px rgba(10, 16, 69, 0.35);
+    var(--shadow-float);
 }
 
 /*
@@ -1400,7 +1448,7 @@ a.button {
 }
 
 .agent-browser-close:hover {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--ink-faint);
 }
 
@@ -1484,7 +1532,7 @@ a.button {
 
 .vault-phases li[data-state='now']::before {
   content: '◐';
-  color: var(--violet);
+  color: var(--violet-ink);
 }
 
 .vault-phases .count {
@@ -1684,7 +1732,7 @@ a.button {
   background: none;
   padding: 0;
   font: inherit;
-  color: var(--violet);
+  color: var(--violet-ink);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1781,16 +1829,16 @@ a.button {
 
 .sidebar-new:hover,
 .sidebar-chat:hover {
-  background: rgba(80, 16, 208, 0.07);
+  background: var(--accent-wash);
 }
 
 .sidebar-new.is-current,
 .sidebar-chat.is-current {
-  background: rgba(80, 16, 208, 0.11);
+  background: var(--accent-wash-strong);
 }
 
 .sidebar-chat.is-menu-open {
-  background: rgba(80, 16, 208, 0.07);
+  background: var(--accent-wash);
 }
 
 .sidebar-new svg {
@@ -1847,7 +1895,7 @@ a.button {
 
 .pin-mark {
   flex: none;
-  color: var(--violet);
+  color: var(--violet-ink);
 }
 
 .sidebar-chat.is-current .sidebar-chat-open {
@@ -1885,7 +1933,7 @@ a.button {
 }
 
 .sidebar-chat-more:hover {
-  background: rgba(10, 16, 69, 0.08);
+  background: var(--tint-strong);
   color: var(--ink);
 }
 
@@ -1942,7 +1990,7 @@ a.button {
 }
 
 .chat-menu .danger-item:hover {
-  background: rgba(179, 38, 30, 0.08);
+  background: var(--danger-wash);
 }
 
 /* ---------- the account footer ---------- */
@@ -1970,7 +2018,7 @@ a.button {
 }
 
 .account-button:hover {
-  background: rgba(80, 16, 208, 0.07);
+  background: var(--accent-wash);
 }
 
 .account-initial {
@@ -2191,7 +2239,7 @@ a.button {
 
 .composer-attach:hover:not(:disabled) {
   background: var(--wash);
-  color: var(--violet);
+  color: var(--violet-ink);
   border-color: var(--line-strong);
 }
 
@@ -2254,7 +2302,7 @@ a.button {
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.06em;
-  color: var(--violet);
+  color: var(--violet-ink);
 }
 
 .attached-name {
@@ -2290,7 +2338,7 @@ a.button {
   cursor: pointer;
   opacity: 0;
   transition: opacity 120ms ease;
-  box-shadow: 0 1px 3px rgba(10, 16, 69, 0.16);
+  box-shadow: var(--shadow-soft);
 }
 
 .attached-item:hover .attached-remove,
@@ -2350,7 +2398,7 @@ a.button {
     position: fixed;
     inset: 0;
     z-index: 25;
-    background: rgba(10, 16, 69, 0.3);
+    background: var(--scrim);
     opacity: 0;
     pointer-events: none;
     transition: opacity 180ms ease;
@@ -2515,7 +2563,7 @@ body.dialog-open .app {
   display: grid;
   place-items: center;
   padding: 1.25rem;
-  background: rgba(10, 16, 69, 0.22);
+  background: var(--scrim);
   animation: scrim-in 140ms ease-out;
 }
 
@@ -2526,9 +2574,7 @@ body.dialog-open .app {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow:
-    0 1px 2px rgba(10, 16, 69, 0.08),
-    0 24px 60px rgba(10, 16, 69, 0.22);
+  box-shadow: var(--shadow-float);
   animation: dialog-in 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
@@ -2588,9 +2634,7 @@ body.dialog-open .app {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow:
-    0 1px 2px rgba(10, 16, 69, 0.08),
-    0 24px 60px rgba(10, 16, 69, 0.22);
+  box-shadow: var(--shadow-float);
   overflow: hidden;
   animation: dialog-in 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
@@ -2626,11 +2670,11 @@ body.dialog-open .app {
 }
 
 .settings-tab:hover {
-  background: rgba(80, 16, 208, 0.07);
+  background: var(--accent-wash);
 }
 
 .settings-tab.is-current {
-  background: rgba(80, 16, 208, 0.11);
+  background: var(--accent-wash-strong);
   color: var(--ink);
   font-weight: 500;
 }
@@ -2806,7 +2850,7 @@ body.dialog-open .app {
 
 .settings-input:focus {
   outline: none;
-  border-color: var(--violet);
+  border-color: var(--violet-ink);
 }
 
 .settings-static {
@@ -2876,7 +2920,7 @@ body.dialog-open .app {
 .segmented button.is-current {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(10, 16, 69, 0.1);
+  box-shadow: var(--shadow-soft);
 }
 
 /* ---------- usage ---------- */
@@ -2909,7 +2953,7 @@ body.dialog-open .app {
 .usage-track {
   height: 7px;
   border-radius: 999px;
-  background: rgba(10, 16, 69, 0.08);
+  background: var(--tint-strong);
   overflow: hidden;
 }
 

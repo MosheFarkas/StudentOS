@@ -5,7 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Contexto Agent</title>
     <meta name="description" content="An AI agent that knows your coursework." />
-    <meta name="theme-color" content="#0a1045" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf9fd" />
+    <!--
+      A pinned appearance is applied before the first paint, from the copy
+      lib/theme.ts keeps in the browser, so a student who chose dark never
+      sees a light frame first. Nothing stamped means follow the system.
+    -->
+    <script>
+      try {
+        var a = localStorage.getItem('appearance');
+        if (a === 'light' || a === 'dark') document.documentElement.dataset.theme = a;
+        var dark =
+          a === 'dark' || (a !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.querySelector('meta[name="theme-color"]').content = '#0c0f2a';
+      } catch (e) {}
+    </script>
 
     <!--
       Separate files per size rather than one large icon for the browser to

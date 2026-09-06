@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MeProfile, UsageStatus } from '@contexto/shared';
 import { api } from '../lib/api.js';
+import { applyAppearance, type Appearance } from '../lib/theme.js';
 import { forgetGraph, loadGraph } from '../lib/vaultGraph.js';
 import { signOut } from '../lib/auth.js';
 import { initialOf } from '../lib/initial.js';
@@ -133,10 +134,13 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
     }
   }
 
-  async function setAppearance(value: 'light' | 'dark') {
+  async function setAppearance(value: Appearance) {
     if (!me) return;
-    await api.me.$patch({ json: { appearance: value } });
+    // On screen first, then saved: a theme that waits for a round trip
+    // feels like a switch that did not take.
+    applyAppearance(value);
     onChange({ ...me, appearance: value });
+    await api.me.$patch({ json: { appearance: value } });
   }
 
   return (
@@ -185,20 +189,14 @@ function General({ me, onChange }: { me: MeProfile | null; onChange: (me: MeProf
 
       <Row label="Appearance">
         <div className="segmented">
-          {/*
-            Two states, not three. Following the system is only meaningful
-            once there is a dark theme to follow it into, and offering it now
-            would be offering a choice between light and light.
-          */}
-          {(['light', 'dark'] as const).map((option) => (
+          {/* System follows the OS live; light and dark are pinned. */}
+          {(['system', 'light', 'dark'] as const).map((option) => (
             <button
               key={option}
-              className={
-                (me.appearance === 'dark' ? 'dark' : 'light') === option ? 'is-current' : ''
-              }
+              className={me.appearance === option ? 'is-current' : ''}
               onClick={() => void setAppearance(option)}
             >
-              {option === 'light' ? 'Light' : 'Dark'}
+              {option === 'system' ? 'System' : option === 'light' ? 'Light' : 'Dark'}
             </button>
           ))}
         </div>

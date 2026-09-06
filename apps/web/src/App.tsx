@@ -4,6 +4,7 @@ import { desktop } from './lib/desktop.js';
 import { MAC_DOWNLOAD } from './lib/download.js';
 import { navigate, useRoute } from './lib/router.js';
 import { signInWithGoogle, useSession } from './lib/auth.js';
+import { applyAppearance, useResolvedTheme, type Appearance } from './lib/theme.js';
 import { WorkingProvider } from './lib/working.js';
 import { Chat } from './screens/Chat.js';
 import { NewChat } from './screens/NewChat.js';
@@ -13,6 +14,7 @@ import { Settings } from './screens/Settings.js';
 
 export function App() {
   const { data: session, isPending } = useSession();
+  const theme = useResolvedTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   /*
    * Set by whichever screen is open. Only the sidebar reads it, and only to
@@ -35,7 +37,11 @@ export function App() {
     if (!session?.user) return;
     void (async () => {
       const res = await api.me.$get();
-      if (res.ok) setPreferred(((await res.json()) as { preferredName: string }).preferredName);
+      if (!res.ok) return;
+      const me = (await res.json()) as { preferredName: string; appearance: Appearance };
+      setPreferred(me.preferredName);
+      // The account's choice wins over whatever this browser last remembered.
+      applyAppearance(me.appearance);
     })();
   }, [session?.user]);
 
@@ -65,7 +71,7 @@ export function App() {
     return (
       <main>
         <div className="signin">
-          <img src="/logo.png" alt="Contexto Agent" />
+          <img src={theme === 'dark' ? '/logo-dark.png' : '/logo.png'} alt="Contexto Agent" />
           <p className="muted">An AI agent that knows your coursework.</p>
           <div className="panel">
             <p>Sign in with your educational Google account to get started.</p>

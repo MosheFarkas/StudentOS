@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Agent } from '@contexto/shared';
 import { api } from '../lib/api.js';
 import { navigate } from '../lib/router.js';
+import { useResolvedTheme } from '../lib/theme.js';
 import type { Route } from '../lib/router.js';
 import { signOut } from '../lib/auth.js';
 import { initialOf } from '../lib/initial.js';
@@ -29,6 +30,7 @@ interface Props {
  * chat, and the agent behind it is plumbing the student never meets.
  */
 export function Sidebar({ route, working, name, email, onOpenSettings }: Props) {
+  const theme = useResolvedTheme();
   const [chats, setChats] = useState<Agent[] | null>(null);
   /** Which row's menu is open. Only ever one. */
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -110,7 +112,11 @@ export function Sidebar({ route, working, name, email, onOpenSettings }: Props) 
         onClick={() => go({ name: 'new' })}
       >
         <LogoMark size={30} working={working} />
-        <img className="sidebar-wordmark" src="/wordmark.png" alt="Contexto Agent" />
+        <img
+          className="sidebar-wordmark"
+          src={theme === 'dark' ? '/wordmark-dark.png' : '/wordmark.png'}
+          alt="Contexto Agent"
+        />
       </button>
 
       <button
