@@ -1,6 +1,6 @@
 ---
 name: vault-reading
-description: How to find things in ContextoVault, what its links mean, and when the vault is the right source rather than a live tool. Loaded when an agent has a vault to consult.
+description: Load before answering anything about this student's courses, teachers, assignments, school, what they have told you before, or what happened and when -- before the first vault_search or vault_open of a turn. Not needed for arithmetic, general knowledge, a question the attached files answer, or a site you are about to open.
 ---
 
 # Reading ContextoVault

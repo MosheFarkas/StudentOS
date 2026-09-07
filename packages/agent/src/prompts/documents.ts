@@ -12,14 +12,13 @@ import { fileURLToPath } from 'node:url';
  * talks is an edit to one file that a non-programmer can make.
  *
  * The frontmatter follows Anthropic's SKILL.md convention -- a name and a
- * description and nothing else -- because the documents most likely to arrive
- * here next are built-in skills, and a skill needs a description that a loader
- * can read to decide whether the body is worth its tokens. Nothing conditional
- * exists yet, so the description is validated rather than used. Validating it
- * now is what makes it trustworthy when something finally reads it.
+ * description and nothing else. For the three documents that are skills
+ * (see skills/builtin.ts) the description is exactly what the model reads: it
+ * says when to load the body, and the body arrives only when the model asks
+ * skill_load for it. So a skill's description is a trigger, not a summary.
  *
- * The description never reaches the model. It is there for whoever opens the
- * file next.
+ * For the rest, the description never reaches the model. It is there for
+ * whoever opens the file next.
  *
  * Two things to know before adding a document here. It is read once, at module
  * load, so the process refuses to start rather than quietly serving a turn
@@ -119,10 +118,13 @@ export const RESPONDING = loadPromptDocument('responding');
  * What an episode is, when to make one, and how to link it.
  *
  * Loaded by every pass that writes into ContextoVault -- mail import,
- * Classroom import, conversation rollup -- and by none that only reads. One
- * definition rather than one per importer, because three importers with three
- * ideas of what an episode is produce a vault with three shapes in it.
+ * Classroom import, conversation rollup -- and, on demand, by a turn in which
+ * the student has said something worth keeping. One definition rather than one
+ * per writer, because three writers with three ideas of what an episode is
+ * produce a vault with three shapes in it.
  */
+export const VAULT_WRITING = loadPromptDocument('vault-writing');
+
 /**
  * How to write the document describing a student's school life.
  *
@@ -132,18 +134,26 @@ export const RESPONDING = loadPromptDocument('responding');
  */
 export const USER_DOC = loadPromptDocument('user-doc');
 
-export const VAULT_WRITING = loadPromptDocument('vault-writing');
-
 /**
  * How to find things in ContextoVault and what its links mean.
  *
  * The counterpart to VAULT_WRITING and deliberately a separate document: an
  * agent answering a student needs to know how to traverse the graph and when a
- * copy is the wrong source, and none of the rules about creating notes. Loading
- * the writing rules on an ordinary turn would spend tokens teaching it to do
- * something it is not being asked to do.
+ * copy is the wrong source, and none of the rules about creating notes. A
+ * skill, loaded on demand: it used to ride on every turn, and most turns are
+ * not about the vault.
  */
 export const VAULT_READING = loadPromptDocument('vault-reading');
+
+/**
+ * When and how to use the student's own browser.
+ *
+ * A skill, loaded on demand. What stays in the prompt for everyone is the one
+ * sentence that has to: the agent CAN get at sites behind a login and must
+ * never say otherwise. Everything else about portals, refreshing, browsing and
+ * where a sign-in lives is here.
+ */
+export const BROWSER = loadPromptDocument('browser');
 
 /**
  * How one bundle of evidence becomes at most one claim.

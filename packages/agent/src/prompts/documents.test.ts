@@ -120,3 +120,44 @@ describe('the documents that ship', () => {
     expect(RESPONDING.body).not.toContain(RESPONDING.description);
   });
 });
+
+describe('the documents that are skills', () => {
+  /*
+   * A skill's description is the trigger the model reads. Everything else
+   * about the document is invisible until the model asks for it, so the
+   * description has to say when to ask -- a description that says what the
+   * document covers is a table of contents, not a trigger.
+   */
+  it('loads the browser document', async () => {
+    const { BROWSER } = await import('./documents.js');
+    expect(BROWSER.name).toBe('browser');
+    expect(BROWSER.body.length).toBeGreaterThan(500);
+  });
+
+  it('gives every skill a description that says when to load it', async () => {
+    const { BROWSER, VAULT_READING, VAULT_WRITING } = await import('./documents.js');
+    for (const skill of [BROWSER, VAULT_READING, VAULT_WRITING]) {
+      expect(skill.description).toMatch(/^Load /);
+    }
+  });
+
+  it('tells the reading skill when it is not needed', async () => {
+    // "Invoked when unnecessary" is the half of the goal a trigger that only
+    // says when to load cannot deliver.
+    const { VAULT_READING } = await import('./documents.js');
+    expect(VAULT_READING.description).toMatch(/not needed for/i);
+  });
+
+  it('tells the writing skill what a turn may and may not write', async () => {
+    const { VAULT_WRITING } = await import('./documents.js');
+    expect(VAULT_WRITING.body).toMatch(/## From a conversation/);
+    expect(VAULT_WRITING.body).toMatch(/left alone, because the next refresh rewrites it/i);
+    expect(VAULT_WRITING.body).toMatch(/search before you link/i);
+  });
+
+  it('tells the browser skill when a plain fetch is the better tool', async () => {
+    const { BROWSER } = await import('./documents.js');
+    expect(BROWSER.body).toContain('web_read_link');
+    expect(BROWSER.body).toMatch(/not the right tool for a public page/i);
+  });
+});
