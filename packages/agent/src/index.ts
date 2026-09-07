@@ -53,7 +53,12 @@ export { importConversation } from './vault/conversation.js';
 export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
 export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
-export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
+export {
+  importMail,
+  classroomEpisode,
+  type SchoolMessage,
+  type MailImportResult,
+} from './vault/mail.js';
 export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export {
