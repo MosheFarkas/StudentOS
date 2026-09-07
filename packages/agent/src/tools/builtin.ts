@@ -33,6 +33,7 @@ import { searchMemory } from './memory.js';
 import { loadSkill } from './skills.js';
 import { searchVault } from './vault.js';
 import { openVaultDocument } from './documents.js';
+import { writeVaultNote } from './vault-write.js';
 import { readWebLink } from './web/read-link.js';
 import { readYoutubeVideo } from './web/youtube.js';
 
@@ -43,6 +44,7 @@ const ALL_TOOLS: Tool<never, unknown>[] = [
   loadSkill as Tool<never, unknown>,
   searchVault as Tool<never, unknown>,
   openVaultDocument as Tool<never, unknown>,
+  writeVaultNote as Tool<never, unknown>,
   listCourses,
   listCoursework,
   listCourseMaterials,

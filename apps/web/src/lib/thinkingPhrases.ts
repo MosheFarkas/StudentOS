@@ -51,6 +51,7 @@ const WRITING_TOOLS = new Set([
   'gmail_send_message',
   'gmail_modify_message',
   'gmail_trash_message',
+  'vault_write',
 ]);
 
 /**

@@ -34,6 +34,7 @@ export { absorptions, collapse, isNumbered, type Absorption } from './vault/coll
 export { searchVault } from './tools/vault.js';
 export { openVaultDocument } from './tools/documents.js';
 export { loadSkill } from './tools/skills.js';
+export { writeVaultNote } from './tools/vault-write.js';
 export {
   readDocument,
   writeDocument,
