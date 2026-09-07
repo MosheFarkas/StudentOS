@@ -105,7 +105,11 @@ export {
   sweepUnattachedFiles,
   type CourseVerdict,
 } from './vault/courses.js';
-export { collectDriveFiles } from './vault/collect-drive.js';
+export {
+  collectDriveFiles,
+  collectDriveChanges,
+  type DriveChanges,
+} from './vault/collect-drive.js';
 export {
   collectSchoolMail,
   discoverSchoolDomains,
@@ -136,7 +140,15 @@ export {
   type SubmissionSummary,
   type Topic,
 } from './tools/google/classroom.js';
-export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
+export {
+  readDriveFile,
+  listDriveFiles,
+  listAccessibleFiles,
+  startPageToken,
+  watchChanges,
+  stopChannel,
+  listChanges,
+} from './tools/google/drive.js';
 // Exported so a caller outside the package can tell a scope refusal from a
 // real answer, which is the whole shape the Google tools return.
 export { isUnavailable } from './tools/google/client.js';

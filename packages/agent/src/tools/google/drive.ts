@@ -7,12 +7,14 @@ import {
   type AudioTranscriber,
 } from '../transcribe.js';
 import { extractPdfText } from '../pdf.js';
-import type { Tool } from '../types.js';
+import type { Tool, ToolUnavailable } from '../types.js';
 import { unavailable } from '../types.js';
 import { googleFetch, googleFetchRaw, isUnavailable } from './client.js';
 import { DRIVE_FILE_SCOPE, DRIVE_READONLY_SCOPE } from './scopes.js';
 
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
+const CHANGES_URL = 'https://www.googleapis.com/drive/v3/changes';
+const CHANNELS_URL = 'https://www.googleapis.com/drive/v3/channels';
 
 /**
  * Reading the contents of a student's files.
@@ -733,6 +735,7 @@ export interface DriveFileMeta {
   ownedByMe?: boolean;
   modifiedTime?: string;
   webViewLink?: string;
+  trashed?: boolean;
   /**
    * Who owns it. Drive gives a name and an address, unlike Classroom.
    *
@@ -741,4 +744,109 @@ export interface DriveFileMeta {
    * usually shared by whoever teaches it.
    */
   owners?: { displayName?: string; emailAddress?: string }[];
+}
+
+/** One file's listing fields, for a change that arrives without its folder. */
+export async function fileMeta(
+  token: string,
+  fileId: string,
+): Promise<DriveFileMeta | ToolUnavailable> {
+  return googleFetch<DriveFileMeta>(
+    `${FILES_URL}/${encodeURIComponent(fileId)}?fields=id,name,mimeType,parents&supportsAllDrives=true`,
+    token,
+  );
+}
+
+/**
+ * Where the change feed starts for a Drive nothing has watched yet.
+ *
+ * Everything before this token is the full listing's business; everything
+ * after it arrives through listChanges, deletions included.
+ */
+export async function startPageToken(token: string): Promise<string | ToolUnavailable> {
+  const result = await googleFetch<{ startPageToken?: string }>(
+    `${CHANGES_URL}/startPageToken?supportsAllDrives=true`,
+    token,
+  );
+  if (isUnavailable(result)) return result;
+  return result.startPageToken ?? '';
+}
+
+export interface DriveChange {
+  fileId: string;
+  removed: boolean;
+  file?: DriveFileMeta;
+}
+
+const CHANGE_FIELDS =
+  'nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,parents,' +
+  'ownedByMe,modifiedTime,webViewLink,trashed,owners(displayName,emailAddress)))';
+
+/** Everything that changed since the token, and the token for next time. */
+export async function listChanges(
+  token: string,
+  pageToken: string,
+): Promise<{ changes: DriveChange[]; newStartPageToken: string } | ToolUnavailable> {
+  const changes: DriveChange[] = [];
+  let at = pageToken;
+  for (;;) {
+    const params = new URLSearchParams({
+      pageToken: at,
+      pageSize: '1000',
+      includeRemoved: 'true',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      fields: CHANGE_FIELDS,
+    });
+    const page = await googleFetch<{
+      changes?: DriveChange[];
+      nextPageToken?: string;
+      newStartPageToken?: string;
+    }>(`${CHANGES_URL}?${params.toString()}`, token);
+    if (isUnavailable(page)) return page;
+    changes.push(...(page.changes ?? []));
+    if (page.nextPageToken) {
+      at = page.nextPageToken;
+      continue;
+    }
+    return { changes, newStartPageToken: page.newStartPageToken ?? at };
+  }
+}
+
+/** Ask Drive to POST to `address` whenever anything changes. Expires within a week. */
+export async function watchChanges(
+  token: string,
+  pageToken: string,
+  channel: { id: string; address: string; token: string; expiresAt: number },
+): Promise<{ resourceId: string; expiration: string } | ToolUnavailable> {
+  const params = new URLSearchParams({
+    pageToken,
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+  });
+  return googleFetch<{ resourceId: string; expiration: string }>(
+    `${CHANGES_URL}/watch?${params.toString()}`,
+    token,
+    {
+      method: 'POST',
+      body: {
+        id: channel.id,
+        type: 'web_hook',
+        address: channel.address,
+        token: channel.token,
+        expiration: String(channel.expiresAt),
+      },
+    },
+  );
+}
+
+/** Stop a channel that has been replaced. Failure is not worth reporting. */
+export async function stopChannel(
+  token: string,
+  channel: { id: string; resourceId: string },
+): Promise<void> {
+  await googleFetch(`${CHANNELS_URL}/stop`, token, {
+    method: 'POST',
+    body: { id: channel.id, resourceId: channel.resourceId },
+  });
 }
