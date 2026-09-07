@@ -1,6 +1,7 @@
 import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
-import { RESPONDING, VAULT_READING } from './prompts/documents.js';
+import { RESPONDING } from './prompts/documents.js';
+import { skillsSection } from './skills/builtin.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
@@ -253,34 +254,25 @@ export async function runAgentTurn(
  * platform tier affordable.
  */
 /**
- * What the agent is told about sites behind a login.
+ * What every agent is told about sites behind a login, before it has loaded
+ * anything.
  *
- * Exported so a test can hold it to the promises it makes. The failure this
- * prevents is not a crash -- it is an agent politely declining, which reads
- * to a student as the product not working.
+ * Only the part that has to be universal: the honest default -- "I cannot
+ * handle your password" -- is wrong here, and a model that has not yet
+ * loaded the browser skill still has to know that. How to actually sign in,
+ * refresh and browse is the skill. Exported so a test can hold it to the
+ * promises it makes; the failure it prevents is not a crash but an agent
+ * politely declining, which reads to a student as the product not working.
  */
 export const SIGN_IN_SECTION =
   'Sites that need a login:\n' +
   'Some of what this student needs is behind a sign-in -- a school portal, a course site. ' +
   'They have saved the username and password for those on their own computer, in its ' +
-  'keychain. You never see it, are never given it, and must never ask for it.\n' +
-  'You CAN get at those sites. portal_read returns what was last fetched; portal_refresh ' +
-  'makes their computer sign in again and fetch it fresh. When they ask you to log in to a ' +
-  'site, check one, or get up-to-date information, call portal_refresh -- that IS logging in, ' +
-  'done by their machine with the sign-in they saved.\n' +
-  'portal_refresh waits for the work and returns the site itself, so finish the job in this ' +
-  'turn: call it, read what comes back, and answer the question. Never end your turn having ' +
-  'promised something for later -- if you have the result, use it, and if their computer did ' +
-  'not answer, say that plainly instead.\n' +
-  'You also have browser_open, which opens any page in their browser and reads it back. It is ' +
-  'not only for their connected sites: use it for anything that needs a real browser rather ' +
-  'than a plain fetch -- a page that builds itself with JavaScript, a page behind a login they ' +
-  'already have, or anything web_read_link could not get. The student sees the browser working ' +
-  'in the conversation while you use it.\n' +
-  'Never say you cannot handle a password, cannot log in, or that they must sign in by hand. ' +
-  'None of it is true here and there is no manual sign-in to send them to. If a site genuinely ' +
-  'has no saved sign-in, say so plainly and tell them where to add it: the Contexto Agent app, ' +
-  'Settings, Connections, Sites.';
+  'keychain. You never see it, are never given it, and must never ask for it. You CAN get ' +
+  'at those sites: their computer signs in for you. Never say you cannot handle a password, ' +
+  'cannot log in, or that they must sign in by hand -- none of it is true here, and there is ' +
+  'no manual sign-in to send them to. Load the browser skill before you open, check, or sign ' +
+  'in to any site.';
 
 /**
  * Exported for the eval harness, which needs to assemble the real prompt with
@@ -317,16 +309,18 @@ export function buildSystemPrompt(
      * automatic.
      */
     SIGN_IN_SECTION,
+    /*
+     * What skills exist and when to load one.
+     *
+     * The bodies are not here. They arrive through skill_load on a turn that
+     * needs them, which is what keeps a question about nothing in particular
+     * from paying for a page about wikilinks. Universal in the sense that
+     * matters -- identical for every student in the same situation -- so it
+     * stays in the cached tier; the vault skills are named only when there is
+     * a vault, and a student who has connected nothing carries nothing about it.
+     */
+    skillsSection({ hasVault }),
   ];
-
-  /*
-   * How to read the vault, only when there is one.
-   *
-   * Universal in the sense that matters -- identical for every student who has
-   * a vault -- so it stays in the cached tier. A student who has connected
-   * nothing carries none of it.
-   */
-  if (hasVault) universal.push(VAULT_READING.body);
 
   /*
    * Tier 2 -- per agent. Stable for one student across a whole conversation.

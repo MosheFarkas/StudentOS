@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { currentTimeSection, runAgentTurn } from './run.js';
-import { RESPONDING } from './prompts/documents.js';
+import { buildSystemPrompt, currentTimeSection, runAgentTurn } from './run.js';
+import { RESPONDING, VAULT_READING } from './prompts/documents.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { ToolContext } from './tools/types.js';
 import type { AgentRunDeps } from './run.js';
@@ -577,5 +577,39 @@ describe('the assembled system prompt', () => {
     // "Be direct and useful; skip preamble" moved into responding.md. Left in
     // both places it would drift, and the two copies would disagree.
     expect(await systemPrompt()).not.toContain('skip preamble');
+  });
+
+  /*
+   * The reading rules used to ride on every turn of every student with a
+   * vault. Now the prompt says what skills exist and when to load one, and
+   * the rules arrive only on a turn that asks -- which is what keeps "what is
+   * 2+2" from paying for a page about wikilinks.
+   */
+  it('names the skills and the tool that loads them', () => {
+    const prompt = buildSystemPrompt('help', [], undefined, true);
+    expect(prompt).toContain('Skills:');
+    expect(prompt).toContain('skill_load');
+    expect(prompt).toContain('- browser: ');
+  });
+
+  it('names the vault skills only when there is a vault', () => {
+    expect(buildSystemPrompt('help', [], undefined, true)).toContain('- vault-reading: ');
+    expect(buildSystemPrompt('help', [], undefined, true)).toContain('- vault-writing: ');
+    expect(buildSystemPrompt('help', [], undefined, false)).not.toContain('vault-reading');
+    expect(buildSystemPrompt('help', [], undefined, false)).not.toContain('vault-writing');
+  });
+
+  it('no longer carries the reading rules whole', () => {
+    expect(buildSystemPrompt('help', [], undefined, true)).not.toContain(VAULT_READING.body);
+  });
+
+  it('keeps the skills block in the universal tier, above anything per agent', () => {
+    const prompt = buildSystemPrompt('keep me on top of chemistry', [], '# Lucas', true);
+    expect(prompt.indexOf('Skills:')).toBeLessThan(prompt.indexOf('Your purpose'));
+    expect(prompt.indexOf('Skills:')).toBeLessThan(prompt.indexOf('# Lucas'));
+  });
+
+  it('tells the model to load the browser skill before touching a site', () => {
+    expect(buildSystemPrompt('help', [])).toMatch(/load the browser skill/i);
   });
 });
