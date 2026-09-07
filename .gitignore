@@ -29,3 +29,7 @@ release/
 
 # Intermediate for the app icon; scripts/make-icon.py regenerates it, icon.icns is the product.
 apps/desktop/build/icon.iconset/
+
+# Scratch for agent-driven plans: worktrees and per-plan ledgers. Never source.
+.worktrees/
+.superpowers/
