@@ -745,7 +745,7 @@ describe('Classroom notifications without a model', () => {
     expect(said?.actor).toBe('Stacey Ottley');
     expect(said?.inCourse).toEqual(['10-chemistry']);
     expect(said?.about).toEqual(['titration-lab-writeup']);
-    expect(said?.what).toContain('Titration lab writeup');
+    expect(said?.what).toBe('Titration lab writeup. Due Friday. Include your raw data table.');
   });
 
   it('keeps nothing for a reminder', () => {
@@ -779,6 +779,56 @@ describe('Classroom notifications without a model', () => {
     expect(episode?.event).toBe('assignment-posted');
     expect(episode?.actor).toBe('Stacey Ottley');
     expect(episode?.body).toContain('In [[10-chemistry]]');
+  });
+
+  it('reports progress correctly for mixed Classroom and human mail', async () => {
+    const vault = await freshVault();
+    const calls: Array<[number, number]> = [];
+    const llm = {
+      chat: vi.fn(async () => ({
+        content: JSON.stringify({
+          keep: false,
+          what: '',
+          actor: '',
+          event: 'other',
+          about: [],
+          inCourse: [],
+        }),
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
+        finishReason: 'stop' as const,
+      })),
+    };
+    const result = await importMail(
+      {
+        llm,
+        onProgress: (done, total) => {
+          calls.push([done, total]);
+          // Ensure progress never exceeds total
+          expect(done).toBeLessThanOrEqual(total);
+        },
+      },
+      {
+        vault,
+        messages: [
+          notification,
+          {
+            ...notification,
+            messageId: 'm2',
+            from: 'teacher@school.org',
+            subject: 'Question: Who can help?',
+          },
+        ],
+        entities: [],
+        userId: 'u',
+        domains: ['school.org'],
+      },
+    );
+    // Both messages should be processed
+    expect(result.written).toBe(1);
+    // Progress should reach the total (2 messages)
+    const finalCall = calls[calls.length - 1];
+    expect(finalCall).toEqual([2, 2]);
   });
 });
 
