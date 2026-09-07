@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — Contexto Agent</title>
+    <meta
+      name="description"
+      content="How Contexto Agent accesses, uses, stores and shares Google user data."
+    />
+    <link rel="icon" href="/icon-32.png" />
+    <link rel="stylesheet" href="/legal.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="masthead">
+        <img src="/logo.png" alt="Contexto Agent" />
+        <a href="/">Back to the app</a>
+      </header>
+
+      <h1>Privacy Policy</h1>
+      <p class="effective">Effective 6 September 2026</p>
+
+      <p>
+        Contexto Agent is an AI study assistant for students. It connects to your Google Classroom,
+        Google Drive and Gmail so that it can answer questions about your own coursework — your
+        assignments, their due dates, the materials your teachers posted, and the files you have
+        written.
+      </p>
+      <p>
+        This policy explains exactly what data we touch, why we touch it, where it goes and how to
+        get rid of it. It applies to the website at
+        <a href="https://contextoagent.ai">contextoagent.ai</a> and to the Contexto Agent desktop
+        application.
+      </p>
+
+      <div class="callout">
+        <p>
+          <strong>Limited Use.</strong> Contexto Agent's use and transfer of information received
+          from Google APIs to any other app will adhere to the
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener"
+            >Google API Services User Data Policy</a
+          >, including the Limited Use requirements.
+        </p>
+      </div>
+
+      <h2>Google data we access</h2>
+
+      <p>
+        We ask for each of these separately. Signing in grants only your identity; Classroom, Drive
+        and Gmail are individual connections you turn on yourself, and you can turn any of them off
+        without affecting the others.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Scope</th>
+            <th>What it lets us read or do</th>
+            <th>Why we need it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code></td>
+            <td>Your name, email address and profile picture.</td>
+            <td>To create your account and show you which account you are signed in as.</td>
+          </tr>
+          <tr>
+            <td><code>classroom.courses.readonly</code></td>
+            <td>The list of courses you are enrolled in.</td>
+            <td>
+              The backbone of everything else. Without it there is nothing to organise your work
+              around.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <code>classroom.coursework.me.readonly</code>,
+              <code>classroom.student-submissions.me.readonly</code>
+            </td>
+            <td>Your assignments and your own submissions to them.</td>
+            <td>To tell you what is due, what you have handed in, and what you still owe.</td>
+          </tr>
+          <tr>
+            <td>
+              <code>classroom.announcements.readonly</code>, <code>classroom.topics.readonly</code>,
+              <code>classroom.courseworkmaterials.readonly</code>
+            </td>
+            <td>Announcements, topics and materials your teachers posted.</td>
+            <td>To answer questions using what your teacher actually said and shared.</td>
+          </tr>
+          <tr>
+            <td><code>classroom.coursework.me</code></td>
+            <td>Turn in work, take it back, attach files to a submission.</td>
+            <td>
+              So you can submit an assignment by asking. We never submit anything without you asking
+              us to in that conversation.
+            </td>
+          </tr>
+          <tr>
+            <td><code>drive.file</code></td>
+            <td>Read only the individual files you hand over through Google's own file picker.</td>
+            <td>
+              The default for Drive. It grants access to nothing until you pick a specific file.
+            </td>
+          </tr>
+          <tr>
+            <td><code>drive.readonly</code></td>
+            <td>Read the files in your Drive.</td>
+            <td>
+              Optional, and off unless you switch it on. It lets the agent find your coursework
+              without you locating each file by hand. See
+              <a href="#drive">Full Drive access</a> below.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <code>gmail.readonly</code>, <code>gmail.modify</code>, <code>gmail.labels</code>
+            </td>
+            <td>Read your mail; send, reply, label, archive and move messages to trash.</td>
+            <td>
+              To surface mail from your school and teachers, and to reply or tidy up when you ask.
+              We do not request
+              <code>https://mail.google.com/</code>, the only scope that can delete mail permanently
+              — so anything the agent removes stays recoverable in your trash.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 id="drive">Full Drive access</h3>
+      <p>
+        <code>drive.readonly</code> is an optional upgrade, never requested as part of connecting
+        Drive. When you enable it, Contexto Agent scans your Drive to work out which files are
+        schoolwork, and imports only those. Files it judges to be personal, along with files last
+        edited before the current school year, are left alone and their contents are never read. You
+        can revoke it at any time and fall back to handing over files individually.
+      </p>
+
+      <h2>How we use it</h2>
+      <p>
+        Everything we read goes into <strong>your vault</strong> — a private, per-student index of
+        your coursework held on our servers. The agent reads your vault to answer your questions.
+        That is the entire purpose.
+      </p>
+      <p>To produce an answer, the relevant excerpts are sent to a large language model:</p>
+      <ul>
+        <li>By default, to <strong>OpenAI</strong> through its API, using our account.</li>
+        <li>
+          If you supply your own API key, to <strong>OpenAI</strong> or
+          <strong>Anthropic</strong> instead, using your account.
+        </li>
+      </ul>
+      <p>
+        These providers process the text solely to generate your response. We do not use your Google
+        data to develop, improve or train generalised AI or machine-learning models, and we do not
+        permit our providers to do so with it either.
+      </p>
+
+      <h3>What we never do</h3>
+      <ul>
+        <li>We do not sell your data, and we never have.</li>
+        <li>We do not use it for advertising, or transfer it to advertising platforms.</li>
+        <li>We do not share it with data brokers or information resellers.</li>
+        <li>
+          No human at Contexto Agent reads your Google data, except with your explicit permission to
+          resolve a problem you have reported, or where the law requires it.
+        </li>
+      </ul>
+
+      <h2>Who else sees it</h2>
+      <p>We share your data with a short list of service providers, and only what each needs:</p>
+      <ul>
+        <li>
+          <strong>OpenAI</strong> and, if you choose it, <strong>Anthropic</strong> — the excerpts
+          needed to answer a question.
+        </li>
+        <li>
+          <strong>Our hosting provider</strong> — the servers and managed database that store your
+          vault.
+        </li>
+        <li>
+          <strong>Telegram</strong> — only if you connect it, and only the messages exchanged on
+          that channel.
+        </li>
+      </ul>
+      <p>
+        Beyond that we disclose data only when we are legally required to, or to protect someone's
+        safety.
+      </p>
+
+      <h2>Data we collect that is not from Google</h2>
+      <ul>
+        <li>
+          <strong>School portals.</strong> If you connect a school portal such as Veracross, we
+          store the timetable and assignment data it returns, and your credentials for it encrypted.
+        </li>
+        <li>
+          <strong>Your conversations.</strong> The messages you exchange with the agent, so your
+          chats survive a refresh.
+        </li>
+        <li><strong>Linked devices.</strong> Which computers you have linked to your account.</li>
+        <li>
+          <strong>Operational logs.</strong> Errors and request timings, used to keep the service
+          running.
+        </li>
+      </ul>
+
+      <h2>Storage and security</h2>
+      <ul>
+        <li>Data is held in a PostgreSQL database on servers we control.</li>
+        <li>
+          Google OAuth tokens and any API keys you supply are <strong>encrypted at rest</strong>.
+        </li>
+        <li>All traffic to and from the service is encrypted in transit over HTTPS.</li>
+        <li>
+          Access to production systems is limited to authorised operators and protected by key-based
+          authentication.
+        </li>
+      </ul>
+
+      <h2>Keeping and deleting your data</h2>
+      <p>We keep your data for as long as your account exists. You can remove it in three ways:</p>
+      <ul>
+        <li>
+          <strong>Disconnect one integration.</strong> In Settings, switch off Classroom, Drive or
+          Gmail. We stop reading it and delete what that integration put in your vault.
+        </li>
+        <li>
+          <strong>Revoke our access at Google.</strong> Visit
+          <a href="https://myaccount.google.com/permissions" rel="noopener"
+            >myaccount.google.com/permissions</a
+          >
+          and remove Contexto Agent. This cuts off access immediately, from Google's side, and works
+          whether or not you can reach us.
+        </li>
+        <li>
+          <strong>Delete your account.</strong> Email
+          <a href="mailto:privacy@contextoagent.ai">privacy@contextoagent.ai</a> from the address on
+          the account. We delete your account, your vault, your conversations and your stored tokens
+          within 30 days, and confirm when it is done.
+        </li>
+      </ul>
+      <p>
+        Backups are retained for a further 30 days before being overwritten. Operational logs, which
+        do not contain the content of your Google data, are kept for up to 90 days.
+      </p>
+
+      <h2>Students and younger users</h2>
+      <p>
+        Contexto Agent is built for students, and some of them are minors. If you are under the age
+        of majority where you live, please read this policy with a parent, guardian or teacher
+        before connecting your accounts. If your Google account is issued by your school, your
+        school's administrator controls which data an app like this can reach, and can revoke it. If
+        you believe a child has connected an account without appropriate consent, write to
+        <a href="mailto:privacy@contextoagent.ai">privacy@contextoagent.ai</a> and we will delete
+        the account and its data.
+      </p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        If we change how we handle your data we will update this page and move the effective date.
+        Where a change is significant — a new category of data, or a new recipient — we will tell
+        you in the app before it takes effect.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions, requests, or anything that looks wrong:
+        <a href="mailto:privacy@contextoagent.ai">privacy@contextoagent.ai</a>.
+      </p>
+
+      <footer>
+        <p>
+          <a href="/">Contexto Agent</a> · <a href="/terms">Terms of Service</a> ·
+          <a href="/privacy">Privacy Policy</a>
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -41,9 +41,13 @@ contextoagent.ai, www.contextoagent.ai {
 
 	handle {
 		root * /srv/contexto/apps/web/dist
-		# SPA fallback: unknown paths return index.html so client routing works
-		# on a hard refresh rather than 404ing.
-		try_files {path} /index.html
+		# {path}/index.html comes before the SPA fallback so the static legal
+		# pages -- /privacy and /terms -- are served as files rather than being
+		# swallowed by it. Without that middle entry they return the app shell,
+		# which client-side resolves them to "not found": a 200 that reads as a
+		# broken link to anyone who cannot run the bundle, Google's brand
+		# verification crawler included.
+		try_files {path} {path}/index.html /index.html
 		file_server
 	}
 

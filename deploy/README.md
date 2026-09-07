@@ -257,6 +257,54 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook" \
 Verify: `curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"` — check
 `pending_update_count` is 0 and `last_error_message` is absent.
 
+**8. Google OAuth verification**
+
+Until this is done, the app is limited to accounts listed as test users, and
+everyone else gets `Error 403: access_denied`. Refresh tokens issued in
+testing mode also expire after 7 days, which stops the vault refresh worker
+for every test user on a weekly cycle.
+
+The app requests three **restricted** scopes -- `gmail.readonly`,
+`gmail.modify` and `drive.readonly` -- so it needs the full track: brand
+verification, then data access verification, then a CASA Tier 2 security
+assessment renewed every 12 months.
+
+_Prerequisites, all already in the repo:_
+
+- Home page describing the app, with links to both policies — the signed-out
+  screen in `apps/web/src/App.tsx`.
+- `https://contextoagent.ai/privacy` and `/terms` — static HTML in
+  `apps/web/public/`, served without JavaScript on purpose. Google's crawler
+  does not run the bundle.
+
+_Console steps, in order:_
+
+1. **Verify the domain.** [Google Search Console](https://search.google.com/search-console/about)
+   → add `contextoagent.ai` → DNS TXT record. Use a Google account that is an
+   Owner or Editor on the Cloud project, or the next step cannot see it.
+2. **Branding.** [Cloud console → Branding](https://console.developers.google.com/auth/branding).
+   App name, support email, the 120x120 logo, home page `https://contextoagent.ai`,
+   privacy `https://contextoagent.ai/privacy`, terms `https://contextoagent.ai/terms`.
+   Add `contextoagent.ai` under **Authorised domains**.
+3. **Verify branding.** Automated, a few minutes. A pass is valid for 7 days --
+   click **Publish branding** inside that window or it reverts and has to be
+   run again.
+4. **Audience → Publish app**, moving it from Testing to In production. Until
+   verification completes users see an "unverified app" interstitial rather
+   than a hard block, capped at 100 grants of sensitive or restricted scopes.
+5. **Demo video.** Unlisted YouTube is fine. It has to show the OAuth consent
+   screen with the URL bar visible, and then each restricted scope actually
+   being used -- reading mail, reading Drive -- not just described.
+6. **[Verification Center](https://console.developers.google.com/auth/verification)**
+   → declare every scope with a justification, attach the video, submit.
+7. **CASA Tier 2** via the [App Defense Alliance](https://appdefensealliance.dev/casa),
+   once Google asks for it. Self-serve, roughly $540-1000, and the slowest part
+   of the whole process.
+
+Google emails the support address and the developer contact during review, and
+the review pauses silently while it waits on a reply. Both addresses must be
+ones somebody reads.
+
 ## Subsequent deploys
 
 ```bash

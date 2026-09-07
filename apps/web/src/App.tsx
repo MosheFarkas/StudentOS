@@ -72,7 +72,18 @@ export function App() {
       <main>
         <div className="signin">
           <img src={theme === 'dark' ? '/logo-dark.png' : '/logo.png'} alt="Contexto Agent" />
-          <p className="muted">An AI agent that knows your coursework.</p>
+          {/*
+            This screen is what an unauthenticated visitor sees at the root, so
+            it is the app's home page in Google's sense as well as the product's
+            -- and brand verification asks a home page to describe what the app
+            does and to link its privacy policy and terms. A lone sign-in button
+            satisfies neither, and that is a routine rejection.
+          */}
+          <p className="muted">
+            An AI agent that knows your coursework. Connect Google Classroom, Drive and Gmail, and
+            it can tell you what is due, find the material a teacher posted, and work through the
+            files you have written.
+          </p>
           <div className="panel">
             <p>Sign in with your educational Google account to get started.</p>
             {/*
@@ -113,6 +124,15 @@ export function App() {
               </a>
             </>
           )}
+
+          {/*
+            Plain anchors, not client routes: these are static HTML files served
+            straight off disk so they load without the bundle. See
+            apps/web/public/privacy/.
+          */}
+          <p className="muted signin-legal">
+            <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a>
+          </p>
         </div>
       </main>
     );

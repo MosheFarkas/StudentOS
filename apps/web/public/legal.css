@@ -1,0 +1,216 @@
+/*
+ * Styles for the static legal pages, which are plain HTML served straight off
+ * disk rather than routes in the SPA.
+ *
+ * That is the whole point of them. Google's brand verification fetches these
+ * URLs and its reviewers open them cold; a page that needs the bundle to boot
+ * before it says anything is a page that can fail review for reasons that have
+ * nothing to do with what it says. So: no JavaScript, no build step, one
+ * stylesheet shared by both pages.
+ *
+ * Fonts and palette are the app's, loaded from the same /fonts directory, so
+ * the pages look like the product they describe rather than a bolted-on
+ * appendix.
+ */
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'PT Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/pt-serif-latin.woff2') format('woff2');
+}
+
+:root {
+  --ink: #001040;
+  --muted: #55608a;
+  --violet: #5010d0;
+  --blue: #4070ff;
+  --line: #dfe3f0;
+  --bg: #ffffff;
+  --panel: #f7f8fc;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eef1ff;
+    --muted: #9aa3c8;
+    --violet: #c090ff;
+    --blue: #7ea0ff;
+    --line: #23294a;
+    --bg: #0c0f2a;
+    --panel: #141838;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 1.5rem 6rem;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    'IBM Plex Sans',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+header.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 0 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2.5rem;
+}
+
+header.masthead img {
+  height: 2rem;
+  width: auto;
+}
+
+header.masthead a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  margin-left: auto;
+}
+
+header.masthead a:hover {
+  color: var(--violet);
+}
+
+h1 {
+  font-family: 'PT Serif', Georgia, serif;
+  font-size: 2.25rem;
+  line-height: 1.2;
+  font-weight: 400;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-family: 'PT Serif', Georgia, serif;
+  font-size: 1.375rem;
+  font-weight: 400;
+  margin: 3rem 0 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.75rem 0 0.5rem;
+}
+
+.effective {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin: 0 0 2rem;
+}
+
+p,
+li {
+  color: var(--ink);
+}
+
+a {
+  color: var(--violet);
+}
+
+strong {
+  font-weight: 600;
+}
+
+ul {
+  padding-left: 1.25rem;
+}
+
+li {
+  margin: 0.4rem 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+td code {
+  font-size: 0.8125rem;
+  word-break: break-all;
+}
+
+code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.875em;
+  background: var(--panel);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.callout {
+  background: var(--panel);
+  border-left: 3px solid var(--blue);
+  border-radius: 0 6px 6px 0;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.callout p {
+  margin: 0;
+}
+
+footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+footer a {
+  color: var(--muted);
+}

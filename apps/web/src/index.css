@@ -1050,6 +1050,10 @@ dd {
   margin: 1.5rem 0 0;
 }
 
+.signin .signin-legal {
+  margin-top: 2rem;
+  font-size: 0.8125rem;
+}
 .signin > a.button {
   display: block;
   width: 100%;
