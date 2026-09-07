@@ -56,22 +56,22 @@
         <thead>
           <tr>
             <th>Scope</th>
-            <th>What it lets us read or do</th>
-            <th>Why we need it</th>
+            <th>What it lets us do, and why we need it</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code></td>
-            <td>Your name, email address and profile picture.</td>
-            <td>To create your account and show you which account you are signed in as.</td>
+            <td>
+              Your name, email address and profile picture. Used to create your account and show you
+              which account you are signed in as.
+            </td>
           </tr>
           <tr>
             <td><code>classroom.courses.readonly</code></td>
-            <td>The list of courses you are enrolled in.</td>
             <td>
-              The backbone of everything else. Without it there is nothing to organise your work
-              around.
+              The list of courses you are enrolled in. The backbone of everything else: without it
+              there is nothing to organise your work around.
             </td>
           </tr>
           <tr>
@@ -79,38 +79,41 @@
               <code>classroom.coursework.me.readonly</code>,
               <code>classroom.student-submissions.me.readonly</code>
             </td>
-            <td>Your assignments and your own submissions to them.</td>
-            <td>To tell you what is due, what you have handed in, and what you still owe.</td>
+            <td>
+              Your assignments and your own submissions to them, so we can tell you what is due,
+              what you have handed in, and what you still owe.
+            </td>
           </tr>
           <tr>
             <td>
               <code>classroom.announcements.readonly</code>, <code>classroom.topics.readonly</code>,
               <code>classroom.courseworkmaterials.readonly</code>
             </td>
-            <td>Announcements, topics and materials your teachers posted.</td>
-            <td>To answer questions using what your teacher actually said and shared.</td>
+            <td>
+              Announcements, topics and materials your teachers posted, so the agent answers using
+              what your teacher actually said and shared.
+            </td>
           </tr>
           <tr>
             <td><code>classroom.coursework.me</code></td>
-            <td>Turn in work, take it back, attach files to a submission.</td>
             <td>
-              So you can submit an assignment by asking. We never submit anything without you asking
-              us to in that conversation.
+              Turn in work, take it back, and attach files to a submission, so you can hand an
+              assignment in by asking. We never submit anything without you asking us to in that
+              conversation.
             </td>
           </tr>
           <tr>
             <td><code>drive.file</code></td>
-            <td>Read only the individual files you hand over through Google's own file picker.</td>
             <td>
-              The default for Drive. It grants access to nothing until you pick a specific file.
+              Read only the individual files you hand over through Google's own file picker. This is
+              the default for Drive, and it grants access to nothing until you pick a specific file.
             </td>
           </tr>
           <tr>
             <td><code>drive.readonly</code></td>
-            <td>Read the files in your Drive.</td>
             <td>
-              Optional, and off unless you switch it on. It lets the agent find your coursework
-              without you locating each file by hand. See
+              Read the files in your Drive. Optional, and off unless you switch it on. It lets the
+              agent find your coursework without you locating each file by hand — see
               <a href="#drive">Full Drive access</a> below.
             </td>
           </tr>
@@ -118,12 +121,12 @@
             <td>
               <code>gmail.readonly</code>, <code>gmail.modify</code>, <code>gmail.labels</code>
             </td>
-            <td>Read your mail; send, reply, label, archive and move messages to trash.</td>
             <td>
-              To surface mail from your school and teachers, and to reply or tidy up when you ask.
-              We do not request
-              <code>https://mail.google.com/</code>, the only scope that can delete mail permanently
-              — so anything the agent removes stays recoverable in your trash.
+              Read your mail, and send, reply, label, archive and move messages to trash. This
+              surfaces mail from your school and teachers, and lets the agent reply or tidy up when
+              you ask. We do not request <code>https://mail.google.com/</code>, the only scope that
+              can delete mail permanently, so anything the agent removes stays recoverable in your
+              trash.
             </td>
           </tr>
         </tbody>

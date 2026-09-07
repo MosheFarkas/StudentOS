@@ -192,7 +192,7 @@ td code {
 
 th:first-child,
 td:first-child {
-  min-width: 17rem;
+  width: 19rem;
 }
 
 code {
