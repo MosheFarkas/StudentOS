@@ -47,6 +47,15 @@ describe('collecting what changed in a Drive', () => {
                   mimeType: 'application/vnd.google-apps.folder',
                 },
               },
+              {
+                fileId: 'sc1',
+                removed: false,
+                file: {
+                  id: 'sc1',
+                  name: 'Chair project (shortcut)',
+                  mimeType: 'application/vnd.google-apps.shortcut',
+                },
+              },
             ],
           }),
         );
@@ -77,6 +86,9 @@ describe('collecting what changed in a Drive', () => {
       path: ['Design 10'],
       modifiedAt: '2026-09-07T10:00:00Z',
     });
+    // A shortcut is a second name for something already here, not a file of its own.
+    expect(changes.changed.map((f) => f.fileId)).not.toContain('sc1');
+    expect(changes.removed).not.toContain('sc1');
     expect(String(fetch.mock.calls[0]?.[0])).toContain('pageToken=900');
     expect(String(fetch.mock.calls[0]?.[0])).toContain('includeRemoved=true');
   });

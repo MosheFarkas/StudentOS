@@ -71,7 +71,7 @@ export interface DriveVerdict {
 export const KEPT_LOOSE = "About your schooling, though not one course's.";
 
 const FOLDER = 'application/vnd.google-apps.folder';
-const SHORTCUT = 'application/vnd.google-apps.shortcut';
+export const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
 /**
  * The courses still in the vault, by the title the school gave them.

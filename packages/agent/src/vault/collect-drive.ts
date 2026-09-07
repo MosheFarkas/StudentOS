@@ -6,7 +6,7 @@ import {
   type DriveFileMeta,
 } from '../tools/google/drive.js';
 import { unavailable, type ToolContext, type ToolUnavailable } from '../tools/types.js';
-import type { DriveFile } from './drive.js';
+import { SHORTCUT, type DriveFile } from './drive.js';
 
 /**
  * Fetching the student's Drive, and working out where each file sits.
@@ -114,7 +114,8 @@ export async function collectDriveChanges(
   const metas: DriveFileMeta[] = [];
   for (const change of listed.changes) {
     if (change.removed || change.file?.trashed) removed.push(change.fileId);
-    else if (change.file && change.file.mimeType !== FOLDER) metas.push(change.file);
+    else if (change.file && change.file.mimeType !== FOLDER && change.file.mimeType !== SHORTCUT)
+      metas.push(change.file);
   }
 
   const folders = new Map<string, DriveFileMeta | null>();
