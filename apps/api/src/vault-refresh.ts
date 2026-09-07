@@ -10,6 +10,7 @@ import {
   collectDriveFiles,
   importDrive,
   judgeDriveFiles,
+  rememberDriveFilesOut,
   domainOf,
   importClassroom,
   importMail,
@@ -317,6 +318,8 @@ async function refreshOne(
     },
     { vault, userId, ...(fileLimit === undefined ? {} : { limit: fileLimit }) },
   );
+  // A document the reader opened and found blank stays out on later refreshes too.
+  await rememberDriveFilesOut(vault, listed, files.blank);
 
   /*
    * And out with anything a dropped course left behind.
@@ -411,6 +414,7 @@ async function refreshOne(
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
     `${drive.removed > 0 ? `, ${drive.removed} Drive files taken out` : ''}` +
+    `${files.blank.length > 0 ? `, ${files.blank.length} blank` : ''}` +
     `${dropped.length > 0 ? `, dropped ${dropped.length} courses (${swept.removed} notes)` : ''}` +
     `${loose.removed > 0 ? `, ${loose.removed} unattached files` : ''}` +
     `${oldMail.removed > 0 ? `, ${oldMail.removed} old-class messages` : ''}` +

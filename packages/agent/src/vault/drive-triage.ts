@@ -392,6 +392,29 @@ function parse(content: unknown): z.infer<typeof verdicts> | null {
   }
 }
 
+/**
+ * Remember some files as out, on somebody else's say-so.
+ *
+ * The reader opens a kept file and finds it blank; that verdict has to reach
+ * the ledger, or the next refresh judges the name again, keeps it again, and
+ * reads it again. Only files in the listing, since the entry is keyed to the
+ * time the file last changed: if it changes, it is asked about afresh.
+ */
+export async function rememberDriveFilesOut(
+  vault: Vault,
+  listed: readonly DriveFile[],
+  fileIds: readonly string[],
+): Promise<void> {
+  if (fileIds.length === 0) return;
+  const ledger = await readLedger(vault);
+  const byId = new Map(listed.map((file) => [file.fileId, file]));
+  for (const id of fileIds) {
+    const file = byId.get(id);
+    if (file) ledger[id] = { keep: false, course: null, modifiedAt: file.modifiedAt ?? '' };
+  }
+  await writeLedger(vault, ledger);
+}
+
 export async function readLedger(vault: Vault): Promise<DriveLedger> {
   try {
     const parsed: unknown = JSON.parse(await readFile(join(vault.directory, LEDGER), 'utf8'));

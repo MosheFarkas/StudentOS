@@ -67,6 +67,7 @@ export {
 export {
   judgeDriveFiles,
   readLedger as readDriveLedger,
+  rememberDriveFilesOut,
   standingOf,
   knownFiles,
   driveKind,

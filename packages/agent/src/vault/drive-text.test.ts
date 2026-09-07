@@ -58,6 +58,7 @@ describe('what a Drive read result means', () => {
   });
 
   it('says "no text" for a file that reads as nothing but whitespace', () => {
-    expect(textFromDriveRead(read('   \n  \n '))).toBeNull();
+    // Blank, which is not the same as unreadable: a blank document is not kept.
+    expect(textFromDriveRead(read('   \n  \n '))).toBe('');
   });
 });

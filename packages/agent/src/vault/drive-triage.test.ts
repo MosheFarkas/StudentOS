@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
 import type { DriveFile } from './drive.js';
-import { judgeDriveFiles, standingOf, type DriveLedger } from './drive-triage.js';
+import {
+  judgeDriveFiles,
+  rememberDriveFilesOut,
+  standingOf,
+  type DriveLedger,
+} from './drive-triage.js';
 
 /**
  * Deciding about every file in a Drive, not only the ones in a course folder.
@@ -258,6 +263,16 @@ describe('judging the files in a Drive', () => {
     // Nothing kept, nothing remembered: asked again next time.
     expect(judged.size).toBe(0);
     expect(llm.chat).toHaveBeenCalledTimes(2);
+  });
+
+  it('remembers a file somebody else found empty, so it is not brought back', async () => {
+    const llm = saying({ file: 'cas project brainstorming', keep: true });
+    await rememberDriveFilesOut(vault, [file()], ['d1']);
+
+    const judged = await judge(llm, [file()]);
+
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(judged.get('d1')).toEqual({ keep: false, course: null });
   });
 
   it('asks in batches rather than about the whole Drive at once', async () => {

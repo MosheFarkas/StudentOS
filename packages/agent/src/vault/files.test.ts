@@ -104,6 +104,14 @@ describe('reading the files in the vault', () => {
     expect(new Set(seen.map((s) => s.total))).toEqual(new Set([4]));
   });
 
+  it('takes a blank document out rather than filing it', async () => {
+    // Opened, and empty. A note about nothing is a dot that answers searches with a blank.
+    const result = await run({ llm: summary('Something.'), read: async () => '   \n' });
+
+    expect(result.blank).toHaveLength(1);
+    expect((await vault.list('entity')).some((note) => note.description === 'File')).toBe(false);
+  });
+
   it('counts a file it could not read towards progress too', async () => {
     // Otherwise a vault of unreadable video stalls at zero and looks stuck.
     const seen: number[] = [];

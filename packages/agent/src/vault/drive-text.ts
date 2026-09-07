@@ -30,7 +30,8 @@ const ABOUT_THE_FILE = [
 ];
 
 /**
- * The file's text, null when it has none, or a throw when we could not get at it.
+ * The file's text, '' when it exported blank, null when it has no readable text at
+ * all, or a throw when we could not get at it.
  *
  * @throws when the refusal is about access, connection, or anything unfamiliar
  *   -- all of which may succeed later and none of which say anything about
@@ -43,6 +44,8 @@ export function textFromDriveRead(result: unknown): string | null {
     throw new Error(reason || 'Drive would not say why it refused');
   }
 
+  // Exported and empty is a blank document, which is its own answer: '' rather
+  // than null, so the reader can tell a blank page from a photograph.
   const content = (result as { content?: string }).content ?? '';
-  return content.trim() === '' ? null : content;
+  return content.trim() === '' ? '' : content;
 }

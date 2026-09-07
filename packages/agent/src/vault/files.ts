@@ -64,6 +64,8 @@ export interface FileReadOptions {
 }
 
 export interface FileReadResult {
+  /** Documents that opened to nothing at all, taken out rather than filed. By file id. */
+  blank: string[];
   read: number;
   unreadable: number;
   failed: number;
@@ -170,6 +172,7 @@ export async function readFileContents(
   const result: FileReadResult = {
     read: 0,
     unreadable: 0,
+    blank: [],
     failed: 0,
     remaining: Math.max(0, files.length - limit),
     reasons: [],
@@ -224,7 +227,20 @@ export async function readFileContents(
       return;
     }
 
-    if (text === null || text.trim() === '') {
+    if (text !== null && text.trim() === '') {
+      /*
+       * A blank document is not a document.
+       *
+       * Opened and empty -- an untitled doc somebody made and never wrote in.
+       * Nothing to summarise, nothing to file, and a note about nothing is a
+       * dot in the picture that answers a search with a blank. Taken out, and
+       * reported so the judgement can remember not to bring it back.
+       */
+      if (await vault.remove('entity', note.name)) result.blank.push(note.externalId as string);
+      return;
+    }
+
+    if (text === null) {
       /*
        * Nothing to read, but still something to file.
        *
