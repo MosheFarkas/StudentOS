@@ -142,4 +142,56 @@ describe('recording a conversation', () => {
     const result = await run(llmReturning('I am not sure what to do with this.'));
     expect(result.written).toBe(0);
   });
+
+  it('shows the pass what the conversation already wrote, so it need not write it again', async () => {
+    /*
+     * A student who says "my test moved to Friday" mid-conversation now gets
+     * that recorded on the spot by vault_write. Hours later this pass reads
+     * the same conversation. Without being told, it would record the same
+     * fact a second time as a conversation episode -- and the writing rules
+     * say one event seen twice is one episode.
+     */
+    await vault.write({
+      name: '2026-09-19-test-moved',
+      kind: 'episode',
+      source: 'student',
+      description: 'The student said the chemistry test moved to Friday.',
+      externalId: 'agent-1',
+      occurred: '2026-09-19T19:00:00Z',
+      actor: 'The student',
+      event: 'deadline-changed',
+      body: 'The student said the chemistry test moved to Friday.',
+    });
+    const llm = llmReturning(JSON.stringify({ keep: false, what: '', about: [], inCourse: [] }));
+
+    await importConversation({ llm } as never, {
+      vault,
+      exchanges: ['Student: my chem test moved to friday\nAgent: Noted.'],
+      conversationId: 'conv-9',
+      occurred: '2026-09-19T20:00:00Z',
+      userId: 'u1',
+      agentId: 'agent-1',
+    });
+
+    const sent = llm.chat.mock.calls[0]?.[0].messages as { role: string; content: string }[];
+    const user = sent.find((m) => m.role === 'user')?.content ?? '';
+    expect(user).toMatch(/already recorded from this conversation/i);
+    expect(user).toContain('The student said the chemistry test moved to Friday.');
+  });
+
+  it('says nothing about prior writes when there were none', async () => {
+    const llm = llmReturning(kept());
+    await importConversation({ llm } as never, {
+      vault,
+      exchanges: EXCHANGES,
+      conversationId: 'conv-10',
+      occurred: '2026-09-19T20:00:00Z',
+      userId: 'u1',
+      agentId: 'agent-1',
+    });
+
+    const sent = llm.chat.mock.calls[0]?.[0].messages as { role: string; content: string }[];
+    const user = sent.find((m) => m.role === 'user')?.content ?? '';
+    expect(user).not.toMatch(/already recorded/i);
+  });
 });

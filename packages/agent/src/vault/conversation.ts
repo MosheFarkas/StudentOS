@@ -32,6 +32,14 @@ export interface ConversationImportOptions {
   /** When it happened. */
   occurred: string;
   userId: string;
+  /**
+   * The agent whose conversation this is.
+   *
+   * What vault_write wrote during the conversation carries this as its
+   * externalId, and the pass is shown those notes so it can decline to record
+   * the same thing twice.
+   */
+  agentId?: string;
 }
 
 const extraction = z.object({
@@ -58,17 +66,23 @@ const ASK = [
   '',
   'about and inCourse may only contain names from the list you are given. Omit rather',
   'than guess, and link the specific piece of work as well as the course it belongs to.',
+  '',
+  'If you are shown what was already recorded from this conversation, do not record it',
+  'again. keep is false when that list already covers everything that happened.',
 ].join('\n');
 
 export async function importConversation(
   { llm }: ConversationImportDeps,
-  { vault, exchanges, conversationId, occurred, userId }: ConversationImportOptions,
+  { vault, exchanges, conversationId, occurred, userId, agentId }: ConversationImportOptions,
 ): Promise<{ written: number }> {
   const existing = await vault.list('episode');
 
   // Stable id, so a second pass is a lookup -- checked before the model call,
   // because the point is not to pay twice for the same conversation.
   if (existing.some((note) => note.externalId === conversationId)) return { written: 0 };
+
+  // Written by the agent mid-conversation, on the student's say-so.
+  const alreadyWritten = agentId ? existing.filter((note) => note.externalId === agentId) : [];
 
   const entities = await vault.list('entity');
   const allowed = new Set(entities.map((note) => note.name));
@@ -104,6 +118,11 @@ export async function importConversation(
       role: 'user',
       content:
         `Names you may link to:\n${[...shortlist].join('\n') || '(none)'}\n\n` +
+        (alreadyWritten.length > 0
+          ? 'Already recorded from this conversation:\n' +
+            alreadyWritten.map((note) => `- ${note.description}`).join('\n') +
+            '\n\n'
+          : '') +
         `The conversation, oldest first:\n\n${exchanges.join('\n\n')}`,
     },
   ];

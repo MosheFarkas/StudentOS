@@ -141,12 +141,13 @@ const jobs: Job[] = [
 
           const bursts = [];
           for (const agentId of agentIds) {
-            bursts.push(
-              await collectExchanges(
+            bursts.push({
+              agentId,
+              ...(await collectExchanges(
                 { memory: ctx.memory, profiles: ctx.profiles },
                 { agentId, userId },
-              ),
-            );
+              )),
+            });
           }
 
           const exchanges = bursts.flatMap((burst) => burst.exchanges);
@@ -210,6 +211,7 @@ const jobs: Job[] = [
                     conversationId: burst.newestId,
                     occurred: burst.occurred ?? new Date().toISOString(),
                     userId,
+                    agentId: burst.agentId,
                   },
                 );
                 recorded += written.written;
