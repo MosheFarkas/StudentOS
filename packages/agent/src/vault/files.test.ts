@@ -476,4 +476,39 @@ describe('reading the files in the vault', () => {
     expect(result.read).toBe(1);
     expect(result.failed).toBe(1);
   });
+
+  it('reads only the files it is pointed at', async () => {
+    await vault.write({
+      name: 'a',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'fa',
+      body: 'a.',
+    });
+    await vault.write({
+      name: 'b',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'fb',
+      body: 'b.',
+    });
+    const read = vi.fn(async () => 'Some words about b.');
+    const llm = {
+      chat: vi.fn(async () => ({
+        content: JSON.stringify({ what: 'About b.', kind: 'notes', inCourse: [] }),
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, totalTokens: 2 },
+        finishReason: 'stop' as const,
+      })),
+    };
+    const result = await readFileContents(
+      { llm, read },
+      { vault, userId: 'u', only: new Set(['fb']) },
+    );
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith('fb');
+    expect(result.remaining).toBe(0);
+  });
 });

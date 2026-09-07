@@ -63,6 +63,7 @@ export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export {
   importDrive,
+  removeDriveFiles,
   courseTitles,
   KEPT_LOOSE,
   type DriveFile,
