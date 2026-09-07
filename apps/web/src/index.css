@@ -735,6 +735,15 @@ hr {
   gap: 1.5rem;
   min-height: 12rem;
   margin-bottom: 1rem;
+  /*
+   * Takes whatever room the conversation does not.
+   *
+   * A two-line answer left the transcript ending halfway up the screen with
+   * the bar tucked under it, floating in the middle of the page. The
+   * transcript keeps the top; the space below it belongs to nothing, so it
+   * goes here and the bar sits on the bottom from the first message on.
+   */
+  flex: 1;
 }
 
 .message {
@@ -903,7 +912,15 @@ hr {
   bottom: 3.4rem;
   z-index: 5;
   height: 6.5rem;
-  margin: 0 -0.75rem -6.5rem;
+  /*
+   * Pulled up as much as it hangs down, so the band costs the column no
+   * height in either direction. All of it used to hang below, and with the
+   * bar resting on the bottom of the screen that overhang was 9px of scroll
+   * on a conversation with nothing to scroll -- a scrollbar on two lines of
+   * text. Where it is drawn is the sticky offset's business, and that has not
+   * moved.
+   */
+  margin: -3.25rem -0.75rem -3.25rem;
   pointer-events: none;
   backdrop-filter: blur(7px);
   /*
@@ -1087,6 +1104,9 @@ main:has(.preview-pane) {
   display: grid;
   gap: 1.25rem;
   align-items: start;
+  /* Fills the main column, which is already at least the height of the
+     window -- without this the chat is only as tall as what was said. */
+  flex: 1;
 }
 
 main:has(.preview-pane) .workspace {
@@ -1097,6 +1117,9 @@ main:has(.preview-pane) .workspace {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* The grid starts its items at the top, which is right for the preview
+     pane beside it and wrong for the one holding the composer. */
+  align-self: stretch;
 }
 
 .message a {
