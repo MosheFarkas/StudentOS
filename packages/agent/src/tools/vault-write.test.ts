@@ -74,7 +74,8 @@ describe('vault_write', () => {
 
     expect(reply).toMatch(/^Wrote episode 2026-09-12-chemistry-test-moved-to-friday/);
     expect(written?.event).toBe('deadline-changed');
-    expect(written?.occurred).toBe('2026-09-12T18:30:00+01:00');
+    // Normalised to UTC: the vault sorts this field as a string, so every writer stores the same form.
+    expect(written?.occurred).toBe('2026-09-12T17:30:00.000Z');
     expect(written?.body).toContain('About [[chemistry-test]]');
   });
 
@@ -94,6 +95,16 @@ describe('vault_write', () => {
 
     expect(written?.occurred).toBeTruthy();
     expect(written?.name.startsWith(new Date().toISOString().slice(0, 10))).toBe(true);
+  });
+
+  it('normalises a date the model wrote in words', async () => {
+    // The vault sorts occurred lexicographically; a note dated "Sep 12 2026"
+    // would sit above every ISO timestamp for ever.
+    await run({ ...episode, occurred: 'Sep 12 2026 18:30 UTC' });
+    const written = (await vault.list('episode'))[0];
+
+    expect(written?.occurred).toBe('2026-09-12T18:30:00.000Z');
+    expect(written?.name.startsWith('2026-09-12-')).toBe(true);
   });
 
   it('refuses an episode with no event', async () => {
@@ -148,6 +159,24 @@ describe('vault_write', () => {
 
     expect(reply).toMatch(/^Updated entity my-tutor/);
     expect((await vault.read('entity', 'my-tutor'))?.body).toContain('Fridays');
+  });
+
+  it('keeps the date and actor of an episode it is updating', async () => {
+    // A correction to last week's note must not move it to today.
+    await run({ ...episode, actor: 'Mr Ali' });
+    const { occurred: _occurred, ...update } = episode;
+    const reply = await run({
+      ...update,
+      name: '2026-09-12-chemistry-test-moved-to-friday',
+      body: 'The student said the chemistry test moved to Friday the 25th, period 3.\n\nAbout [[chemistry-test]]',
+    });
+    const written = (await vault.list('episode'))[0];
+
+    expect(reply).toMatch(/^Updated episode 2026-09-12-chemistry-test-moved-to-friday/);
+    expect(written?.occurred).toBe('2026-09-12T17:30:00.000Z');
+    expect(written?.actor).toBe('Mr Ali');
+    expect(written?.body).toContain('period 3');
+    expect(await vault.list('episode')).toHaveLength(1);
   });
 
   it('refuses to edit an imported note, and says what to do instead', async () => {

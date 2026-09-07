@@ -64,12 +64,18 @@ const inputSchema = z.object({
     .string()
     .refine((value) => !Number.isNaN(Date.parse(value)), 'must be a date or timestamp')
     .optional()
-    .describe('Episodes: when it happened, as an ISO timestamp with offset. Defaults to now.'),
+    .describe(
+      'Episodes: when it happened, as an ISO timestamp with offset. Defaults to now for a ' +
+        "new note, and to the note's own date when updating.",
+    ),
   actor: z
     .string()
     .max(80)
     .optional()
-    .describe('Episodes: who did it, in the plainest name. Defaults to the student.'),
+    .describe(
+      'Episodes: who did it, in the plainest name. Defaults to the student, or to the ' +
+        "note's own actor when updating.",
+    ),
   event: z.enum(EVENTS).optional().describe('Episodes: what changed for the student. Required.'),
 });
 
@@ -134,7 +140,7 @@ export const writeVaultNote: Tool<z.infer<typeof inputSchema>, string> = {
       if (!input.event) {
         return 'Not written: an episode needs an event saying what changed for the student.';
       }
-      const occurred = input.occurred ?? new Date().toISOString();
+      const occurred = new Date(input.occurred ?? existing?.occurred ?? Date.now()).toISOString();
       const name = existing?.name ?? freshName(`${occurred.slice(0, 10)} ${input.title}`, known);
       const note: VaultNote = {
         name,
@@ -143,7 +149,7 @@ export const writeVaultNote: Tool<z.infer<typeof inputSchema>, string> = {
         description,
         externalId: ctx.agentId,
         occurred,
-        actor: input.actor?.trim() || 'The student',
+        actor: input.actor?.trim() || existing?.actor || 'The student',
         event: input.event,
         body,
       };
