@@ -33,6 +33,7 @@ export { buildGraph, type VaultGraph, type GraphNode } from './vault/graph.js';
 export { absorptions, collapse, isNumbered, type Absorption } from './vault/collapse.js';
 export { searchVault } from './tools/vault.js';
 export { openVaultDocument } from './tools/documents.js';
+export { loadSkill } from './tools/skills.js';
 export {
   readDocument,
   writeDocument,

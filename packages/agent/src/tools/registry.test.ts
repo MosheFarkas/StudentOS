@@ -133,6 +133,7 @@ describe('scope declarations', () => {
     const ids = buildToolRegistry(null).ids();
 
     expect(ids).toContain('web_read_link');
+    expect(ids).toContain('skill_load');
     expect(ids.filter((id) => id.startsWith('google_'))).toEqual([]);
   });
 });
