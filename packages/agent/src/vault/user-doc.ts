@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import type { LlmProvider } from '@contexto/llm';
 import { USER_DOC } from '../prompts/documents.js';
 import {
@@ -18,7 +19,7 @@ import { academicYearEnd } from './school-doc.js';
 import { NOTHING_KEPT_YET } from './chats-doc.js';
 import { readGrade } from './grade.js';
 import { retrying } from './retry.js';
-import type { Vault } from './vault.js';
+import type { Vault, VaultNote } from './vault.js';
 
 /**
  * What is durably true about a student's school life, on one page.
@@ -48,6 +49,34 @@ const LEGACY_FILE = 'user.md';
 
 /** Re-exported so nothing outside has to know the budget moved to documents.ts. */
 export { USER_DOC_LIMIT };
+
+/**
+ * A fingerprint of what the page is written from.
+ *
+ * The class pages carry their own source hashes, so a page whose notes have
+ * not changed reads the same here; the school and chats pages are hashed
+ * whole. The date is left out on purpose -- it changes every day and the
+ * student does not.
+ */
+function userDocFingerprint(input: {
+  classes: VaultNote[];
+  school: VaultNote | undefined;
+  chats: VaultNote | undefined;
+  student: string | undefined;
+  grade: number | null;
+}): string {
+  const short = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 16);
+  const parts = [
+    `student:${input.student ?? ''}`,
+    `grade:${input.grade ?? ''}`,
+    ...input.classes
+      .map((doc) => `${doc.name}:${doc.academic ?? ''}:${doc.sourceHash ?? short(doc.body)}`)
+      .sort(),
+    `school:${input.school ? short(input.school.body) : ''}`,
+    `chats:${input.chats ? short(input.chats.body) : ''}`,
+  ];
+  return short(parts.join('\n'));
+}
 
 export interface UserDocDeps {
   llm: Pick<LlmProvider, 'chat'>;
@@ -117,6 +146,16 @@ export async function writeUserDoc(
   const today = new Date().toISOString().slice(0, 10);
   const yearEnd = await academicYearEnd(vault);
   const grade = await readGrade(vault, { today, ...(yearEnd ? { yearEnd } : {}) });
+
+  const sourceHash = userDocFingerprint({
+    classes,
+    school,
+    chats,
+    student,
+    grade: grade?.grade ?? null,
+  });
+  // Nothing it is written from has changed since it was last written.
+  if (existing?.sourceHash === sourceHash) return existing.body;
 
   const answer = await retrying(() =>
     llm.chat(
@@ -198,6 +237,7 @@ export async function writeUserDoc(
     name: USER_DOC_NAME,
     description: 'Who this student is, and what else there is to open',
     body,
+    sourceHash,
     ...(student ? { student } : {}),
   });
 
