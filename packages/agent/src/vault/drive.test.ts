@@ -312,6 +312,52 @@ describe('files that were judged rather than filed', () => {
     expect(await vault.read('entity', 'cas-project-brainstorming')).toBeNull();
   });
 
+  it('takes out a file it kept before, once that file is judged out', async () => {
+    /*
+     * Last year's science slides were kept on their name and then read, and
+     * the reader said what they were. Asked again with that in view, the
+     * judgement refuses them -- and a refusal has to reach the note on disk,
+     * or the rule changes and nothing does.
+     */
+    await vault.write({
+      name: 'ste-electricity-magnetism',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'd1',
+      body: 'STE: Electricity-Magnetism.\n\nShared by Keith Chuprun.',
+    });
+
+    const result = await importDrive(
+      vault,
+      [file({ name: 'STE: Electricity-Magnetism', path: [] })],
+      new Map([['d1', { keep: false, course: null }]]),
+    );
+
+    expect(result.removed).toBe(1);
+    expect(await vault.read('entity', 'ste-electricity-magnetism')).toBeNull();
+  });
+
+  it('leaves a file Classroom gave us alone, whatever the judgement says', async () => {
+    await vault.write({
+      name: 'worksheet',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'File',
+      externalId: 'd1',
+      body: 'A worksheet.\nPart of [[history]].',
+    });
+
+    const result = await importDrive(
+      vault,
+      [file({ name: 'Worksheet', path: [] })],
+      new Map([['d1', { keep: false, course: null }]]),
+    );
+
+    expect(result.removed).toBe(0);
+    expect(await vault.read('entity', 'worksheet')).not.toBeNull();
+  });
+
   it('still files by folder without asking anybody', async () => {
     await importDrive(vault, [file({ path: ['History'] })], new Map());
 

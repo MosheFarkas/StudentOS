@@ -138,13 +138,88 @@ describe('judging the files in a Drive', () => {
     expect(llm.chat).toHaveBeenCalledTimes(2);
   });
 
-  it('passes over a file last changed before last school year began', async () => {
+  it('refuses a file last changed before last school year began, without asking', async () => {
     const llm = saying();
 
     const judged = await judge(llm, [file({ modifiedAt: '2024-11-03T10:00:00.000Z' })]);
 
     expect(llm.chat).not.toHaveBeenCalled();
-    expect(judged.size).toBe(0);
+    expect(judged.get('d1')).toEqual({ keep: false, course: null });
+  });
+
+  it('refuses a temporary or system file without asking', async () => {
+    const llm = saying();
+
+    const judged = await judge(llm, [
+      file({ fileId: 'j1', name: '.DS_Store' }),
+      file({ fileId: 'j2', name: '~$rk_Process_Journal.docx' }),
+      file({ fileId: 'j3', name: '~ai-a644bade-242e.tmp' }),
+      file({ fileId: 'j4', name: 'desktop.ini' }),
+    ]);
+
+    expect(llm.chat).not.toHaveBeenCalled();
+    for (const id of ['j1', 'j2', 'j3', 'j4']) {
+      expect(judged.get(id)).toEqual({ keep: false, course: null });
+    }
+  });
+
+  it('tells the model which subjects are over, and what grade the student is in', async () => {
+    const llm = saying({ file: 'STE: Electricity-Magnetism', keep: false });
+
+    await judgeDriveFiles({ llm } as never, {
+      vault,
+      files: [file({ name: 'STE: Electricity-Magnetism' })],
+      today: TODAY,
+      yearStart: YEAR_START,
+      userId: 'u-1',
+      dropped: ['2025/2026 - 10 Science and Technology - 04 (ST and STE)'],
+      grade: 11,
+    });
+
+    const sent = JSON.stringify(llm.chat.mock.calls[0]?.[0]);
+    expect(sent).toContain('10 Science and Technology');
+    expect(sent).toContain('Grade 11');
+  });
+
+  it('shows the model what the reader found in a file the vault already holds', async () => {
+    /*
+     * A file kept on its name alone and then opened: the sentence the reader
+     * wrote is the best evidence there is about it, and a name like "Unit 4"
+     * says nothing. Asked again, the model sees both.
+     */
+    await vault.write({
+      name: 'unit-4',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'd1',
+      body: 'Unit 4.\n\nYours -- you made this.\n\n## What is in it (slides)\n\nThis 10 Science slide deck covers electricity and magnetism.',
+    });
+    const llm = saying({ file: 'Unit 4', keep: false });
+
+    const judged = await judge(llm, [file({ name: 'Unit 4' })]);
+
+    expect(JSON.stringify(llm.chat.mock.calls[0]?.[0])).toContain('10 Science slide deck');
+    expect(judged.get('d1')).toEqual({ keep: false, course: null });
+  });
+
+  it('asks again about everything once the rule has changed', async () => {
+    /*
+     * A verdict given under an older rule is not this rule's verdict. The
+     * ledger carries the rule it was written under, and one written under
+     * another is set aside -- every file asked once more, then remembered.
+     */
+    const { writeFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    await writeFile(
+      join(vault.directory, 'drive-judged.json'),
+      JSON.stringify({ d1: { keep: true, course: null, modifiedAt: '2026-09-01T10:00:00.000Z' } }),
+    );
+    const llm = saying({ file: 'cas project brainstorming', keep: true });
+
+    await judge(llm, [file()]);
+
+    expect(llm.chat).toHaveBeenCalledTimes(1);
   });
 
   it('passes over a file Classroom already knows, and one a folder already places', async () => {
@@ -233,8 +308,17 @@ describe('where a file stands, before anybody is asked', () => {
     expect(at({ fileId: 'd-known' })).toEqual({ why: 'classroom' });
   });
 
-  it('says an earlier pass already kept it', () => {
-    expect(at({ fileId: 'd-kept' })).toEqual({ why: 'kept' });
+  it('judges a file the vault already holds from Drive like any other', () => {
+    // Kept once on its name; when the rule moves, it is asked about again.
+    expect(at({ fileId: 'd-kept' })).toEqual({ why: 'unjudged' });
+  });
+
+  it('says a temporary or system file is junk', () => {
+    expect(at({ name: '.DS_Store' })).toEqual({ why: 'junk' });
+    expect(at({ name: '~$essay.docx' })).toEqual({ why: 'junk' });
+    expect(at({ name: 'notes.tmp' })).toEqual({ why: 'junk' });
+    expect(at({ name: 'Thumbs.db' })).toEqual({ why: 'junk' });
+    expect(at({ name: 'CAS project Brainstorming' })).toEqual({ why: 'unjudged' });
   });
 
   it('says a folder placed it, and under what', () => {

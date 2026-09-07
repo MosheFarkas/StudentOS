@@ -30,6 +30,7 @@ import {
   sweepUnattachedFiles,
   readDriveFile,
   textFromDriveRead,
+  readGrade,
 } from '@contexto/agent';
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
@@ -276,9 +277,21 @@ async function refreshOne(
    */
   onPhase?.({ phase: 'drive', done: 0, total: 0 });
   const listed = await collectDriveFiles(toolContext);
+  // Which grade they are in now, so "Grade 10" in a file's name reads as last year's.
+  const grade = await readGrade(vault, { today, ...(yearEnd ? { yearEnd } : {}) });
   const judged = await judgeDriveFiles(
     { llm: await ctx.llm.resolve(userId) },
-    { vault, files: listed, today, yearStart, ...(school ? { school } : {}), userId },
+    {
+      vault,
+      files: listed,
+      today,
+      yearStart,
+      ...(school ? { school } : {}),
+      // The subjects that are over, so their files are refused however good they are.
+      dropped: dropped.map((verdict) => verdict.course),
+      ...(grade ? { grade: grade.grade } : {}),
+      userId,
+    },
   );
   const drive = await importDrive(vault, listed, judged);
 
@@ -397,6 +410,7 @@ async function refreshOne(
   return (
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
+    `${drive.removed > 0 ? `, ${drive.removed} Drive files taken out` : ''}` +
     `${dropped.length > 0 ? `, dropped ${dropped.length} courses (${swept.removed} notes)` : ''}` +
     `${loose.removed > 0 ? `, ${loose.removed} unattached files` : ''}` +
     `${oldMail.removed > 0 ? `, ${oldMail.removed} old-class messages` : ''}` +

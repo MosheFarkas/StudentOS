@@ -90,15 +90,13 @@ async function main(): Promise<void> {
     switch (standing.why) {
       case 'folder':
         return `FOLDER    ${standing.course}`;
-      case 'remembered':
-        return standing.verdict.keep
-          ? `KEPT      ${standing.verdict.course ?? '(about school, no room)'}`
-          : 'OUT       -';
-      case 'kept': {
-        const note = byId.get(file.fileId);
-        const under = /^Part of \[\[([^\]]+)\]\]/m.exec(note?.body ?? '')?.[1];
-        return `KEPT      ${under ?? '(about school, no room)'}`;
+      case 'remembered': {
+        if (!standing.verdict.keep) return 'OUT       -';
+        const under = /^Part of \[\[([^\]]+)\]\]/m.exec(byId.get(file.fileId)?.body ?? '')?.[1];
+        return `KEPT      ${under ?? standing.verdict.course ?? '(about school, no room)'}`;
       }
+      case 'junk':
+        return 'JUNK      -';
       case 'classroom':
         return 'CLASSROOM -';
       case 'too-old':
@@ -129,14 +127,12 @@ Placed by a folder:     ${count((s) => s.why === 'folder')}
 Too old to judge:       ${count((s) => s.why === 'too-old')}
 Judged in, remembered:  ${count((s) => s.why === 'remembered' && s.verdict.keep)}
 Judged out, remembered: ${count((s) => s.why === 'remembered' && !s.verdict.keep)}
-Kept by an earlier pass: ${count((s) => s.why === 'kept')}
+Junk, refused outright: ${count((s) => s.why === 'junk')}
 Not yet judged:         ${count((s) => s.why === 'unjudged')}`);
 
   const kept = rows.filter(
     ({ standing }) =>
-      standing.why === 'kept' ||
-      standing.why === 'folder' ||
-      (standing.why === 'remembered' && standing.verdict.keep),
+      standing.why === 'folder' || (standing.why === 'remembered' && standing.verdict.keep),
   );
   const kinds = new Map<string, number>();
   for (const { file } of kept)

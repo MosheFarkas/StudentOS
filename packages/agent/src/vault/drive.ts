@@ -46,6 +46,8 @@ export interface DriveImportResult {
   written: number;
   /** Files Classroom already gave us, and files nothing has judged in. */
   skipped: number;
+  /** Files kept on an earlier pass and judged out on this one. */
+  removed: number;
 }
 
 /**
@@ -93,11 +95,11 @@ export async function importDrive(
   judged: ReadonlyMap<string, DriveVerdict> = new Map(),
 ): Promise<DriveImportResult> {
   const existing = await vault.list('entity');
-  const known = new Set(existing.map((note) => note.externalId).filter(Boolean));
+  const held = new Map(existing.filter((note) => note.externalId).map((n) => [n.externalId, n]));
   const takenNames = new Set(existing.map((note) => note.name));
   const courses = courseTitles(existing);
 
-  const result: DriveImportResult = { written: 0, skipped: 0 };
+  const result: DriveImportResult = { written: 0, skipped: 0, removed: 0 };
 
   for (const file of files) {
     // A folder is structure rather than content, and a shortcut is a second
@@ -111,8 +113,19 @@ export async function importDrive(
      * the course and the assignment it was attached to, and rewriting it from
      * a Drive listing would trade all of that for a filename.
      */
-    if (known.has(file.fileId)) {
-      result.skipped += 1;
+    const already = held.get(file.fileId);
+    if (already) {
+      /*
+       * And a file kept on an earlier pass goes when it is judged out now.
+       *
+       * The rule can change its mind -- last year's science slides were kept
+       * on their name, opened, and only then known for what they were -- and a
+       * refusal that never reaches the note on disk changes nothing. Only what
+       * Drive brought in: a file Classroom attached is Classroom's to remove.
+       */
+      if (already.source === 'drive' && judged.get(file.fileId)?.keep === false) {
+        if (await vault.remove('entity', already.name)) result.removed += 1;
+      } else result.skipped += 1;
       continue;
     }
 
@@ -125,7 +138,7 @@ export async function importDrive(
       name = `${name}-${suffix}`;
     }
     takenNames.add(name);
-    known.add(file.fileId);
+    held.set(file.fileId, { name, source: 'drive' } as VaultNote);
 
     const lines = [`${file.name}.`, ''];
 
