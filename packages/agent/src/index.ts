@@ -104,6 +104,10 @@ export {
   sweepDroppedCourses,
   sweepCourseMail,
   sweepUnattachedFiles,
+  courseFingerprint,
+  recallCourseVerdicts,
+  rememberCourseVerdicts,
+  lastCourseVerdicts,
   type CourseVerdict,
 } from './vault/courses.js';
 export {

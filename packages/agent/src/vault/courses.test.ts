@@ -12,6 +12,10 @@ import {
   sweepDroppedCourses,
   sweepCourseMail,
   sweepUnattachedFiles,
+  courseFingerprint,
+  recallCourseVerdicts,
+  rememberCourseVerdicts,
+  lastCourseVerdicts,
   type ClassifiableCourse,
   type CourseVerdict,
 } from './courses.js';
@@ -1407,5 +1411,48 @@ describe('what the classifier is told a subject is', () => {
     expect(String(llm.chat.mock.calls[0]?.[0]?.messages?.[0]?.content)).toContain(
       'Personal Project',
     );
+  });
+});
+
+describe('remembering course verdicts', () => {
+  const verdicts = [
+    { course: '10 Chemistry', academic: true, subject: 'chemistry', year: '2026-2027', keep: true },
+    { course: 'House Blue', academic: false, subject: 'house-blue', year: null, keep: true },
+  ];
+
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-courseledger-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('recalls verdicts for the same question and not for a different one', async () => {
+    await rememberCourseVerdicts(vault, 'abc', verdicts);
+    expect(await recallCourseVerdicts(vault, 'abc')).toEqual(verdicts);
+    expect(await recallCourseVerdicts(vault, 'xyz')).toBeNull();
+    expect(await lastCourseVerdicts(vault)).toEqual(verdicts);
+  });
+
+  it('does not remember a held verdict', async () => {
+    await rememberCourseVerdicts(vault, 'abc', [
+      ...verdicts,
+      { course: 'Mystery', academic: false, subject: null, year: null, keep: true },
+    ]);
+    expect(await recallCourseVerdicts(vault, 'abc')).toBeNull();
+    expect(await lastCourseVerdicts(vault)).toEqual([]);
+  });
+
+  it('fingerprints what the classifier sees, not the day it sees it', () => {
+    const a = [{ id: '1', name: 'Chem', work: ['Lab 1'], workCount: 1 }];
+    const same = courseFingerprint(a, '2026-08-25', '06-20', 'a school');
+    expect(courseFingerprint(a, '2026-08-25', '06-20', 'a school')).toBe(same);
+    expect(
+      courseFingerprint([{ ...a[0]!, work: ['Lab 2'] }], '2026-08-25', '06-20', 'a school'),
+    ).not.toBe(same);
+    expect(courseFingerprint(a, '2027-08-25', '06-20', 'a school')).not.toBe(same);
   });
 });

@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import type { LlmProvider } from '@contexto/llm';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { untrustedNote } from '../untrusted.js';
 import { slugForNote } from './slug.js';
 import type { ClassroomSnapshot } from './classroom.js';
@@ -840,4 +843,93 @@ export async function sweepCourseMail(
   }
 
   return { removed };
+}
+
+/** Where the last verdicts live: beside the notes, like the Drive ledger. */
+const COURSE_LEDGER = 'courses-judged.json';
+
+/**
+ * Which question the remembered verdicts answer. Bump when the prompt or the
+ * rule that reads its answer changes, and every vault is asked once more.
+ *
+ *   1  the first remembered rule
+ */
+export const CLASSIFIER_RULE = 1;
+
+/**
+ * A fingerprint of everything the classifier is shown.
+ *
+ * The described courses are the prompt; the year boundary decides which are
+ * over; the school page names the houses. Today's date is deliberately not
+ * here: the answer changes with the year, not with the day.
+ */
+export function courseFingerprint(
+  courses: ClassifiableCourse[],
+  yearStart: string,
+  yearEnd: string | undefined,
+  school: string | undefined,
+): string {
+  const sorted = [...courses].sort((a, b) => a.id.localeCompare(b.id));
+  const parts = JSON.stringify({
+    rule: CLASSIFIER_RULE,
+    sorted,
+    yearStart,
+    yearEnd: yearEnd ?? null,
+    school: school ?? null,
+  });
+  return createHash('sha256').update(parts).digest('hex').slice(0, 16);
+}
+
+interface CourseLedger {
+  rule: number;
+  fingerprint: string;
+  verdicts: CourseVerdict[];
+}
+
+async function readCourseLedger(vault: Vault): Promise<CourseLedger | null> {
+  try {
+    const parsed: unknown = JSON.parse(
+      await readFile(join(vault.directory, COURSE_LEDGER), 'utf8'),
+    );
+    if (!parsed || typeof parsed !== 'object') return null;
+    const { rule, fingerprint, verdicts } = parsed as Partial<CourseLedger>;
+    if (rule !== CLASSIFIER_RULE || typeof fingerprint !== 'string' || !Array.isArray(verdicts))
+      return null;
+    return { rule, fingerprint, verdicts };
+  } catch {
+    return null;
+  }
+}
+
+/** The verdicts given to exactly this question, or null. */
+export async function recallCourseVerdicts(
+  vault: Vault,
+  fingerprint: string,
+): Promise<CourseVerdict[] | null> {
+  const ledger = await readCourseLedger(vault);
+  return ledger && ledger.fingerprint === fingerprint ? ledger.verdicts : null;
+}
+
+/** The verdicts last given, whatever the question was. For a pass with no model. */
+export async function lastCourseVerdicts(vault: Vault): Promise<CourseVerdict[]> {
+  return (await readCourseLedger(vault))?.verdicts ?? [];
+}
+
+/**
+ * Keep the verdicts, unless one of them is silence.
+ *
+ * A held course is a question the model did not answer, and remembering that
+ * would make the silence permanent. The next pass asks again.
+ */
+export async function rememberCourseVerdicts(
+  vault: Vault,
+  fingerprint: string,
+  verdicts: CourseVerdict[],
+): Promise<void> {
+  if (verdicts.some((verdict) => verdict.subject === null)) return;
+  await mkdir(vault.directory, { recursive: true });
+  await writeFile(
+    join(vault.directory, COURSE_LEDGER),
+    JSON.stringify({ rule: CLASSIFIER_RULE, fingerprint, verdicts }, null, 2),
+  );
 }
