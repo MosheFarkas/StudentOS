@@ -9,7 +9,7 @@ describe('which mail is school mail', () => {
      * sent to them. On a real account it returned two thousand, which was the
      * ceiling rather than the answer.
      */
-    const query = schoolMailQuery(['wearelcc.ca'], 12);
+    const query = schoolMailQuery(['wearelcc.ca'], '12m');
     expect(query).toContain('from:wearelcc.ca');
     expect(query).not.toContain('to:wearelcc.ca');
   });
@@ -17,20 +17,20 @@ describe('which mail is school mail', () => {
   it('asks for every domain the school uses', () => {
     // A school having one domain was an assumption, and on the first real
     // account it was wrong: students are @wearelcc.ca and staff are @lcc.ca.
-    const query = schoolMailQuery(['wearelcc.ca', 'lcc.ca'], 12);
+    const query = schoolMailQuery(['wearelcc.ca', 'lcc.ca'], '12m');
     expect(query).toContain('from:wearelcc.ca');
     expect(query).toContain('from:lcc.ca');
     expect(query).toContain(' OR ');
   });
 
   it('leaves out spam and the bin', () => {
-    expect(schoolMailQuery(['wearelcc.ca'], 12)).toContain('-in:spam');
-    expect(schoolMailQuery(['wearelcc.ca'], 12)).toContain('-in:trash');
+    expect(schoolMailQuery(['wearelcc.ca'], '12m')).toContain('-in:spam');
+    expect(schoolMailQuery(['wearelcc.ca'], '12m')).toContain('-in:trash');
   });
 
   it('asks only as far back as it was told to', () => {
-    expect(schoolMailQuery(['wearelcc.ca'], 12)).toContain('newer_than:12m');
-    expect(schoolMailQuery(['wearelcc.ca'], 3)).toContain('newer_than:3m');
+    expect(schoolMailQuery(['wearelcc.ca'], '12m')).toContain('newer_than:12m');
+    expect(schoolMailQuery(['wearelcc.ca'], '3m')).toContain('newer_than:3m');
   });
 
   it('asks for Classroom\u2019s own notification mail', () => {
@@ -47,7 +47,7 @@ describe('which mail is school mail', () => {
      * one place in the whole system where a teacher's name sits next to the
      * course they posted in, and it was the single thing being filtered out.
      */
-    expect(schoolMailQuery(['lcc.ca'], 12)).toContain('classroom.google.com');
+    expect(schoolMailQuery(['lcc.ca'], '12m')).toContain('classroom.google.com');
   });
 });
 

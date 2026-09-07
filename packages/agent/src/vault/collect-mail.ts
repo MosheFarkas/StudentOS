@@ -46,14 +46,25 @@ export interface MailCollectionOptions {
   domains: string[];
   /** How far back to look, in months. */
   months?: number;
+  /** How far back to look, as a Gmail duration such as `2d`. Wins over months. */
+  newerThan?: string;
   /** Ceiling on ids listed, for an inbox far outside the ordinary. */
   maxIds?: number;
+  /**
+   * Message ids not to fetch, because the vault already holds them.
+   *
+   * The listing is two requests; the bodies were six hundred. Skipping here
+   * rather than in the importer is the whole difference.
+   */
+  skip?: ReadonlySet<string>;
 }
 
 export interface CollectedMail {
   messages: SchoolMessage[];
   /** How many ids were listed, so a truncated fetch is visible. */
   found: number;
+  /** How many of those the vault already had, and so were not fetched. */
+  known: number;
   /** True when listing stopped at the ceiling, so the result is incomplete. */
   hitCeiling: boolean;
   skipped: string[];
@@ -124,13 +135,14 @@ export async function collectSchoolMail(
   options: MailCollectionOptions,
 ): Promise<CollectedMail> {
   const skipped: string[] = [];
-  const query = schoolMailQuery(options.domains, options.months ?? 12);
+  const query = schoolMailQuery(options.domains, options.newerThan ?? `${options.months ?? 12}m`);
 
   const ids = await listAllMessageIds(ctx, query, options.maxIds ?? MAX_IDS);
   if (isUnavailable(ids)) {
     return {
       messages: [],
       found: 0,
+      known: 0,
       hitCeiling: false,
       skipped: ['gmail: not available (scope not granted, or not connected)'],
     };
@@ -149,6 +161,7 @@ export async function collectSchoolMail(
     return {
       messages: [],
       found: ids.length,
+      known: 0,
       hitCeiling: true,
       skipped: [
         `listing stopped at ${ceiling} messages, which means the query is too broad -- ` +
@@ -158,7 +171,13 @@ export async function collectSchoolMail(
   }
 
   const messages: SchoolMessage[] = [];
+  let known = 0;
   for (const messageId of ids) {
+    if (options.skip?.has(messageId)) {
+      known += 1;
+      continue;
+    }
+
     let full: unknown;
     try {
       full = await readMail.execute({ messageId } as never, ctx);
@@ -187,5 +206,5 @@ export async function collectSchoolMail(
     });
   }
 
-  return { messages, found: ids.length, hitCeiling, skipped };
+  return { messages, found: ids.length, known, hitCeiling, skipped };
 }
