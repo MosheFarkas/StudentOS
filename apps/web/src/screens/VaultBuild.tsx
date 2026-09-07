@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 
 /**
@@ -92,6 +92,24 @@ export function VaultBuild() {
     }
     await load();
   }
+
+  /*
+   * The first build starts itself.
+   *
+   * A student who has just connected everything has done the one thing a
+   * vault needs, and this is the screen Google sends them back to. A button
+   * they still have to find on top of that is a step nobody asked for, and
+   * the timer would otherwise leave them with nothing for hours. Once only:
+   * a vault with anything in it is theirs to update when they choose.
+   */
+  const kicked = useRef(false);
+  useEffect(() => {
+    if (!status || kicked.current) return;
+    if (status.ready && !status.building && status.entities + status.episodes === 0) {
+      kicked.current = true;
+      void build();
+    }
+  }, [status]);
 
   if (!status) return null;
 

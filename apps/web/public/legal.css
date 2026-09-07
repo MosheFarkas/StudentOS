@@ -178,9 +178,21 @@ th {
   white-space: nowrap;
 }
 
+/*
+ * Each scope stays on one line, and a cell holding several wraps between them
+ * rather than through them. Breaking anywhere turned userinfo.email into
+ * "userinf o.email", which is not a thing anyone can paste into a console.
+ * The column is wide enough for the longest scope we request; below that the
+ * table scrolls sideways instead of mangling the names.
+ */
 td code {
   font-size: 0.8125rem;
-  word-break: break-all;
+  white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  min-width: 17rem;
 }
 
 code {
