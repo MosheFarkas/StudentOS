@@ -160,6 +160,7 @@ export { isUnavailable } from './tools/google/client.js';
 export {
   searchMail,
   readMail,
+  watchMailbox,
   readMailAttachment,
   listMailLabels,
   sendMail,

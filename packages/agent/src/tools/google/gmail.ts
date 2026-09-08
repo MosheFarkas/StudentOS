@@ -621,3 +621,20 @@ export const trashMail: Tool<z.infer<typeof readInput>, unknown> = {
     return { trashed: true, messageId: result.id, note: 'In Trash, recoverable for 30 days.' };
   },
 };
+
+/**
+ * Ask Gmail to publish a Pub/Sub message whenever this mailbox changes.
+ *
+ * Not a tool. Expires within seven days; the live sync renews it daily. The
+ * historyId in the answer is not kept -- the bell is a bell, and the sync
+ * searches rather than replays history.
+ */
+export async function watchMailbox(
+  token: string,
+  topicName: string,
+): Promise<{ historyId: string; expiration: string } | ToolUnavailable> {
+  return googleFetch<{ historyId: string; expiration: string }>(`${GMAIL}/watch`, token, {
+    method: 'POST',
+    body: { topicName },
+  });
+}
