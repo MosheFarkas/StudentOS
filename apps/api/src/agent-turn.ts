@@ -96,7 +96,7 @@ export async function runTurnForAgent(
        * Only handed over when there is something in it.
        *
        * Its presence decides whether vault_search can find anything and
-       * whether the reading rules go onto the prompt, so an agent whose
+       * whether the vault skills are named on the prompt, so an agent whose
        * student has imported nothing carries neither -- and behaves exactly as
        * it did before vaults existed.
        */

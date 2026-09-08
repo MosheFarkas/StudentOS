@@ -173,7 +173,10 @@ separately because prompt caching, not model choice, is the main lever on what t
   in the database we already run, behind the existing `MemoryStore` interface.
 - **Skills** — versioned, named, editable procedures with `origin: 'builtin' | 'learned'`. Storage is
   ready; the learning loop is not built. The open questions (what earns promotion, how a stale skill
-  gets revised, how skills are forgotten) are in `packages/agent/src/skills/registry.ts`.
+  gets revised, how skills are forgotten) are in `packages/agent/src/skills/registry.ts`. Three
+  built-in skills -- reading the vault, writing to it, and using the student's browser -- ship as
+  prompt documents in `packages/agent/src/prompts/`; the prompt names each with a one-line trigger
+  and the agent loads the body through `skill_load` when a turn needs it.
 - **Tools** — Zod-schema'd, converted to JSON Schema at the provider boundary. Calendar and Classroom
   are stubs behind a `GoogleTokenProvider` seam.
 

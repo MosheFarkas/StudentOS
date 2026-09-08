@@ -66,9 +66,8 @@ export interface AgentRunInput {
   /**
    * ContextoVault, when this student has one.
    *
-   * Its presence also decides whether the reading rules are loaded: an agent
-   * with nothing to search should not be carrying instructions about how to
-   * search it on every turn.
+   * Its presence also decides which skills the prompt names: an agent
+   * with nothing to search should not be offered a skill about searching it.
    */
   vault?: Vault;
   /**

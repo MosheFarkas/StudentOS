@@ -359,9 +359,9 @@ describe('reporting activity', () => {
 /**
  * The prompt documents actually reach the model.
  *
- * buildSystemPrompt is private, so nothing outside this file would notice a
- * section being dropped from it. The document could be perfect, tested, and
- * never sent.
+ * buildSystemPrompt is exported for the evals and tests that call it
+ * directly; nothing else would notice a section being dropped from what it
+ * assembles. The document could be perfect, tested, and never sent.
  */
 describe('the assembled system prompt', () => {
   /** Records the messages the turn sends, then replies. */

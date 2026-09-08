@@ -122,6 +122,8 @@ const CASES: Case[] = [
     tool: ['portal_read', 'portal_refresh'],
     expect: ['thursday', '18'],
   },
+  // No answer check: it would ride on a live fetch of example.com, which one
+  // run already failed on DNS alone. The tool choice is the measurement.
   {
     id: 'a-public-article',
     why: 'a public page is a plain fetch, and waking a laptop for it is the wrong call',
@@ -131,7 +133,6 @@ const CASES: Case[] = [
     noLoad: ['browser', 'vault-writing'],
     tool: ['web_read_link'],
     noTool: ['browser_open'],
-    expect: ['example', 'illustrative'],
   },
   {
     id: 'a-page-behind-a-login',
