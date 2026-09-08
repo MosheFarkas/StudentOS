@@ -261,7 +261,11 @@ async function runCase(apiKey: string, testCase: Case): Promise<Outcome> {
     const answered = testCase.expect.some((want) => text.includes(want.toLowerCase()));
 
     const distinct = [...new Set(called)];
-    const efficient = testCase.enough === 'none' ? distinct.length === 0 : distinct.length <= 1;
+    // skill_load is the agent reading its own instructions, not a memory it
+    // asked. Shown, so a run says what happened, and not counted as a spare
+    // lookup -- the question here is which memory it chose.
+    const looked = distinct.filter((tool) => tool !== 'skill_load');
+    const efficient = testCase.enough === 'none' ? looked.length === 0 : looked.length <= 1;
 
     return { testCase, reply, called: distinct, answered, efficient };
   } finally {

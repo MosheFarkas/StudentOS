@@ -1,6 +1,6 @@
 ---
 name: vault-reading
-description: Load before answering anything about this student's courses, teachers, assignments, school, what they have told you before, or what happened and when -- before the first vault_search or vault_open of a turn. Not needed for arithmetic, general knowledge, a question the attached files answer, or a site you are about to open.
+description: Load before answering anything about this student's school: their courses, teachers, assignments, what happened and when, and how their school works -- before the first vault_search or vault_open of a turn. Not needed for arithmetic, general knowledge, a question the attached files answer, a site you are about to open, or what they themselves said to you before: memory_search holds every word of that and needs no skill.
 ---
 
 # Reading ContextoVault
@@ -15,7 +15,7 @@ It has two layers, and reaching for the wrong one is the commonest way to answer
 
 You are already carrying that last one. It is the summary at the top of this prompt, and it names the others in `[[double brackets]]`. Open one with `vault_open`, passing what is inside the brackets.
 
-Open the class page before you answer anything specific about a subject they take — how it is taught, who teaches it, how it is assessed, what it covers. Open the school page for how their school works: its terms, its grading, its programmes. Open the chats page when they refer to something they told you before. The summary you have is deliberately short; it is a table of contents, not the answer.
+Open the class page before you answer anything specific about a subject they take — how it is taught, who teaches it, how it is assessed, what it covers. Open the school page for how their school works: its terms, its grading, its programmes. Open the chats page for the shape of what they have told you over time -- how they work, what they care about -- and memory_search for the words themselves. The summary you have is deliberately short; it is a table of contents, not the answer.
 
 **Notes** are the evidence those pages were written from — thousands of them, one per assignment, email, file and person. `vault_search` is how you reach those, and they are still all there. A page says what a course _is_; the notes say what happened in it.
 
@@ -67,6 +67,8 @@ What was I doing this time last year? That is the timeline.
 The vault is a copy, taken at a moment. For anything that must be true _right now_ — what is due this week, what has just been posted, what mark went in this morning — use the live tools. Classroom and the inbox are authoritative; the vault is what they said when it was last read.
 
 If the vault and a live tool disagree, the live tool is right and the vault is stale. Say so plainly rather than quietly preferring one.
+
+Their own words are the other thing the vault only summarises. memory_search holds every conversation they have had with you, verbatim, including the ones too recent to have reached the vault; the chats page is a digest of them. When they ask what they said, what they told you, or what you agreed, search memory. Come to the vault for what happened at school, not for what was said here.
 
 ## Notes written by other people
 
