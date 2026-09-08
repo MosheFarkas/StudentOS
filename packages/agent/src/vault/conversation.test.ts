@@ -175,8 +175,45 @@ describe('recording a conversation', () => {
 
     const sent = llm.chat.mock.calls[0]?.[0].messages as { role: string; content: string }[];
     const user = sent.find((m) => m.role === 'user')?.content ?? '';
-    expect(user).toMatch(/already recorded from this conversation/i);
+    expect(user).toMatch(/already recorded by you/i);
     expect(user).toContain('The student said the chemistry test moved to Friday.');
+  });
+
+  it('shows only the most recent few of its own writes, newest first, dated', async () => {
+    // An agent that has been writing for a year must not hand the pass a
+    // year of notes on every hourly rollup.
+    for (let day = 1; day <= 12; day += 1) {
+      const date = `2026-08-${String(day).padStart(2, '0')}`;
+      await vault.write({
+        name: `${date}-note`,
+        kind: 'episode',
+        source: 'student',
+        description: `Note from ${date}.`,
+        externalId: 'agent-1',
+        occurred: `${date}T12:00:00Z`,
+        actor: 'The student',
+        event: 'other',
+        body: `Note from ${date}.`,
+      });
+    }
+    const llm = llmReturning(JSON.stringify({ keep: false, what: '', about: [], inCourse: [] }));
+
+    await importConversation({ llm } as never, {
+      vault,
+      exchanges: ['Student: hi\nAgent: Hello.'],
+      conversationId: 'conv-11',
+      occurred: '2026-09-19T20:00:00Z',
+      userId: 'u1',
+      agentId: 'agent-1',
+    });
+
+    const sent = llm.chat.mock.calls[0]?.[0].messages as { role: string; content: string }[];
+    const user = sent.find((m) => m.role === 'user')?.content ?? '';
+    expect(user).toContain('- 2026-08-12: Note from 2026-08-12.');
+    expect(user).toContain('- 2026-08-03: Note from 2026-08-03.');
+    expect(user).not.toContain('Note from 2026-08-02.');
+    expect(user).not.toContain('Note from 2026-08-01.');
+    expect(user.indexOf('2026-08-12')).toBeLessThan(user.indexOf('2026-08-03'));
   });
 
   it('says nothing about prior writes when there were none', async () => {

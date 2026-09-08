@@ -132,6 +132,19 @@ export const writeVaultNote: Tool<z.infer<typeof inputSchema>, string> = {
         `About [[${existing.name}]] instead.`
       );
     }
+    /*
+     * Only this agent's own writes are updatable.
+     *
+     * A conversation episode the rollup wrote is source: student too, and it
+     * carries the verbatim transcript. Its name is visible to the model, so
+     * without this a "correction" could replace a record of what was said.
+     */
+    if (existing && existing.externalId !== ctx.agentId) {
+      return (
+        `Not written: "${existing.name}" is a record written by another pass, and a record is ` +
+        'not rewritten. Write a new note instead, and link it if it is worth pointing at.'
+      );
+    }
 
     const description = input.description.trim();
     const body = input.body.trim();

@@ -49,6 +49,15 @@ const extraction = z.object({
   inCourse: z.array(z.string()).max(3).default([]),
 });
 
+/**
+ * How many of the agent's own earlier writes the pass is shown.
+ *
+ * Every note vault_write makes for this agent carries its id, across every
+ * conversation it has ever had, so the honest list is the recent few,
+ * dated, rather than everything, claiming to be this conversation's.
+ */
+const ALREADY_WRITTEN_LIMIT = 10;
+
 const ASK = [
   'You are reading one conversation between a student and their study agent, and writing',
   'a single episode for ContextoVault, following the rules above.',
@@ -67,8 +76,9 @@ const ASK = [
   'about and inCourse may only contain names from the list you are given. Omit rather',
   'than guess, and link the specific piece of work as well as the course it belongs to.',
   '',
-  'If you are shown what was already recorded from this conversation, do not record it',
-  'again. keep is false when that list already covers everything that happened.',
+  'If something that happened is already in the list of what you recorded in recent',
+  'conversations, do not record it again. keep is false when that list already covers',
+  'everything that happened here.',
 ].join('\n');
 
 export async function importConversation(
@@ -82,7 +92,12 @@ export async function importConversation(
   if (existing.some((note) => note.externalId === conversationId)) return { written: 0 };
 
   // Written by the agent mid-conversation, on the student's say-so.
-  const alreadyWritten = agentId ? existing.filter((note) => note.externalId === agentId) : [];
+  const alreadyWritten = agentId
+    ? existing
+        .filter((note) => note.externalId === agentId)
+        .sort((a, b) => (b.occurred ?? '').localeCompare(a.occurred ?? ''))
+        .slice(0, ALREADY_WRITTEN_LIMIT)
+    : [];
 
   const entities = await vault.list('entity');
   const allowed = new Set(entities.map((note) => note.name));
@@ -119,8 +134,10 @@ export async function importConversation(
       content:
         `Names you may link to:\n${[...shortlist].join('\n') || '(none)'}\n\n` +
         (alreadyWritten.length > 0
-          ? 'Already recorded from this conversation:\n' +
-            alreadyWritten.map((note) => `- ${note.description}`).join('\n') +
+          ? 'Already recorded by you in recent conversations with this student, most recent first:\n' +
+            alreadyWritten
+              .map((note) => `- ${(note.occurred ?? '').slice(0, 10)}: ${note.description}`)
+              .join('\n') +
             '\n\n'
           : '') +
         `The conversation, oldest first:\n\n${exchanges.join('\n\n')}`,

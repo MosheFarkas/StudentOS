@@ -45,6 +45,7 @@ describe('vault_write', () => {
       kind: 'entity',
       source: 'student',
       description: 'A tutor the student sees',
+      externalId: 'agent-1',
       body: 'Sam, on Wednesdays.',
     });
     await writeDocument(vault, {
@@ -52,12 +53,28 @@ describe('vault_write', () => {
       description: 'Chemistry, as the vault has it',
       body: '# Chemistry\n\nTaught by Mr Ali.',
     });
+    await vault.write({
+      name: '2026-09-01-essay-chat',
+      kind: 'episode',
+      source: 'student',
+      description: 'The student said they had not started the essay.',
+      externalId: 'conv-1',
+      occurred: '2026-09-01T20:00:00Z',
+      actor: 'The student',
+      event: 'conversation',
+      body: 'The student said they had not started the essay.\n\n## What was said\n\nStudent: i havent started',
+    });
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
   const run = (input: Record<string, unknown>, context = ctx) =>
     writeVaultNote.execute(input as never, context) as Promise<string>;
+
+  // The vault now always carries the rollup-style fixture episode too; this
+  // narrows list('episode') to what a given test's own calls wrote.
+  const writtenEpisodes = async () =>
+    (await vault.list('episode')).filter((note) => note.name !== '2026-09-01-essay-chat');
 
   const episode = {
     kind: 'episode',
@@ -70,7 +87,7 @@ describe('vault_write', () => {
 
   it('writes an episode the student can find again', async () => {
     const reply = await run(episode);
-    const written = (await vault.list('episode'))[0];
+    const written = (await writtenEpisodes())[0];
 
     expect(reply).toMatch(/^Wrote episode 2026-09-12-chemistry-test-moved-to-friday/);
     expect(written?.event).toBe('deadline-changed');
@@ -81,7 +98,7 @@ describe('vault_write', () => {
 
   it("marks everything it writes as the student's own, from this conversation", async () => {
     await run(episode);
-    const written = (await vault.list('episode'))[0];
+    const written = (await writtenEpisodes())[0];
 
     expect(written?.source).toBe('student');
     expect(written?.externalId).toBe('agent-1');
@@ -91,7 +108,7 @@ describe('vault_write', () => {
   it('dates an episode now when the model gives no time', async () => {
     const { occurred: _occurred, ...undated } = episode;
     await run(undated);
-    const written = (await vault.list('episode'))[0];
+    const written = (await writtenEpisodes())[0];
 
     expect(written?.occurred).toBeTruthy();
     expect(written?.name.startsWith(new Date().toISOString().slice(0, 10))).toBe(true);
@@ -101,7 +118,7 @@ describe('vault_write', () => {
     // The vault sorts occurred lexicographically; a note dated "Sep 12 2026"
     // would sit above every ISO timestamp for ever.
     await run({ ...episode, occurred: 'Sep 12 2026 18:30 UTC' });
-    const written = (await vault.list('episode'))[0];
+    const written = (await writtenEpisodes())[0];
 
     expect(written?.occurred).toBe('2026-09-12T18:30:00.000Z');
     expect(written?.name.startsWith('2026-09-12-')).toBe(true);
@@ -110,7 +127,7 @@ describe('vault_write', () => {
   it('refuses an episode with no event', async () => {
     const { event: _event, ...eventless } = episode;
     expect(await run(eventless)).toMatch(/^Not written:.*event/i);
-    expect(await vault.list('episode')).toEqual([]);
+    expect(await writtenEpisodes()).toEqual([]);
   });
 
   it('refuses a link to a note that does not exist, and names it', async () => {
@@ -122,12 +139,12 @@ describe('vault_write', () => {
     expect(reply).toMatch(/^Not written:/);
     expect(reply).toContain('[[chem-test]]');
     expect(reply).not.toContain('[[chemistry]]');
-    expect(await vault.list('episode')).toEqual([]);
+    expect(await writtenEpisodes()).toEqual([]);
   });
 
   it('accepts a link to a page as well as to a note', async () => {
     await run({ ...episode, body: 'Moved.\n\nAbout [[class-chemistry]]' });
-    expect(await vault.list('episode')).toHaveLength(1);
+    expect(await writtenEpisodes()).toHaveLength(1);
   });
 
   it('writes an entity for a thing the vault does not have', async () => {
@@ -170,13 +187,13 @@ describe('vault_write', () => {
       name: '2026-09-12-chemistry-test-moved-to-friday',
       body: 'The student said the chemistry test moved to Friday the 25th, period 3.\n\nAbout [[chemistry-test]]',
     });
-    const written = (await vault.list('episode'))[0];
+    const written = (await writtenEpisodes())[0];
 
     expect(reply).toMatch(/^Updated episode 2026-09-12-chemistry-test-moved-to-friday/);
     expect(written?.occurred).toBe('2026-09-12T17:30:00.000Z');
     expect(written?.actor).toBe('Mr Ali');
     expect(written?.body).toContain('period 3');
-    expect(await vault.list('episode')).toHaveLength(1);
+    expect(await writtenEpisodes()).toHaveLength(1);
   });
 
   it('refuses to edit an imported note, and says what to do instead', async () => {
@@ -193,6 +210,22 @@ describe('vault_write', () => {
     expect(reply).toMatch(/episode/i);
     expect(reply).toContain('About [[chemistry-test]]');
     expect((await vault.read('entity', 'chemistry-test'))?.body).toContain('Due: 2026-09-18');
+  });
+
+  it('refuses to rewrite a record it did not write itself', async () => {
+    // The rollup's conversation episodes are the student's own too, and they
+    // carry the transcript. A name is not a licence to replace one.
+    const reply = await run({
+      ...episode,
+      name: '2026-09-01-essay-chat',
+      body: 'The student said they had started the essay.',
+    });
+
+    expect(reply).toMatch(/^Not written:/);
+    expect(reply).toMatch(/another pass/i);
+    expect((await vault.read('episode', '2026-09-01-essay-chat'))?.body).toContain(
+      'havent started',
+    );
   });
 
   it('refuses to update a note that is not there', async () => {
