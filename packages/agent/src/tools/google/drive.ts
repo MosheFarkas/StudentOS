@@ -769,7 +769,10 @@ export async function startPageToken(token: string): Promise<string | ToolUnavai
     token,
   );
   if (isUnavailable(result)) return result;
-  return result.startPageToken ?? '';
+  // An empty string is a token Drive would reject on the next call. Saying so
+  // here keeps the caller from storing one and losing a real token for it.
+  if (!result.startPageToken) return unavailable('Drive returned no start page token.');
+  return result.startPageToken;
 }
 
 export interface DriveChange {

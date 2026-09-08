@@ -65,6 +65,12 @@ async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
   const errorBody = (await response.json().catch(() => null)) as GoogleErrorBody | null;
   const reason = errorBody?.error?.errors?.[0]?.reason ?? errorBody?.error?.status ?? '';
   const message = errorBody?.error?.message ?? `HTTP ${response.status}`;
+  /*
+   * Carried on every answer below. The student-facing reason deliberately
+   * loses the detail, and a caller deciding whether to throw away stored
+   * state -- a Drive change token, say -- needs the detail back.
+   */
+  const detail = { status: response.status, message };
 
   switch (reason) {
     /*
@@ -87,11 +93,13 @@ async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
         return unavailable(
           'Contexto is not set up to use this Google service yet. This is on us, ' +
             'not you or your school -- it needs enabling on our side.',
+          detail,
         );
       }
       return unavailable(
         'Your school has not approved Contexto yet, so this cannot be used. ' +
           'An administrator needs to allow the app before it will work.',
+        detail,
       );
 
     case 'adminPolicyEnforced':
@@ -99,18 +107,20 @@ async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
       return unavailable(
         'Your school has blocked Contexto from accessing this. ' +
           'An administrator would need to change that.',
+        detail,
       );
 
     /* The token is stale or the scope was revoked. Reconnecting fixes it. */
     case 'authError':
     case 'UNAUTHENTICATED':
-      return unavailable('Your Google connection expired. Reconnect it in Settings.');
+      return unavailable('Your Google connection expired. Reconnect it in Settings.', detail);
 
     case 'insufficientPermissions':
     case 'PERMISSION_DENIED':
       return unavailable(
         'Contexto does not have permission for this. Reconnect Google in Settings ' +
           'to grant it.',
+        detail,
       );
 
     /*
@@ -121,13 +131,16 @@ async function mapGoogleError(response: Response): Promise<ToolUnavailable> {
     case 'rateLimitExceeded':
     case 'userRateLimitExceeded':
     case 'RESOURCE_EXHAUSTED':
-      return unavailable('Google is rate limiting us right now. Try again in a minute.');
+      return unavailable('Google is rate limiting us right now. Try again in a minute.', detail);
 
     default:
       if (response.status === 404) {
-        return unavailable('That Google resource does not exist or is not shared with you.');
+        return unavailable(
+          'That Google resource does not exist or is not shared with you.',
+          detail,
+        );
       }
-      return unavailable(`Google returned an error: ${message}`);
+      return unavailable(`Google returned an error: ${message}`, detail);
   }
 }
 
