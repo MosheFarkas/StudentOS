@@ -457,7 +457,11 @@ async function refreshOne(
       `, ${mailKnown} mail already held`
     );
   } finally {
-    await updateSyncState(ctx.db, userId, { lastRefreshAt: new Date() });
+    try {
+      await updateSyncState(ctx.db, userId, { lastRefreshAt: new Date() });
+    } catch (error) {
+      console.error(`[vault] ${userId} could not record the refresh attempt`, error);
+    }
   }
 }
 
