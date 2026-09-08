@@ -31,6 +31,11 @@ export async function updateSyncState(
   userId: string,
   patch: SyncPatch,
 ): Promise<void> {
+  if (Object.keys(patch).length === 0) {
+    await db.insert(vaultSync).values({ userId }).onConflictDoNothing();
+    return;
+  }
+
   await db
     .insert(vaultSync)
     .values({ userId, ...patch })
