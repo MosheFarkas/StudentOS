@@ -29,6 +29,7 @@ export const vaultSync = pgTable(
      */
     schoolDomains: jsonb('school_domains').$type<string[]>(),
     lastLiveSyncAt: timestamp('last_live_sync_at', { withTimezone: true }),
+    /** The last attempt, successful or not, used for ordering. */
     lastRefreshAt: timestamp('last_refresh_at', { withTimezone: true }),
   },
   (t) => [index('vault_sync_drive_channel_id_idx').on(t.driveChannelId)],

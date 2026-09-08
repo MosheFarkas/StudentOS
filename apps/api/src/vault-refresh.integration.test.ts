@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { AppContext } from './context.js';
 import { createUser, grantGoogle, reset, testDb } from './test-support/harness.js';
 import { refreshVaultFor } from './vault-refresh.js';
+import { syncStateOf } from './vault-sync-state.js';
 
 /**
  * The gate in front of every build.
@@ -73,5 +74,24 @@ describe('refusing to build a student who is not ready', () => {
     expect(await refreshVaultFor(ctx, student.id)).toBe('not ready: Drive not consented');
     expect(asked).toBe(0);
     expect(await readdir(root)).toEqual([]);
+  });
+
+  it('still records the attempt, so a student stuck at the gate is not first forever', async () => {
+    /*
+     * lastRefreshAt means the last attempt, not the last success. A student
+     * whose token is dead returns here in milliseconds every time; without
+     * this, they would sort first under stalest-first ordering on every pass
+     * and every boot, and never stop consuming the budget.
+     */
+    const student = await createUser();
+    await grantGoogle(student.id, [CLASSROOM, GMAIL, DRIVE]);
+    const { ctx } = await contextWhereGoogle(async () => {
+      throw new Error('invalid_grant');
+    });
+
+    expect(await refreshVaultFor(ctx, student.id)).toBe(
+      'not ready: Google access expired, sign in again',
+    );
+    expect((await syncStateOf(ctx.db, student.id))?.lastRefreshAt).not.toBeNull();
   });
 });
