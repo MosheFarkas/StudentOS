@@ -12,7 +12,8 @@ import {
 } from '@contexto/agent';
 import type { Auth } from '../auth.js';
 
-const GOOGLE_PROVIDER_ID = 'google';
+/** Better Auth's id for the Google link. A user with a row for it has connected Google. */
+export const GOOGLE_PROVIDER_ID = 'google';
 
 /**
  * Which Google scope groups a student has granted.
