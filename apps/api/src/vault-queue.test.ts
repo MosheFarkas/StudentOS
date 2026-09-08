@@ -65,4 +65,20 @@ describe('StudentQueue', () => {
     ).rejects.toThrow('boom');
     expect(await queue.run('s1', async () => 'ok')).toBe('ok');
   });
+
+  it('clears busy immediately after a successful job', async () => {
+    const queue = new StudentQueue();
+    await queue.run('s1', async () => 'ok');
+    expect(queue.busy('s1')).toBe(false);
+  });
+
+  it('clears busy immediately after a failed job', async () => {
+    const queue = new StudentQueue();
+    await queue
+      .run('s1', async () => {
+        throw new Error('boom');
+      })
+      .catch(() => {});
+    expect(queue.busy('s1')).toBe(false);
+  });
 });

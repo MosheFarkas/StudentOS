@@ -16,19 +16,22 @@ export class StudentQueue {
 
     // Runs after the previous job however that job ended.
     const next = previous.then(job, job);
-    const settled = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.#tails.set(userId, settled);
 
-    void settled.then(() => {
+    // Cleanup function to be attached directly to next.
+    // Runs on both success and failure paths, always returns undefined.
+    const cleanup = () => {
       const left = (this.#pending.get(userId) ?? 1) - 1;
       if (left <= 0) {
         this.#pending.delete(userId);
         if (this.#tails.get(userId) === settled) this.#tails.delete(userId);
       } else this.#pending.set(userId, left);
-    });
+      return undefined;
+    };
+
+    // Attach cleanup directly to next (before run() returns) on both paths,
+    // so it runs before any caller continuation.
+    const settled = next.then(cleanup, cleanup);
+    this.#tails.set(userId, settled);
 
     return next;
   }
