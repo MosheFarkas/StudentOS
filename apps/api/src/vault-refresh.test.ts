@@ -16,45 +16,37 @@ import { studentsToRefresh } from './vault-refresh.js';
  */
 
 describe('choosing whose vault to refresh', () => {
-  it('visits a student once however many agents they have', () => {
-    const rows = [
-      { userId: 'alice', agentId: 'a1' },
-      { userId: 'alice', agentId: 'a2' },
-      { userId: 'alice', agentId: 'a3' },
-      { userId: 'bob', agentId: 'b1' },
-    ];
+  const rows = [
+    { userId: 'alice', agentId: 'a1' },
+    { userId: 'alice', agentId: 'a2' },
+    { userId: 'bob', agentId: null },
+    { userId: 'cara', agentId: 'c1' },
+  ];
+  const at = (iso: string) => new Date(iso);
 
-    expect(studentsToRefresh(rows, 10)).toEqual(['alice', 'bob']);
+  it('visits a student once however many agents they have, and includes one with none', () => {
+    expect(studentsToRefresh(rows, new Map())).toEqual(['alice', 'bob', 'cara']);
   });
 
-  it('includes a student who has no agents at all', () => {
-    /*
-     * The account this was built against has none: they were deleted, and the
-     * vault -- three and a half thousand notes -- remained, because it is
-     * keyed by the student. Iterating agents would have left it to rot.
-     */
-    const rows = [
-      { userId: 'alice', agentId: null },
-      { userId: 'bob', agentId: 'b1' },
-    ];
-
-    expect(studentsToRefresh(rows, 10)).toEqual(['alice', 'bob']);
+  it('puts the never-refreshed first, then the stalest', () => {
+    const last = new Map([
+      ['alice', at('2026-09-07T06:00:00Z')],
+      ['bob', at('2026-09-06T06:00:00Z')],
+      ['cara', null],
+    ]);
+    expect(studentsToRefresh(rows, last)).toEqual(['cara', 'bob', 'alice']);
   });
 
-  it('takes only as many students as the batch allows', () => {
-    // The batch is there to bound one pass. Counting agents rather than
-    // students made it bound something nobody cared about.
-    const rows = [
-      { userId: 'alice', agentId: 'a1' },
-      { userId: 'alice', agentId: 'a2' },
-      { userId: 'bob', agentId: 'b1' },
-      { userId: 'carol', agentId: 'c1' },
-    ];
-
-    expect(studentsToRefresh(rows, 2)).toEqual(['alice', 'bob']);
+  it('can keep only the overdue', () => {
+    const last = new Map([
+      ['alice', at('2026-09-07T06:00:00Z')],
+      ['bob', at('2026-09-06T06:00:00Z')],
+    ]);
+    const overdueBefore = at('2026-09-07T00:00:00Z');
+    expect(studentsToRefresh(rows, last, { overdueBefore })).toEqual(['cara', 'bob']);
   });
 
   it('copes with nobody at all', () => {
-    expect(studentsToRefresh([], 5)).toEqual([]);
+    expect(studentsToRefresh([], new Map())).toEqual([]);
   });
 });

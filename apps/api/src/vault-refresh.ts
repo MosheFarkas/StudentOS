@@ -32,6 +32,9 @@ import {
   readDriveFile,
   textFromDriveRead,
   readGrade,
+  courseFingerprint,
+  recallCourseVerdicts,
+  rememberCourseVerdicts,
 } from '@contexto/agent';
 import type { ToolContext } from '@contexto/agent';
 import { BetterAuthGoogleTokenProvider, getGoogleGrant } from './google/connections.js';
@@ -43,6 +46,8 @@ import {
   unreadyReason,
   type BuildPhase,
 } from './vault-build.js';
+import { updateSyncState, allSyncStates } from './vault-sync-state.js';
+import { studentQueue } from './vault-queue.js';
 
 /**
  * Keeping ContextoVault current.
@@ -61,31 +66,30 @@ import {
 /** How often to look. School data changes on the scale of days, not minutes. */
 const EVERY = 6 * 60 * 60 * 1000;
 
-/** Agents refreshed per pass, so one wake cannot run for an hour. */
-const BATCH = 5;
+/** Wait this long after boot before the first pass, so a deploy settles first. */
+const AFTER_BOOT = 3 * 60 * 1000;
 
 /**
- * The students to refresh this pass, from a listing of their agents.
+ * The students to refresh this pass, stalest first.
  *
- * The vault used to belong to an agent, so this loop was over agents. It
- * belongs to the student now, and iterating agents breaks at both ends: a
- * student with three agents had their whole year imported three times every
- * pass, and a student with none was never refreshed at all -- while their
- * vault, three and a half thousand notes of it, sat there going stale.
- *
- * Both cases are real. The account this was built against has no agents left
- * and the largest vault on the deployment.
+ * The vault used to belong to an agent, so this loop was over agents, and a
+ * student with none was never refreshed. Then it took the first five rows in
+ * table order, and a sixth student was never refreshed either. Now every
+ * student is listed, those never refreshed come first, and the pass runs
+ * down the list until its time budget ends -- so nobody waits for ever, and
+ * one wake still cannot run for an hour.
  */
 export function studentsToRefresh(
   rows: readonly { userId: string; agentId: string | null }[],
-  batch: number,
+  lastRefreshed: ReadonlyMap<string, Date | null>,
+  options: { overdueBefore?: Date } = {},
 ): string[] {
-  const seen = new Set<string>();
-  for (const row of rows) {
-    if (seen.size >= batch && !seen.has(row.userId)) break;
-    seen.add(row.userId);
-  }
-  return [...seen];
+  const students = [...new Set(rows.map((row) => row.userId))];
+  const when = (userId: string) => lastRefreshed.get(userId)?.getTime() ?? 0;
+  const due = options.overdueBefore
+    ? students.filter((userId) => when(userId) < (options.overdueBefore as Date).getTime())
+    : students;
+  return due.sort((a, b) => when(a) - when(b));
 }
 
 /**
@@ -191,19 +195,32 @@ async function refreshOne(
    * sweep below can never drop. Last year's exam prep sat in a real vault on
    * exactly those terms, so those are judged too, from their own notes.
    */
-  const verdicts = await classifyCourses(
-    { llm: await ctx.llm.resolve(userId) },
-    {
-      courses: [
-        ...describeCourses(snapshot, today),
-        ...(await describeOrphanCourses(vault, snapshot, today)),
-      ],
-      today,
-      ...(yearEnd ? { yearEnd } : {}),
-      ...(school ? { school } : {}),
-      userId,
-    },
-  );
+  const described = [
+    ...describeCourses(snapshot, today),
+    ...(await describeOrphanCourses(vault, snapshot, today)),
+  ];
+  const fingerprint = courseFingerprint(described, yearStart, yearEnd ?? undefined, school);
+  /*
+   * Asked only when the question changed.
+   *
+   * The described courses, the year boundary and the school page are the
+   * whole prompt. Same prompt, same rule: the last answer stands, and a
+   * quiet pass costs no call here. Held verdicts are never remembered, so a
+   * silence is asked again.
+   */
+  const verdicts =
+    (await recallCourseVerdicts(vault, fingerprint)) ??
+    (await classifyCourses(
+      { llm: await ctx.llm.resolve(userId) },
+      {
+        courses: described,
+        today,
+        ...(yearEnd ? { yearEnd } : {}),
+        ...(school ? { school } : {}),
+        userId,
+      },
+    ));
+  await rememberCourseVerdicts(vault, fingerprint, verdicts);
   const dropped = verdicts.filter((verdict) => !verdict.keep);
 
   /*
@@ -231,12 +248,18 @@ async function refreshOne(
    * per message to produce notes joined to nothing.
    */
   let mail = { written: 0, people: 0 };
+  let mailKnown = 0;
   if (domainOf(owner.email) && (await vault.has())) {
     // Asked each refresh rather than cached: a student changes schools, and a
     // domain list frozen at first sign-in would quietly stop matching.
     onPhase?.({ phase: 'mail', done: 0, total: 0 });
     const domains = await discoverSchoolDomains(toolContext, owner.email);
-    const found = await collectSchoolMail(toolContext, { domains });
+    await updateSyncState(ctx.db, userId, { schoolDomains: domains });
+    const known = new Set(
+      (await vault.list('episode')).map((note) => note.externalId).filter(Boolean) as string[],
+    );
+    const found = await collectSchoolMail(toolContext, { domains, skip: known });
+    mailKnown = found.known;
     if (!found.hitCeiling) {
       const entities = (await vault.list('entity')).map((note) => note.name);
       mail = await importMail(
@@ -410,6 +433,8 @@ async function refreshOne(
     },
   );
 
+  await updateSyncState(ctx.db, userId, { lastRefreshAt: new Date() });
+
   return (
     `${classroom.written}+${classroom.updated} classroom, ${mail.written} episodes, ` +
     `${drive.written} drive files, ${files.read} read (${files.remaining} to go)` +
@@ -420,7 +445,8 @@ async function refreshOne(
     `${oldMail.removed > 0 ? `, ${oldMail.removed} old-class messages` : ''}` +
     `, ${classes.written} class pages (${classes.skipped} unchanged, ${classes.removed} gone)` +
     `, ${people.written} people (${people.skipped} unchanged, ${people.removed} gone)` +
-    `${about ? `, wrote user.md (${about.length} chars)` : ''}`
+    `${about ? `, wrote user.md (${about.length} chars)` : ''}` +
+    `, ${mailKnown} mail already held`
   );
 }
 
@@ -433,25 +459,34 @@ async function refreshOne(
 export function startVaultRefresh(ctx: AppContext): () => void {
   if (!ctx.env.VAULT_ROOT) return () => {};
 
-  const pass = async (): Promise<void> => {
+  const pass = async (options: { onlyOverdue: boolean }): Promise<void> => {
     try {
-      /*
-       * Every student, and their agents if they have any.
-       *
-       * A left join rather than a select from agents: a vault outlives the
-       * agents that were reading it, and one with no agents still needs
-       * keeping up to date. The batch bounds students, which is the thing a
-       * pass actually costs.
-       */
       const rows = await ctx.db
         .select({ userId: user.id, agentId: agents.id })
         .from(user)
         .leftJoin(agents, eq(agents.userId, user.id));
+      const lastRefreshed = new Map(
+        (await allSyncStates(ctx.db)).map((state) => [state.userId, state.lastRefreshAt]),
+      );
+      const students = studentsToRefresh(
+        rows,
+        lastRefreshed,
+        options.onlyOverdue ? { overdueBefore: new Date(Date.now() - EVERY) } : {},
+      );
 
-      for (const userId of studentsToRefresh(rows, BATCH)) {
+      // Bounded by time, not by a count: one wake still cannot run for an hour.
+      const deadline = Date.now() + ctx.env.VAULT_REFRESH_BUDGET_MINUTES * 60 * 1000;
+      for (const userId of students) {
+        if (Date.now() > deadline) {
+          console.log(
+            `[vault] refresh budget spent; ${students.indexOf(userId)} of ${students.length} done`,
+          );
+          break;
+        }
         try {
           const agentId = rows.find((row) => row.userId === userId)?.agentId ?? userId;
-          console.log(`Vault ${userId}: ${await refreshOne(ctx, agentId, userId)}`);
+          const summary = await studentQueue.run(userId, () => refreshOne(ctx, agentId, userId));
+          console.log(`Vault ${userId}: ${summary}`);
         } catch (error) {
           // One student's expired token must not stop the rest.
           console.error(`Vault refresh failed for ${userId}`, error);
@@ -462,8 +497,16 @@ export function startVaultRefresh(ctx: AppContext): () => void {
     }
   };
 
-  // Not on boot: a deploy restarts the process, and a refresh on every deploy
-  // would import the same mail repeatedly while somebody is iterating.
-  const timer = setInterval(() => void pass(), EVERY);
-  return () => clearInterval(timer);
+  /*
+   * Soon after boot, for the overdue only. A deploy restarts the process,
+   * and the old rule of "never on boot" meant a deploy every few hours
+   * stopped the refresh from ever running. Only the overdue, so a deploy
+   * does not re-import for students refreshed an hour ago.
+   */
+  const first = setTimeout(() => void pass({ onlyOverdue: true }), AFTER_BOOT);
+  const timer = setInterval(() => void pass({ onlyOverdue: false }), EVERY);
+  return () => {
+    clearTimeout(first);
+    clearInterval(timer);
+  };
 }
