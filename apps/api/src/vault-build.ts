@@ -1,4 +1,5 @@
 import { domainOf } from '@contexto/agent';
+import { studentQueue } from './vault-queue.js';
 
 /**
  * Building a student's vault on demand, rather than when the timer next fires.
@@ -160,10 +161,14 @@ export function startBuild(userId: string, work: () => Promise<string>): boolean
    * A student presses the button and polls two seconds later. If progress only
    * appeared once a phase had finished, they would see a spinner and no phase
    * at all through the first minute of a two-hour job.
+   *
+   * Queued behind any live sync or refresh already running for this student,
+   * so the two never write at once.
    */
   building.set(userId, { phase: 'classroom', done: 0, total: 0, startedAt: Date.now() });
 
-  void work()
+  void studentQueue
+    .run(userId, work)
     .then((summary) => {
       console.log(`Vault built for ${userId}: ${summary}`);
     })
