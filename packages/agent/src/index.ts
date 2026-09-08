@@ -121,6 +121,7 @@ export {
   domainOf,
   type CollectedMail,
 } from './vault/collect-mail.js';
+export { schoolDomains } from './vault/mail-query.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';
