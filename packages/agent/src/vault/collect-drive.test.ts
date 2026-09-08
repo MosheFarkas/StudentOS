@@ -93,6 +93,64 @@ describe('collecting what changed in a Drive', () => {
     expect(String(fetch.mock.calls[0]?.[0])).toContain('includeRemoved=true');
   });
 
+  it('walks a deep filing all the way up, fetching each folder once', async () => {
+    /*
+     * Five folders deep, which the live path used to cut to three. The
+     * importer never rewrites a note it has already written, so a path
+     * truncated here is a misfiling no later pass corrects.
+     */
+    const chain = ['School', 'Grade 11', 'Physics', 'Unit 3', 'Labs'];
+    const idOf = (index: number) => `f${index}`;
+    const fetch = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.includes('/changes?')) {
+        return new Response(
+          JSON.stringify({
+            newStartPageToken: '77',
+            changes: [
+              {
+                fileId: 'deep1',
+                removed: false,
+                file: {
+                  id: 'deep1',
+                  name: 'Pendulum writeup',
+                  mimeType: 'application/vnd.google-apps.document',
+                  parents: [idOf(4)],
+                  ownedByMe: true,
+                },
+              },
+            ],
+          }),
+        );
+      }
+      const folder = chain.findIndex((_, index) => url.includes(`/files/${idOf(index)}?`));
+      if (folder >= 0) {
+        return new Response(
+          JSON.stringify({
+            id: idOf(folder),
+            name: chain[folder],
+            mimeType: 'application/vnd.google-apps.folder',
+            ...(folder > 0 ? { parents: [idOf(folder - 1)] } : {}),
+          }),
+        );
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    vi.stubGlobal('fetch', fetch);
+
+    const changes = await collectDriveChanges(ctx, '76');
+    if (isUnavailable(changes)) throw new Error(changes.reason);
+
+    expect(changes.changed[0]?.path).toEqual(chain);
+    // Each folder asked for exactly once: the per-sync cache does the rest.
+    for (const [index] of chain.entries()) {
+      const asked = fetch.mock.calls.filter((call) =>
+        String(call[0]).includes(`/files/${idOf(index)}?`),
+      );
+      expect(asked).toHaveLength(1);
+    }
+  });
+
   it('reports Drive being unavailable rather than inventing an empty change', async () => {
     vi.stubGlobal(
       'fetch',
