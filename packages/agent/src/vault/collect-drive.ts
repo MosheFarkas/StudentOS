@@ -90,15 +90,14 @@ export interface DriveChanges {
   pageToken: string;
 }
 
-/** Folders looked up for one batch of changes. Deeper than this is the full listing's job. */
-const CHANGE_DEPTH = 3;
-
 /**
  * What changed since the last token, for the live sync.
  *
  * A change arrives with parent ids and no names, so the folders a changed
- * file sits in are fetched one at a time and cached for the batch. The full
- * listing on the slow refresh corrects anything this misfiles.
+ * file sits in are fetched one at a time and cached for the batch. Walked to
+ * the same depth as the full listing: the importer never rewrites a note it
+ * has already written, so a path cut short here is a misfiling the slow
+ * refresh cannot undo.
  */
 export async function collectDriveChanges(
   ctx: ToolContext,
@@ -129,7 +128,7 @@ export async function collectDriveChanges(
   const pathOf = async (file: DriveFileMeta): Promise<string[]> => {
     const parts: string[] = [];
     let at = file.parents?.[0];
-    for (let depth = 0; depth < CHANGE_DEPTH && at; depth += 1) {
+    for (let depth = 0; depth < MAX_DEPTH && at; depth += 1) {
       const parent = await folder(at);
       if (!parent) break;
       parts.unshift(parent.name ?? '');

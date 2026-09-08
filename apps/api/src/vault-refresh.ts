@@ -263,7 +263,14 @@ async function refreshOne(
       // domain list frozen at first sign-in would quietly stop matching.
       onPhase?.({ phase: 'mail', done: 0, total: 0 });
       const domains = await discoverSchoolDomains(toolContext, owner.email);
-      await updateSyncState(ctx.db, userId, { schoolDomains: domains });
+      try {
+        // Cached for the live sync's benefit, not this pass's. A database
+        // hiccup here costs the live path one rediscovery; throwing would
+        // cost this student their whole mail import.
+        await updateSyncState(ctx.db, userId, { schoolDomains: domains });
+      } catch (error) {
+        console.warn(`[refresh] ${userId} could not cache school domains`, error);
+      }
       const known = new Set(
         (await vault.list('episode')).map((note) => note.externalId).filter(Boolean) as string[],
       );
