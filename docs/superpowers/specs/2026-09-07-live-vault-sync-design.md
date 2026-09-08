@@ -52,12 +52,15 @@ fallback path when it does, and a metadata fetch per message to learn the
 sender. The search returns exactly the school messages in one request and
 the id de-duplication already exists.
 
+School domains come from the row, found by the slow refresh; discovery
+reads hundreds of sent messages and must not run per bell.
+
 ### Classroom, via Gmail
 
 Classroom emails the student for every post, grade and material. When a new
 message is a Classroom notification and names a course the vault knows, the
-live sync pulls that one course from the Classroom API -- coursework,
-topics, materials, announcements, submissions, filtered by course -- and
+live sync pulls the Classroom snapshot again -- the tools cannot fetch one
+course, and the whole snapshot is sixty requests and twenty seconds -- and
 imports it through `importClassroom` using the cached course verdicts. Zero
 model calls. A course with no cached verdict waits for the slow refresh.
 
@@ -179,13 +182,14 @@ Domain verification page for Drive webhooks.
 One table, `vault_sync`, one row per student, keyed by user id with cascade
 delete:
 
-| column                                                                                      | purpose                                        |
-| ------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `drive_page_token`                                                                          | where the next `changes.list` starts           |
-| `drive_channel_id`, `drive_resource_id`, `drive_channel_secret`, `drive_channel_expires_at` | the live Drive channel                         |
-| `gmail_watch_expires_at`                                                                    | when the Gmail watch lapses                    |
-| `last_live_sync_at`                                                                         | last completed live sync                       |
-| `last_refresh_at`                                                                           | last completed slow refresh, used for ordering |
+| column                                                                                      | purpose                                                                                       |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `drive_page_token`                                                                          | where the next `changes.list` starts                                                          |
+| `drive_channel_id`, `drive_resource_id`, `drive_channel_secret`, `drive_channel_expires_at` | the live Drive channel                                                                        |
+| `gmail_watch_expires_at`                                                                    | when the Gmail watch lapses                                                                   |
+| `school_domains`                                                                            | the school's mail domains, found by the slow refresh so the live sync need not read sent mail |
+| `last_live_sync_at`                                                                         | last completed live sync                                                                      |
+| `last_refresh_at`                                                                           | last completed slow refresh, used for ordering                                                |
 
 Index on `drive_channel_id`.
 
@@ -249,8 +253,6 @@ times. Well inside per-user quotas.
   fetch) and `newerThan`.
 - `mail.ts`: a deterministic path for Classroom notifications before the
   model pool; exported for tests.
-- `collect.ts`: `collectClassroomCourse(ctx, courseId)` returns a snapshot
-  for one course.
 - `collect-drive.ts`: `collectDriveChanges(ctx, pageToken)` returns changed
   files with paths, removed ids and the new token.
 - `drive.ts`: `importDrive` gains an additive mode; `removeDriveFiles`.

@@ -305,6 +305,59 @@ Google emails the support address and the developer contact during review, and
 the review pauses silently while it waits on a reply. Both addresses must be
 ones somebody reads.
 
+## Live sync
+
+The vault hears about new mail, Classroom posts and Drive files within about
+a minute. Without the steps below it still works, by polling every
+`VAULT_LIVE_POLL_MINUTES` (default 5). With them, Google pushes.
+
+### Settings
+
+- `GMAIL_PUBSUB_TOPIC` — optional; `projects/<id>/topics/<name>`. Unset: no
+  Gmail push.
+- `VAULT_HOOK_SECRET` — required when the topic is set; the Gmail hook
+  token.
+- `VAULT_LIVE_POLL_MINUTES` — optional; default 5; 0 disables the poll
+  trigger.
+- `VAULT_REFRESH_BUDGET_MINUTES` — optional; default 50.
+
+### Gmail, via Cloud Pub/Sub
+
+In the same Google Cloud project as the OAuth client:
+
+1. APIs & Services → Enable **Cloud Pub/Sub API**.
+2. Pub/Sub → Topics → Create topic `contexto-gmail`.
+3. On the topic, Permissions → Add principal
+   `gmail-api-push@system.gserviceaccount.com` with role **Pub/Sub Publisher**.
+4. Pub/Sub → Subscriptions → Create subscription on that topic, delivery type
+   **Push**, endpoint
+   `https://contextoagent.ai/api/hooks/gmail?token=<VAULT_HOOK_SECRET>`.
+   Generate the secret with `openssl rand -hex 32`.
+5. In `.env`: `GMAIL_PUBSUB_TOPIC=projects/<project-id>/topics/contexto-gmail`
+   and `VAULT_HOOK_SECRET=<the same secret>`. Restart the API.
+
+Within a minute of boot the API arms a watch for every connected student and
+renews it daily. A watch lasts seven days.
+
+### Drive, via a webhook channel
+
+Drive posts to `https://contextoagent.ai/api/hooks/drive`. It needs the
+domain registered:
+
+1. Search Console already verifies `contextoagent.ai` (done for OAuth).
+2. APIs & Services → **Domain verification** → Add domain → `contextoagent.ai`.
+
+Nothing else. Channels are armed with the Gmail watches and renewed daily.
+
+### Checking it
+
+```
+journalctl -u contexto-api -f | grep -E 'Live |\[live\]'
+```
+
+Post an announcement on a test course, or create a Google Doc, and watch for
+`Live <userId>: ...` within a minute or two.
+
 ## Subsequent deploys
 
 ```bash

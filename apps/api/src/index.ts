@@ -5,6 +5,7 @@ import { createContext } from './context.js';
 import { handleError } from './errors.js';
 import { loadEnv } from './env.js';
 import { createRoutes } from './routes/index.js';
+import { startVaultLive } from './vault-live.js';
 import { startVaultRefresh } from './vault-refresh.js';
 
 const env = loadEnv();
@@ -47,5 +48,13 @@ serve({ fetch: app.fetch, port: env.PORT }, (info) => {
  * nobody refreshes answers with last month's deadline and no way to know it.
  */
 startVaultRefresh(ctx);
+
+/*
+ * And hearing about changes as they happen.
+ *
+ * Push from Gmail and Drive where the deploy has set it up, a poll timer
+ * where it has not. Either way the same sync runs, on the student's own queue.
+ */
+startVaultLive(ctx);
 
 export type { AppRoutes } from './routes/index.js';
