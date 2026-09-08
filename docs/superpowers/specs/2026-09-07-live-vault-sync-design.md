@@ -116,9 +116,14 @@ document, about the same as today.
 
 ### Debounce
 
-Bells coalesce per student: 20 seconds of quiet for Gmail, 90 for Drive,
-because a student typing in Docs produces a change every few seconds. A bell
-during a running sync marks it dirty so it runs once more after.
+A quiet window per source, per student: 20 seconds for Gmail, 90 for Drive,
+because a student typing in Docs produces a change every few seconds. Each
+further bell pushes its own source's deadline out again, but never past five
+minutes from that source's first bell, so a long editing session still syncs
+while it is happening. The bell fires at the earliest pending deadline and
+carries every pending source, so a Gmail bell during a Drive window fires at
+Gmail's 20 seconds with both. A bell during a running sync marks it dirty so
+it runs once more after.
 
 ### Poll fallback
 
@@ -158,6 +163,8 @@ watch needs the Drive read scope. Both are already granted.
   Pub/Sub pushes to `POST /api/hooks/gmail?token=<secret>`; the token is
   compared in constant time. The body names the mailbox; it is mapped to a
   student by email and their bell is rung. Unknown mailbox: 204 and ignore.
+  The watch is filtered to INBOX; mail a filter archives arrives on the slow
+  refresh.
 - **Drive.** `changes.getStartPageToken` on first arm, then `changes.watch`
   with a per-student random channel token pointing at
   `POST /api/hooks/drive`. The handler matches channel id and token against
@@ -223,8 +230,9 @@ times. Well inside per-user quotas.
 
 ## Failure handling
 
-- Drive change token rejected (404 or 410): take a fresh start token, mark
-  the row for reconciliation; the next slow refresh does the full listing.
+- Drive change token rejected (404, 410, or a 400 naming the page token): take
+  a fresh start token; any other Drive failure keeps the token and is retried
+  on the next bell.
 - Google refuses the token: the readiness check already stops the build; the
   live sync stops the same way, and the renewal job clears the watch fields.
 - Pub/Sub retries on non-2xx, so the Gmail hook answers 204 as soon as the
@@ -264,7 +272,8 @@ times. Well inside per-user quotas.
 
 `apps/api/src/`:
 
-- `vault-queue.ts` (new): per-student serial queue with dirty flag.
+- `vault-queue.ts` (new): per-student serial queue; coalescing lives in
+  `Bells` in `vault-live.ts`.
 - `vault-live.ts` (new): debounce, `liveSync(ctx, userId)`, the poll
   trigger, watch arming and renewal.
 - `vault-refresh.ts`: known-id skip, cached verdicts, user.md skip,

@@ -337,7 +337,9 @@ In the same Google Cloud project as the OAuth client:
    and `VAULT_HOOK_SECRET=<the same secret>`. Restart the API.
 
 Within a minute of boot the API arms a watch for every connected student and
-renews it daily. A watch lasts seven days.
+renews it daily. A watch lasts seven days. It is filtered to INBOX, so school
+mail that one of the student's own filters archives on arrival is picked up by
+the slow refresh rather than the live sync.
 
 ### Drive, via a webhook channel
 
