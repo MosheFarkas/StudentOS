@@ -93,6 +93,21 @@ const envSchema = z.object({
   VAULT_ROOT: optional(z.string().min(1)),
 
   /**
+   * Live sync. All optional; without them the live tier polls on
+   * VAULT_LIVE_POLL_MINUTES and nothing is pushed.
+   *
+   * GMAIL_PUBSUB_TOPIC is the full name, projects/<id>/topics/<name>, of a
+   * topic Gmail may publish to. See deploy/README.md for the Console steps.
+   */
+  GMAIL_PUBSUB_TOPIC: optional(z.string().regex(/^projects\/[^/]+\/topics\/[^/]+$/)),
+  /** Shared secret in the Pub/Sub push URL. Required with GMAIL_PUBSUB_TOPIC. */
+  VAULT_HOOK_SECRET: optional(z.string().min(16)),
+  /** How often the poll trigger rings every student's bell. 0 disables it. */
+  VAULT_LIVE_POLL_MINUTES: z.coerce.number().int().min(0).default(5),
+  /** How long one slow pass may keep starting students. */
+  VAULT_REFRESH_BUDGET_MINUTES: z.coerce.number().int().positive().default(50),
+
+  /**
    * Telegram gateway. Both optional -- unset disables the gateway entirely,
    * and the product must work without it.
    */
@@ -155,6 +170,12 @@ export function loadEnv(source?: NodeJS.ProcessEnv): Env {
       message:
         'Required when TELEGRAM_BOT_TOKEN is set -- without it, anyone who finds the ' +
         'webhook URL can forge messages. Generate one with: openssl rand -hex 32',
+    })
+    .refine((env) => !env.GMAIL_PUBSUB_TOPIC || Boolean(env.VAULT_HOOK_SECRET), {
+      path: ['VAULT_HOOK_SECRET'],
+      message:
+        'Required when GMAIL_PUBSUB_TOPIC is set -- without it anyone who finds the hook ' +
+        "URL can ring every student's bell. Generate one with: openssl rand -hex 32",
     })
     .safeParse(source);
 

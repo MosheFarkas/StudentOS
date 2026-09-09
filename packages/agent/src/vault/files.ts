@@ -61,6 +61,8 @@ export interface FileReadOptions {
   userId: string;
   /** How many files to read this pass. */
   limit?: number;
+  /** Read only these files, by Drive id. The live sync points at what it just brought in. */
+  only?: ReadonlySet<string>;
 }
 
 export interface FileReadResult {
@@ -150,11 +152,15 @@ const ASK = [
 
 export async function readFileContents(
   { llm, read, onProgress }: FileReadDeps,
-  { vault, userId, limit = PER_PASS }: FileReadOptions,
+  { vault, userId, limit = PER_PASS, only }: FileReadOptions,
 ): Promise<FileReadResult> {
   const entities = await vault.list('entity');
   const files = entities.filter(
-    (note) => note.description === 'File' && note.externalId && !note.body.includes(SECTION),
+    (note) =>
+      note.description === 'File' &&
+      note.externalId &&
+      !note.body.includes(SECTION) &&
+      (!only || only.has(note.externalId)),
   );
 
   /*

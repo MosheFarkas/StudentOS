@@ -176,8 +176,26 @@ export interface GoogleTokenProvider {
 export interface ToolUnavailable {
   unavailable: true;
   reason: string;
+  /**
+   * The HTTP status behind it, when there was one.
+   *
+   * `reason` is written for a student; a caller deciding whether to throw away
+   * stored state needs to tell "this token is dead" from "Google wobbled", and
+   * only the status and Google's own message say which.
+   */
+  status?: number;
+  /** What the upstream API said, unedited. Not for showing to a student. */
+  message?: string;
 }
 
-export function unavailable(reason: string): ToolUnavailable {
-  return { unavailable: true, reason };
+export function unavailable(
+  reason: string,
+  extra?: { status?: number; message?: string },
+): ToolUnavailable {
+  return {
+    unavailable: true,
+    reason,
+    ...(extra?.status === undefined ? {} : { status: extra.status }),
+    ...(extra?.message === undefined ? {} : { message: extra.message }),
+  };
 }

@@ -29,14 +29,14 @@
  */
 const CLASSROOM_NOTIFICATIONS = 'no-reply@classroom.google.com';
 
-export function schoolMailQuery(domains: string[], months: number): string {
+export function schoolMailQuery(domains: string[], newerThan: string): string {
   const from = [
     ...domains.map((domain) => `from:${domain}`),
     `from:${CLASSROOM_NOTIFICATIONS}`,
   ].join(' OR ');
   // Parenthesised because Gmail binds OR tighter than the implicit AND, and
   // without them `newer_than` would apply to the last domain alone.
-  return `(${from}) newer_than:${months}m -in:spam -in:trash`;
+  return `(${from}) newer_than:${newerThan} -in:spam -in:trash`;
 }
 
 /**

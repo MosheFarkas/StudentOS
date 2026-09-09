@@ -55,11 +55,17 @@ export { importConversation } from './vault/conversation.js';
 export { slugForNote } from './vault/slug.js';
 export { importClassroom, type ClassroomSnapshot, type ImportResult } from './vault/classroom.js';
 export { collectClassroomSnapshot, type Collected } from './vault/collect.js';
-export { importMail, type SchoolMessage, type MailImportResult } from './vault/mail.js';
+export {
+  importMail,
+  classroomEpisode,
+  type SchoolMessage,
+  type MailImportResult,
+} from './vault/mail.js';
 export { readFileContents, type FileReadResult } from './vault/files.js';
 export { textFromDriveRead } from './vault/drive-text.js';
 export {
   importDrive,
+  removeDriveFiles,
   courseTitles,
   KEPT_LOOSE,
   type DriveFile,
@@ -100,15 +106,24 @@ export {
   sweepDroppedCourses,
   sweepCourseMail,
   sweepUnattachedFiles,
+  courseFingerprint,
+  recallCourseVerdicts,
+  rememberCourseVerdicts,
+  lastCourseVerdicts,
   type CourseVerdict,
 } from './vault/courses.js';
-export { collectDriveFiles } from './vault/collect-drive.js';
+export {
+  collectDriveFiles,
+  collectDriveChanges,
+  type DriveChanges,
+} from './vault/collect-drive.js';
 export {
   collectSchoolMail,
   discoverSchoolDomains,
   domainOf,
   type CollectedMail,
 } from './vault/collect-mail.js';
+export { schoolDomains } from './vault/mail-query.js';
 
 export * from './skills/types.js';
 export { PostgresSkillRegistry } from './skills/registry.js';
@@ -133,13 +148,22 @@ export {
   type SubmissionSummary,
   type Topic,
 } from './tools/google/classroom.js';
-export { readDriveFile, listDriveFiles, listAccessibleFiles } from './tools/google/drive.js';
+export {
+  readDriveFile,
+  listDriveFiles,
+  listAccessibleFiles,
+  startPageToken,
+  watchChanges,
+  stopChannel,
+  listChanges,
+} from './tools/google/drive.js';
 // Exported so a caller outside the package can tell a scope refusal from a
 // real answer, which is the whole shape the Google tools return.
 export { isUnavailable } from './tools/google/client.js';
 export {
   searchMail,
   readMail,
+  watchMailbox,
   readMailAttachment,
   listMailLabels,
   sendMail,

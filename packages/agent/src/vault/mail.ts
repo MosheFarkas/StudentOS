@@ -248,6 +248,66 @@ export function namesCourse(body: string, courses: readonly string[]): boolean {
   return courses.some((course) => said.startsWith(course.toLowerCase()));
 }
 
+/** The event prefix Classroom puts on a subject, so the rest is the thing itself. */
+const EVENT_PREFIX =
+  /^(?:re:\s*)?(?:new (?:assignment|announcement|material|question)|graded)\s*[:\-–—]?\s*/i;
+
+/**
+ * What a Classroom notification says, read off the notification.
+ *
+ * Every one of these used to cost a model call, although the announcement or
+ * assignment it announces arrives structurally through the Classroom import
+ * for nothing. The subject states the event, the body names the course, the
+ * sender names the teacher, and all three parsers already exist. So these
+ * episodes are written from those, and the model is kept for mail a person
+ * wrote. Reminders and comments keep nothing, which is what the model decided
+ * for them anyway.
+ *
+ * Null for anything not from Classroom's own address.
+ */
+export function classroomEpisode(message: SchoolMessage): z.infer<typeof extraction> | null {
+  const { address } = parseSender(message.from);
+  if (address !== CLASSROOM_NOTIFICATIONS) return null;
+
+  const event = classroomEvent(message.subject);
+  if (!event) return { keep: false, what: '', actor: '', event: 'other', about: [], inCourse: [] };
+
+  const remainder = message.subject.trim().replace(EVENT_PREFIX, '').trim();
+  const course = classroomCourse(message.body);
+  let paragraph =
+    message.body
+      .split(/\n\s*\n/)
+      .map((part) => part.trim())
+      .find(
+        (part) =>
+          part !== '' &&
+          !/https?:\/\//.test(part) &&
+          part !== course &&
+          part.toLowerCase() !== remainder.toLowerCase() &&
+          !/^hi\b|^hello\b/i.test(part) &&
+          !/posted a new|graded your/i.test(part),
+      ) ?? '';
+
+  // Strip the leading line if it equals the remainder, so the title isn't repeated.
+  if (paragraph) {
+    const lines = paragraph.split('\n');
+    if (lines[0]?.toLowerCase() === remainder.toLowerCase()) {
+      paragraph = lines.slice(1).join('\n').trim();
+    }
+  }
+
+  const what = [remainder, paragraph].filter(Boolean).join('. ').slice(0, 300) || message.subject;
+
+  return {
+    keep: true,
+    what,
+    actor: classroomSender(message.from, message.subject) ?? '',
+    event: event as (typeof EVENTS)[number],
+    about: remainder ? [slugForNote(remainder)] : [],
+    inCourse: course ? [slugForNote(course)] : [],
+  };
+}
+
 export function classroomSender(from: string, subject = ''): string | null {
   const { display, address } = parseSender(from);
   if (address !== CLASSROOM_NOTIFICATIONS) return null;
@@ -441,6 +501,12 @@ export async function importMail(
 
   async function extractAndWrite(batch: SchoolMessage[]): Promise<void> {
     const extracted = await pooled(batch, EXTRACT_CONCURRENCY, async (message) => {
+      const known = classroomEpisode(message);
+      if (known) {
+        seen += 1;
+        onProgress?.(seen, pending.length);
+        return { message, parsed: known };
+      }
       /*
        * Counted in a finally, so a message counts once however it went.
        * Otherwise a run of failures leaves the bar frozen and looking hung

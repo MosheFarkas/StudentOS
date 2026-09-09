@@ -49,6 +49,10 @@ describe('writing the user document', () => {
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
+  const freshVault = () => {
+    return new Vault(root, `student-fresh-${Date.now()}`);
+  };
+
   const run = (llm: unknown) =>
     writeUserDoc({ llm } as never, { vault, userId: 'u-1', name: 'Lucas' });
 
@@ -160,6 +164,13 @@ describe('writing the user document', () => {
      */
     await run(llmSaying('# Lucas'));
 
+    // Add a class to change the sourceHash so the LLM is called again
+    await writeDocument(vault, {
+      name: 'class-spanish',
+      description: 'spanish, as the vault has it',
+      body: '# Spanish\n\nTaught by [[sr-torres]].',
+    });
+
     const llm = llmSaying('# Lucas');
     await writeUserDoc({ llm } as never, { vault, userId: 'u-1' });
 
@@ -228,6 +239,32 @@ describe('writing the user document', () => {
 
     expect(after).toContain('Real content');
     expect(await readUserDoc(vault)).toContain('Real content');
+  });
+
+  it('does not rewrite a page whose sources have not changed', async () => {
+    const testVault = freshVault();
+    await writeDocument(testVault, {
+      name: 'class-chemistry',
+      description: 'Chemistry',
+      body: 'Chem.',
+      academic: true,
+      sourceHash: 'h1',
+    });
+    const llm = llmSaying('Who they are.');
+
+    await writeUserDoc({ llm } as never, { vault: testVault, userId: 'u', name: 'Lucas' });
+    await writeUserDoc({ llm } as never, { vault: testVault, userId: 'u', name: 'Lucas' });
+    expect(llm.chat).toHaveBeenCalledTimes(1);
+
+    await writeDocument(testVault, {
+      name: 'class-chemistry',
+      description: 'Chemistry',
+      body: 'Chem, now with labs.',
+      academic: true,
+      sourceHash: 'h2',
+    });
+    await writeUserDoc({ llm } as never, { vault: testVault, userId: 'u', name: 'Lucas' });
+    expect(llm.chat).toHaveBeenCalledTimes(2);
   });
 });
 

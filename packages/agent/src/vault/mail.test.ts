@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Vault } from './vault.js';
-import { CHUNK, importMail, type SchoolMessage } from './mail.js';
+import { CHUNK, classroomEpisode, importMail, type SchoolMessage } from './mail.js';
 
 /**
  * Turning school mail into ContextoVault episodes.
@@ -49,6 +50,11 @@ const kept = (over: Record<string, unknown> = {}) =>
     inCourse: ['history'],
     ...over,
   });
+
+const freshVault = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'v-'));
+  return new Vault(dir, 'u');
+};
 
 describe('importing school mail', () => {
   let root: string;
@@ -709,6 +715,120 @@ describe('importing school mail', () => {
 
     const [episode] = await vault.list('episode');
     expect(episode?.body).toContain('[[latin-9-2023-2024]]');
+  });
+});
+
+describe('Classroom notifications without a model', () => {
+  const notification = {
+    messageId: 'm1',
+    from: 'Stacey Ottley (Classroom) <no-reply@classroom.google.com>',
+    subject: 'New assignment: Titration lab writeup',
+    date: 'Tue, 2 Sep 2026 10:00:00 +0000',
+    body: [
+      'Hi Lucas,',
+      '',
+      'Stacey Ottley posted a new assignment in 10 Chemistry',
+      '',
+      '10 Chemistry',
+      'https://classroom.google.com/c/abc',
+      '',
+      'Titration lab writeup',
+      'Due Friday. Include your raw data table.',
+    ].join('\n'),
+  };
+
+  it('reads the event, the teacher and the course from the notification itself', () => {
+    const said = classroomEpisode(notification);
+    expect(said).not.toBeNull();
+    expect(said?.keep).toBe(true);
+    expect(said?.event).toBe('assignment-posted');
+    expect(said?.actor).toBe('Stacey Ottley');
+    expect(said?.inCourse).toEqual(['10-chemistry']);
+    expect(said?.about).toEqual(['titration-lab-writeup']);
+    expect(said?.what).toBe('Titration lab writeup. Due Friday. Include your raw data table.');
+  });
+
+  it('keeps nothing for a reminder', () => {
+    const said = classroomEpisode({
+      ...notification,
+      subject: 'Reminder: Titration lab writeup is due tomorrow',
+    });
+    expect(said?.keep).toBe(false);
+  });
+
+  it("leaves a teacher's own email to the model", () => {
+    expect(
+      classroomEpisode({ ...notification, from: 'Stacey Ottley <ottley@school.org>' }),
+    ).toBeNull();
+  });
+
+  it('writes the episode without asking the model', async () => {
+    const vault = await freshVault();
+    const llm = {
+      chat: vi.fn(async () => {
+        throw new Error('the model must not be asked');
+      }),
+    };
+    const result = await importMail(
+      { llm },
+      { vault, messages: [notification], entities: [], userId: 'u', domains: ['school.org'] },
+    );
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(result.written).toBe(1);
+    const [episode] = await vault.list('episode');
+    expect(episode?.event).toBe('assignment-posted');
+    expect(episode?.actor).toBe('Stacey Ottley');
+    expect(episode?.body).toContain('In [[10-chemistry]]');
+  });
+
+  it('reports progress correctly for mixed Classroom and human mail', async () => {
+    const vault = await freshVault();
+    const calls: Array<[number, number]> = [];
+    const llm = {
+      chat: vi.fn(async () => ({
+        content: JSON.stringify({
+          keep: false,
+          what: '',
+          actor: '',
+          event: 'other',
+          about: [],
+          inCourse: [],
+        }),
+        toolCalls: [],
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 },
+        finishReason: 'stop' as const,
+      })),
+    };
+    const result = await importMail(
+      {
+        llm,
+        onProgress: (done, total) => {
+          calls.push([done, total]);
+          // Ensure progress never exceeds total
+          expect(done).toBeLessThanOrEqual(total);
+        },
+      },
+      {
+        vault,
+        messages: [
+          notification,
+          {
+            ...notification,
+            messageId: 'm2',
+            from: 'teacher@school.org',
+            subject: 'Question: Who can help?',
+          },
+        ],
+        entities: [],
+        userId: 'u',
+        domains: ['school.org'],
+      },
+    );
+    // Both messages should be processed
+    expect(result.written).toBe(1);
+    // Progress should reach the total (2 messages)
+    const finalCall = calls[calls.length - 1];
+    expect(finalCall).toEqual([2, 2]);
   });
 });
 

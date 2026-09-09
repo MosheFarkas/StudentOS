@@ -71,7 +71,7 @@ export interface DriveVerdict {
 export const KEPT_LOOSE = "About your schooling, though not one course's.";
 
 const FOLDER = 'application/vnd.google-apps.folder';
-const SHORTCUT = 'application/vnd.google-apps.shortcut';
+export const SHORTCUT = 'application/vnd.google-apps.shortcut';
 
 /**
  * The courses still in the vault, by the title the school gave them.
@@ -212,4 +212,21 @@ export async function importDrive(
   }
 
   return result;
+}
+
+/**
+ * Files Drive says are gone, taken out.
+ *
+ * Only what Drive brought in. A file Classroom attached is Classroom's to
+ * remove, and it may well still be attached to the assignment.
+ */
+export async function removeDriveFiles(vault: Vault, fileIds: readonly string[]): Promise<number> {
+  if (fileIds.length === 0) return 0;
+  const gone = new Set(fileIds);
+  let removed = 0;
+  for (const note of await vault.list('entity')) {
+    if (note.source !== 'drive' || !note.externalId || !gone.has(note.externalId)) continue;
+    if (await vault.remove('entity', note.name)) removed += 1;
+  }
+  return removed;
 }

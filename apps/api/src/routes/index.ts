@@ -20,6 +20,7 @@ import { createAgentRoutes } from './agents.js';
 import { createChannelRoutes } from './channels.js';
 import { createDeviceRoutes } from './devices.js';
 import { createGoogleRoutes } from './google.js';
+import { createHookRoutes } from './hooks.js';
 import { createVaultRoutes } from './vault.js';
 
 /**
@@ -241,6 +242,7 @@ export function createRoutes(ctx: AppContext) {
       .route('/vault', createVaultRoutes(ctx))
       .route('/channels', createChannelRoutes(ctx))
       .route('/devices', createDeviceRoutes(ctx))
+      .route('/hooks', createHookRoutes(ctx))
 
       /** Which BYOK keys this student has stored. Never includes key material. */
       .get('/credentials', auth, async (c) => {

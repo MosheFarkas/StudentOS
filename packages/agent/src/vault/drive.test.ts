@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Vault } from './vault.js';
-import { KEPT_LOOSE, importDrive, type DriveFile } from './drive.js';
+import { KEPT_LOOSE, importDrive, removeDriveFiles, type DriveFile } from './drive.js';
 
 /**
  * The student's own Drive.
@@ -364,5 +364,40 @@ describe('files that were judged rather than filed', () => {
     expect((await vault.read('entity', 'grade-10-history-outline-2025'))?.body).toContain(
       'Part of [[history]]',
     );
+  });
+});
+
+describe('removing files Drive no longer has', () => {
+  let root: string;
+  let vault: Vault;
+
+  beforeEach(async () => {
+    root = mkdtempSync(join(tmpdir(), 'contexto-drive-remove-'));
+    vault = new Vault(root, 'student-1');
+  });
+
+  afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('removes the Drive note and leaves a Classroom attachment alone', async () => {
+    await vault.write({
+      name: 'essay',
+      kind: 'entity',
+      source: 'drive',
+      description: 'File',
+      externalId: 'f1',
+      body: 'essay.',
+    });
+    await vault.write({
+      name: 'worksheet',
+      kind: 'entity',
+      source: 'classroom',
+      description: 'File',
+      externalId: 'f2',
+      body: 'worksheet.',
+    });
+
+    expect(await removeDriveFiles(vault, ['f1', 'f2', 'never'])).toBe(1);
+    const names = (await vault.list('entity')).map((n) => n.name);
+    expect(names).toEqual(['worksheet']);
   });
 });
