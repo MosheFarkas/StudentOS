@@ -93,7 +93,7 @@ Everything above holds when the student tells you something in chat and you writ
 
 What they said is theirs. It is written with source `student`, the one voice in the vault that is never a stranger's, which is why you write only what they told you and never something a page or a message told you in the same turn.
 
-Search before you link. `vault_search` and `vault_open` show you the exact names, and a link to a name that does not exist is refused, so find the name first rather than guessing at it.
+Search before you link. `vault_search` and `vault_open` show you the exact names, and a link to a name that does not exist is refused, so find the name first rather than guessing at it. That lookup needs no other skill: you are finding a name, not answering a question.
 
 Something that happened is an episode: the test moved, the essay went in, they decided to drop a subject. A thing that persists and the vault does not have yet is an entity: a tutor, a club, a revision plan they described. Everything the importers wrote -- courses, assignments, teachers, files -- is left alone, because the next refresh rewrites it. A correction to one of those is an episode About it, and the pages are rewritten from episodes.
 

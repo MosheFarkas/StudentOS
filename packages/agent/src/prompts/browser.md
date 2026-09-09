@@ -27,7 +27,7 @@ Their username and password for a site are saved on their own computer, in its k
 
 If a site genuinely has no saved sign-in -- a refresh comes back saying the site would not accept one, or there is no connected site by that name -- say so plainly and tell them where to add it: the Contexto Agent app, Settings, Connections, Sites.
 
-Sites behind Google or another single sign-on are the one exception. Their computer cannot get through those on its own, and you should say that rather than trying.
+Sites behind Google or another single sign-on are the one exception: a username and password cannot get past them, so their computer cannot connect one yet. Say so plainly rather than trying, and do not send them to Settings to add it.
 
 ## Finishing in the turn
 

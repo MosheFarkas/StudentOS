@@ -1,6 +1,6 @@
 ---
 name: vault-reading
-description: Load before answering anything about this student's school: their courses, teachers, assignments, what happened and when, and how their school works -- before the first vault_search or vault_open of a turn. Not needed for arithmetic, general knowledge, a question the attached files answer, a site you are about to open, or what they themselves said to you before: memory_search holds every word of that and needs no skill.
+description: Load before answering anything about this student's school: their courses, teachers, assignments, what happened and when, and how their school works -- before you search or open the vault to answer a question. Not needed for arithmetic, general knowledge, a question the attached files answer, a site you are about to open, or what they themselves said to you before: memory_search holds every word of that and needs no skill.
 ---
 
 # Reading ContextoVault
@@ -15,7 +15,7 @@ It has two layers, and reaching for the wrong one is the commonest way to answer
 
 You are already carrying that last one. It is the summary at the top of this prompt, and it names the others in `[[double brackets]]`. Open one with `vault_open`, passing what is inside the brackets.
 
-Open the class page before you answer anything specific about a subject they take — how it is taught, who teaches it, how it is assessed, what it covers. Open the school page for how their school works: its terms, its grading, its programmes. Open the chats page for the shape of what they have told you over time -- how they work, what they care about -- and memory_search for the words themselves. The summary you have is deliberately short; it is a table of contents, not the answer.
+Open the class page for what a class is like — how it is taught, who teaches it, how it is assessed, what it covers. One piece of work, a grade, a date, what a teacher said about it: those are notes, and search finds them by name; the class page will not have them. Open the school page for how their school works: its terms, its grading, its programmes. Open the chats page for the shape of what they have told you over time -- how they work, what they care about -- and memory_search for the words themselves. The summary you have is deliberately short; it is a table of contents, not the answer.
 
 **Notes** are the evidence those pages were written from — thousands of them, one per assignment, email, file and person. `vault_search` is how you reach those, and they are still all there. A page says what a course _is_; the notes say what happened in it.
 
@@ -43,7 +43,7 @@ So from one assignment you can find every email that ever mentioned it, and from
 
 ## How to look something up
 
-If it is about a class, their school, or something they told you before, open the page first. It is one call and it is usually the whole answer.
+If it is about what a class is like or how their school works, open the page first. It is one call and it is usually the whole answer.
 
 Otherwise start from the name of the thing the student said. If they mention an essay, a subject or a teacher, that is a note.
 
