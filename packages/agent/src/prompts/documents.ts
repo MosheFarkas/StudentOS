@@ -155,6 +155,64 @@ export const VAULT_READING = loadPromptDocument('vault-reading');
  */
 export const BROWSER = loadPromptDocument('browser');
 
+/*
+ * The twenty general skills.
+ *
+ * Each is a skill, loaded on demand, named for the job rather than the
+ * artefact: feedback rather than draft-feedback, practice rather than
+ * exam-prep. Every description ends by naming the skills it is not, because
+ * with this many the "not for" clause is what keeps neighbours apart. Grouped
+ * as the catalog groups them, and listed in the prompt in this order.
+ */
+
+// Learning: understanding things and getting better at them.
+/** Explaining or teaching a concept the student wants to understand. */
+export const TUTORING = loadPromptDocument('tutoring');
+/** Understanding or digesting one specific source, with notes as the output. */
+export const READING = loadPromptDocument('reading');
+/** Getting through one specific exercise with them, attempt first. */
+export const PROBLEM_SOLVING = loadPromptDocument('problem-solving');
+/** Testing themselves: quizzes, flashcards, a study guide, an error log. */
+export const PRACTICE = loadPromptDocument('practice');
+/** Feedback on anything the student made, against the brief. */
+export const FEEDBACK = loadPromptDocument('feedback');
+/** How to study rather than what: methods, focus, exam technique. */
+export const STUDY_SKILLS = loadPromptDocument('study-skills');
+
+// Making: producing a piece of work.
+/** Producing a piece of writing with them, from first idea to final draft. */
+export const WRITING = loadPromptDocument('writing');
+/** Finding, judging and citing information, from sources actually opened. */
+export const RESEARCH = loadPromptDocument('research');
+/** Anything shown to an audience: slides, a talk, a poster, a video. */
+export const PRESENTING = loadPromptDocument('presenting');
+/** Numbers and results: lab data, a survey, a spreadsheet, a graph. */
+export const DATA = loadPromptDocument('data');
+/** Coming up with ideas: diverge first, judge later. */
+export const BRAINSTORMING = loadPromptDocument('brainstorming');
+
+// Organising: the admin side, where every source is visible at once.
+/** What is due and when, across Classroom, mail, the portal and the vault. */
+export const PLANNING = loadPromptDocument('planning');
+/** Where they stand: grades so far, what is missing, what a target needs. */
+export const PROGRESS = loadPromptDocument('progress');
+/** A message to a person, or the inbox sorted; sent only when told. */
+export const COMMUNICATION = loadPromptDocument('communication');
+/** How their school works: forms, permissions, policies, procedures. */
+export const ADMIN = loadPromptDocument('admin');
+/** A project done with other people: division, deadlines, the awkward talk. */
+export const GROUP_WORK = loadPromptDocument('group-work');
+/** Handing work in: the checklist, the right file, the turn-in, the confirmation. */
+export const SUBMITTING = loadPromptDocument('submitting');
+
+// Life: the parts of being a student that are not a course.
+/** Applying for anything: requirements, deadlines, essays, references. */
+export const APPLICATIONS = loadPromptDocument('applications');
+/** Choosing: courses, a major, drop or keep, which offer. */
+export const DECISIONS = loadPromptDocument('decisions');
+/** When they are not okay: listen first, know the limits, point to real help. */
+export const WELLBEING = loadPromptDocument('wellbeing');
+
 /**
  * How one bundle of evidence becomes at most one claim.
  *
