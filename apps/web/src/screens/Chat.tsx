@@ -116,10 +116,22 @@ export function Chat({ agentId }: Props) {
     })();
   }, [agentId]);
 
+  /*
+   * Set by a send, so the next scroll happens wherever the student was.
+   *
+   * Their own message is the one thing worth pulling them down for. Sent from
+   * partway up the conversation, it landed below the fold, and a send that
+   * cannot be seen reads as one that did not happen. Spent by the scroll it
+   * causes: the reply that follows is back under the rule below.
+   */
+  const justSent = useRef(false);
+
   useEffect(() => {
-    // Only when they are already at the bottom. Scrolling someone back down
-    // mid-sentence because a reply landed is the rudest thing a chat can do.
-    if (atBottom) bottom.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only when they are already at the bottom, or have just sent something.
+    // Scrolling someone back down mid-sentence because a reply landed is the
+    // rudest thing a chat can do.
+    if (atBottom || justSent.current) bottom.current?.scrollIntoView({ behavior: 'smooth' });
+    justSent.current = false;
     /*
      * atBottom is read but not depended on, deliberately. This fires when the
      * conversation changes; re-running it every time the student scrolls would
@@ -305,6 +317,8 @@ export function Chat({ agentId }: Props) {
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, pending]);
+    // In view too, however far up they had scrolled.
+    justSent.current = true;
 
     try {
       /*
