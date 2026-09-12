@@ -1,6 +1,6 @@
 ---
 name: tutoring
-description: Load before explaining or teaching a concept, topic, or method the student wants to understand: something from class that has not landed, a theory, why a procedure works. Not for a specific exercise (problem-solving), a text or passage they have in hand, pasted or attached (reading), or testing them on it (practice).
+description: Load before explaining or teaching a concept, topic, or method the student wants to understand: something from class that has not landed, a theory, why a procedure works. Not for a specific exercise (problem-solving), a text or passage they have in hand, pasted or attached (reading), testing them on it (practice), or a quick fact or one-line definition they could look up, which needs no skill at all.
 ---
 
 # Teaching a concept until it lands

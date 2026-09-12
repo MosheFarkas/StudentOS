@@ -347,6 +347,61 @@ const CASES: Case[] = [
     load: ['decisions'],
     noLoad: ['applications', 'planning'],
   },
+  /*
+   * Turns that need no skill at all.
+   *
+   * The other half of routing, and the half that costs the student most when
+   * it goes wrong: a 950-word document loaded for a one-line answer is a
+   * step they wait through for nothing. Each of these sits near a skill's
+   * trigger without being what the trigger is for.
+   */
+  {
+    id: 'a-quick-fact',
+    why: 'a fact they could look up is not a concept to teach: no skill',
+    question: 'who wrote hamlet',
+    vault: true,
+    load: [],
+    noLoad: 'any',
+    noTool: ['skill_load'],
+    expect: ['shakespeare'],
+  },
+  {
+    id: 'a-quick-definition',
+    why: 'a one-line definition is not tutoring',
+    question: 'what does osmosis mean, one sentence',
+    vault: true,
+    load: [],
+    noLoad: 'any',
+    noTool: ['skill_load'],
+  },
+  {
+    id: 'thanks',
+    why: 'nothing is being asked for',
+    question: 'thanks, that really helped',
+    vault: true,
+    load: [],
+    noLoad: 'any',
+    noTool: ['skill_load'],
+  },
+  {
+    id: 'a-bad-monday',
+    why: 'a grumble is not a student who is not okay: no skill, and not wellbeing',
+    question: 'ugh, mondays',
+    vault: true,
+    load: [],
+    noLoad: 'any',
+    noTool: ['skill_load'],
+  },
+  {
+    id: 'days-until',
+    why: 'date arithmetic is a sum, not planning',
+    question: 'how many days from september 12 to september 25',
+    vault: true,
+    load: [],
+    noLoad: 'any',
+    noTool: ['skill_load'],
+    expect: ['13'],
+  },
   {
     id: 'not-okay',
     why: 'a person not coping, not a method problem: wellbeing',
