@@ -2,6 +2,36 @@ import { describe, expect, it } from 'vitest';
 import { BUILTIN_SKILLS, availableSkills, skillsSection } from './builtin.js';
 
 /**
+ * The twenty general skills, in the order the prompt lists them.
+ *
+ * Grouped as the catalog groups them: learning, making, organising, life.
+ * The order is the prompt's order, so it is fixed here rather than left to
+ * whatever the registry happens to do.
+ */
+const GENERAL = [
+  'tutoring',
+  'reading',
+  'problem-solving',
+  'practice',
+  'feedback',
+  'study-skills',
+  'writing',
+  'research',
+  'presenting',
+  'data',
+  'brainstorming',
+  'planning',
+  'progress',
+  'communication',
+  'admin',
+  'group-work',
+  'submitting',
+  'applications',
+  'decisions',
+  'wellbeing',
+];
+
+/**
  * What the prompt says about skills, and which ones a student gets.
  *
  * The block is in the cached prefix, so the property that matters is that it
@@ -9,24 +39,44 @@ import { BUILTIN_SKILLS, availableSkills, skillsSection } from './builtin.js';
  * bytes, and a student without one carries nothing about it.
  */
 describe('the built-in skills', () => {
-  it('are the three the product has', () => {
+  it('are the browser, the twenty general ones, and the two vault ones', () => {
     expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
       'browser',
+      ...GENERAL,
       'vault-reading',
       'vault-writing',
     ]);
   });
 
-  it('offers the browser to everyone', () => {
-    expect(availableSkills({ hasVault: false }).map((s) => s.name)).toEqual(['browser']);
+  it('offers everything but the vault skills to a student with no vault', () => {
+    expect(availableSkills({ hasVault: false }).map((s) => s.name)).toEqual([
+      'browser',
+      ...GENERAL,
+    ]);
   });
 
   it('offers the vault skills only with a vault', () => {
     expect(availableSkills({ hasVault: true }).map((s) => s.name)).toEqual([
       'browser',
+      ...GENERAL,
       'vault-reading',
       'vault-writing',
     ]);
+  });
+
+  it('gives every skill a one-line trigger that also says what it is not for', () => {
+    // The description is the only thing the model chooses on, and with
+    // twenty-three of them the "not for" clause is what keeps neighbours apart.
+    for (const skill of BUILTIN_SKILLS) {
+      expect(skill.description, skill.name).not.toContain('\n');
+      expect(skill.description, skill.name).toMatch(/^Load /);
+      expect(skill.description, skill.name).toMatch(/\bNot (for|needed)\b/);
+    }
+  });
+
+  it('names no skill twice', () => {
+    const names = BUILTIN_SKILLS.map((s) => s.name);
+    expect(new Set(names).size).toBe(names.length);
   });
 });
 

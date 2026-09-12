@@ -25,18 +25,25 @@ const ALL = [...BASIC_PHRASES, ...NICHE_PHRASES].map((p) => p.text);
 // updates it is supposed to flush are left in flight.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const message = (role: string, content: string) => ({
+const message = (role: string, content: string, skillsRead: string[] = []) => ({
   id: `m-${role}`,
   agentId: 'a1',
   role,
   content,
   toolsUsed: [],
+  skillsRead,
   createdAt: '2026-08-22T00:00:00.000Z',
 });
 
 /** What the server would say about this conversation, poll by poll. */
 let serverPending: boolean;
 let reported: AgentActivity | undefined;
+/** Which skills the running turn has read so far, as the poll reports them. */
+let reportedSkills: string[];
+/** The transcript the poll hands back. */
+let serverMessages: ReturnType<typeof message>[];
+/** What the reply to a message of our own says it read. */
+let repliedWith: string[];
 /** Set to keep a reply in flight, so a poll can land while the turn runs. */
 let holdPost: Promise<void> | undefined;
 
@@ -84,6 +91,9 @@ async function submit() {
 beforeEach(async () => {
   serverPending = true;
   reported = { kind: 'thinking' };
+  reportedSkills = [];
+  serverMessages = [];
+  repliedWith = [];
   holdPost = undefined;
 
   // happy-dom has no layout, so the scroll the conversation does on every
@@ -108,13 +118,14 @@ beforeEach(async () => {
       if (holdPost) await holdPost;
       body = {
         userMessage: message('user', 'hi'),
-        assistantMessage: message('assistant', 'Friday.'),
+        assistantMessage: message('assistant', 'Friday.', repliedWith),
       };
     } else if (url.endsWith('/messages')) {
       body = {
-        messages: [],
+        messages: serverMessages,
         pending: serverPending,
         activity: serverPending ? reported : undefined,
+        skills: serverPending ? reportedSkills : [],
       };
     } else {
       body = {
@@ -229,5 +240,94 @@ describe('the line under a question', () => {
 
     expect(container.textContent).toContain('Friday.');
     expect(container.querySelector('.thinking')).toBeNull();
+  });
+});
+
+/**
+ * What the agent read, on screen.
+ *
+ * Reading a skill is over in an instant, so the line under the question
+ * cannot show it as the step: it is a row of its own above the line while
+ * the turn runs, and a row above the reply for as long as the conversation
+ * exists -- the way a search assistant shows what it searched.
+ */
+describe('what it has read', () => {
+  const rows = () => [...container.querySelectorAll('.skill-read')].map((r) => r.textContent);
+
+  it('names each skill the turn has read, above the line', async () => {
+    reportedSkills = ['browser'];
+    await poll();
+
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toContain('browser');
+    expect(container.querySelector('.skills-read + .thinking')).not.toBeNull();
+  });
+
+  it('says it is reading while the turn runs', async () => {
+    reportedSkills = ['browser'];
+    await poll();
+    expect(rows()[0]).toMatch(/^Reading skill/);
+  });
+
+  it('shows nothing when the turn has read nothing', async () => {
+    await poll();
+    expect(rows()).toEqual([]);
+  });
+
+  it('keeps every skill the turn has read, in the order it read them', async () => {
+    reportedSkills = ['browser', 'vault-reading'];
+    await poll();
+    expect(rows().map((r) => r?.replace(/^Reading skill/, ''))).toEqual([
+      'browser',
+      'vault-reading',
+    ]);
+  });
+
+  it('shows what a reply read above it, once the turn is over', async () => {
+    serverPending = false;
+    serverMessages = [message('assistant', 'Friday.', ['vault-reading'])];
+    await poll();
+
+    const reply = container.querySelector('.message.assistant');
+    expect(reply?.firstElementChild?.classList.contains('skills-read')).toBe(true);
+    expect(rows()).toEqual(['Read skillvault-reading']);
+    expect(container.querySelector('.thinking')).toBeNull();
+  });
+
+  it('shows nothing above a reply that read nothing', async () => {
+    serverPending = false;
+    serverMessages = [message('assistant', 'Friday.')];
+    await poll();
+    expect(container.querySelector('.message.assistant .skills-read')).toBeNull();
+  });
+
+  it('hands the rows over to the reply the moment it arrives', async () => {
+    serverPending = false;
+    await poll();
+
+    let answer!: () => void;
+    holdPost = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    repliedWith = ['browser'];
+
+    await type('open my portal');
+    await submit();
+
+    // Mid-turn, the poll says the agent has read the browser skill.
+    serverPending = true;
+    reportedSkills = ['browser'];
+    await poll();
+    expect(rows()).toEqual(['Reading skillbrowser']);
+
+    serverPending = false;
+    await act(async () => {
+      answer();
+    });
+    await settle();
+
+    // One row, on the reply, and not a second one still under it.
+    expect(rows()).toEqual(['Read skillbrowser']);
+    expect(container.querySelector('.message.assistant .skill-read')).not.toBeNull();
   });
 });

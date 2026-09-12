@@ -184,6 +184,7 @@ export async function runTurnForAgent(
         role: 'assistant',
         content: result.reply,
         toolsUsed: result.toolsUsed,
+        skillsRead: result.skillsRead,
       })
       .returning();
 
@@ -215,6 +216,7 @@ export function toMessage(row: typeof agentMessages.$inferSelect): Message {
     content: row.content,
     attachments: row.attachments ?? [],
     toolsUsed: row.toolsUsed,
+    skillsRead: row.skillsRead,
     createdAt: row.createdAt.toISOString(),
   };
 }

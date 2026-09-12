@@ -1,0 +1,1 @@
+ALTER TABLE "agent_messages" ADD COLUMN "skills_read" jsonb DEFAULT '[]'::jsonb NOT NULL;

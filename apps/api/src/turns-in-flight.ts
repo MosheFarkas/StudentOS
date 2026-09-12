@@ -30,6 +30,16 @@ interface InFlight {
    * conversation's work, and the student is owed the more recent of them.
    */
   activity?: AgentActivity;
+  /**
+   * The skills the turn has read so far, in order, each once.
+   *
+   * A list rather than a step: reading a skill is over in milliseconds, and
+   * a poll every few seconds would never catch it as the current step. It
+   * goes with the turn, the same as the step -- the reply carries the names
+   * from then on, and a list that outlived the turn would put the same rows
+   * on screen twice.
+   */
+  skills: string[];
 }
 
 const running = new Map<string, InFlight>();
@@ -37,7 +47,7 @@ const running = new Map<string, InFlight>();
 export function beginTurn(agentId: string): void {
   const now = running.get(agentId);
   if (now) now.count += 1;
-  else running.set(agentId, { count: 1 });
+  else running.set(agentId, { count: 1, skills: [] });
 }
 
 export function endTurn(agentId: string): void {
@@ -62,12 +72,21 @@ export function turnRunning(agentId: string): boolean {
  */
 export function setActivity(agentId: string, activity: AgentActivity): void {
   const now = running.get(agentId);
-  if (now) now.activity = activity;
+  if (!now) return;
+  now.activity = activity;
+  if (activity.kind === 'skill' && !now.skills.includes(activity.name)) {
+    now.skills.push(activity.name);
+  }
 }
 
 /** What this conversation is doing, if it is doing anything. */
 export function turnActivity(agentId: string): AgentActivity | undefined {
   return running.get(agentId)?.activity;
+}
+
+/** Which skills the running turn has read so far. Empty when nothing is running. */
+export function turnSkills(agentId: string): readonly string[] {
+  return running.get(agentId)?.skills ?? [];
 }
 
 /** Tests only: forget everything, so one test cannot colour the next. */

@@ -13,7 +13,7 @@ import type { Agent } from '@contexto/shared';
 import type { AppContext } from '../context.js';
 import { Vault, buildGraph, forgetChatInChatsDoc, writeUserDoc } from '@contexto/agent';
 import { runTurnForAgent, toMessage } from '../agent-turn.js';
-import { turnActivity, turnRunning } from '../turns-in-flight.js';
+import { turnActivity, turnRunning, turnSkills } from '../turns-in-flight.js';
 import { requireAuth, type AuthVariables } from '../middleware/auth.js';
 
 export function createAgentRoutes(ctx: AppContext) {
@@ -295,6 +295,12 @@ export function createAgentRoutes(ctx: AppContext) {
            * is one that happens to be empty invites the client to render it.
            */
           activity: turnActivity(agent.id),
+          /*
+           * And the skills it has read so far. A list, not a step: reading
+           * one is over before the next poll, and the rows it puts on screen
+           * have to stay there until the reply arrives to carry them.
+           */
+          skills: turnSkills(agent.id),
         });
       })
 

@@ -29,6 +29,14 @@ export const agentMessages = pgTable(
     /** Tool ids invoked while producing this message, for UI attribution. */
     toolsUsed: jsonb('tools_used').$type<string[]>().notNull().default([]),
     /**
+     * The skills the agent read before saying this, by name, each once.
+     *
+     * Shown above the reply for as long as the conversation exists, the way
+     * a search assistant shows what it searched. `toolsUsed` cannot stand in
+     * for it: that records the tool that fetches a skill, not which one.
+     */
+    skillsRead: jsonb('skills_read').$type<string[]>().notNull().default([]),
+    /**
      * Files the student attached to this message.
      *
      * Stored on the message rather than derived from its text, because the

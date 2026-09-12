@@ -2,6 +2,7 @@ import type { AgentActivity } from '@contexto/shared';
 import type { ChatMessage, LlmRegistry } from '@contexto/llm';
 import { RESPONDING } from './prompts/documents.js';
 import { skillsSection } from './skills/builtin.js';
+import { skillRequested } from './tools/skills.js';
 import type { MemoryStore } from './memory/types.js';
 import type { SkillRegistry } from './skills/types.js';
 import type { GoogleTokenProvider, ToolContext, PortalSnapshotSource } from './tools/types.js';
@@ -84,6 +85,14 @@ export interface AgentRunInput {
 export interface AgentRunResult {
   reply: string;
   toolsUsed: string[];
+  /**
+   * The skills the turn read before answering, in order, each once.
+   *
+   * Beside the reply rather than only reported as it happens, because this is
+   * the one step that stays on the transcript: a reply shows what it read
+   * above it, the way a search assistant shows what it searched.
+   */
+  skillsRead: string[];
 }
 
 /**
@@ -155,6 +164,8 @@ export async function runAgentTurn(
   const toolDefinitions = tools.ids().length > 0 ? tools.toDefinitions() : undefined;
 
   const toolsUsed: string[] = [];
+  const skillsRead: string[] = [];
+  const situation = { hasVault: Boolean(input.vault) };
   let reply = '';
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
@@ -179,7 +190,18 @@ export async function runAgentTurn(
 
     for (const call of response.toolCalls) {
       toolsUsed.push(call.name);
-      input.onActivity?.({ kind: 'tool', name: call.name });
+      /*
+       * Reading a skill is reported as the skill, not as the tool that fetches
+       * it. "Reading the browser skill" is something a student can recognise
+       * on the line under their question; "skill_load" is not.
+       */
+      const skill = skillRequested(call, situation);
+      if (skill) {
+        if (!skillsRead.includes(skill)) skillsRead.push(skill);
+        input.onActivity?.({ kind: 'skill', name: skill });
+      } else {
+        input.onActivity?.({ kind: 'tool', name: call.name });
+      }
       const result = await tools.execute(call.name, call.arguments, toolContext);
       messages.push({
         role: 'tool',
@@ -239,7 +261,7 @@ export async function runAgentTurn(
     source: 'agent_run',
   });
 
-  return { reply, toolsUsed };
+  return { reply, toolsUsed, skillsRead };
 }
 
 /**

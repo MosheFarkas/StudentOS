@@ -1,4 +1,28 @@
-import { BROWSER, VAULT_READING, VAULT_WRITING } from '../prompts/documents.js';
+import {
+  ADMIN,
+  APPLICATIONS,
+  BRAINSTORMING,
+  BROWSER,
+  COMMUNICATION,
+  DATA,
+  DECISIONS,
+  FEEDBACK,
+  GROUP_WORK,
+  PLANNING,
+  PRACTICE,
+  PRESENTING,
+  PROBLEM_SOLVING,
+  PROGRESS,
+  READING,
+  RESEARCH,
+  STUDY_SKILLS,
+  SUBMITTING,
+  TUTORING,
+  VAULT_READING,
+  VAULT_WRITING,
+  WELLBEING,
+  WRITING,
+} from '../prompts/documents.js';
 import type { PromptDocument } from '../prompts/documents.js';
 
 /**
@@ -29,10 +53,46 @@ export interface BuiltinSkill extends PromptDocument {
   available(situation: SkillSituation): boolean;
 }
 
+/**
+ * The twenty general skills, in the order the prompt lists them.
+ *
+ * Universal, every one: each works for a student who has connected nothing,
+ * by asking for what it cannot fetch, so none is gated. Gating would buy a
+ * shorter block for some students at the price of a prompt that differs by
+ * connection, and the block is in the cached prefix.
+ */
+const GENERAL: readonly PromptDocument[] = [
+  // Learning
+  TUTORING,
+  READING,
+  PROBLEM_SOLVING,
+  PRACTICE,
+  FEEDBACK,
+  STUDY_SKILLS,
+  // Making
+  WRITING,
+  RESEARCH,
+  PRESENTING,
+  DATA,
+  BRAINSTORMING,
+  // Organising
+  PLANNING,
+  PROGRESS,
+  COMMUNICATION,
+  ADMIN,
+  GROUP_WORK,
+  SUBMITTING,
+  // Life
+  APPLICATIONS,
+  DECISIONS,
+  WELLBEING,
+];
+
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   // Universal first, so the block for a student without a vault is a prefix
   // of the block for a student with one.
   { ...BROWSER, available: () => true },
+  ...GENERAL.map((skill) => ({ ...skill, available: () => true })),
   { ...VAULT_READING, available: ({ hasVault }) => hasVault },
   { ...VAULT_WRITING, available: ({ hasVault }) => hasVault },
 ];
@@ -54,7 +114,8 @@ export function skillsSection(situation: SkillSituation): string {
     "Before you do any of the following, call skill_load with the skill's name and follow " +
     'what comes back. Load one only when the turn needs it: a question none of them covers ' +
     'needs none of them, and loading a skill for a question it does not cover is a wasted ' +
-    'step the student waits through.\n' +
+    'step the student waits through. Most turns need one; load a second only when the work ' +
+    'genuinely runs into what it covers.\n' +
     availableSkills(situation)
       .map((skill) => `- ${skill.name}: ${skill.description}`)
       .join('\n')

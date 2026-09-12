@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BUILTIN_SKILLS, availableSkills } from '../skills/builtin.js';
+import type { SkillSituation } from '../skills/builtin.js';
 import type { Tool } from './types.js';
 
 /**
@@ -46,3 +47,31 @@ export const loadSkill: Tool<z.infer<typeof inputSchema>, string> = {
     return skill.body;
   },
 };
+
+/**
+ * The skill a tool call is about to read, if it is one.
+ *
+ * Only a skill this student actually has counts. The tool answers a wrong
+ * name with the list of right ones and a vault skill without a vault with
+ * "not available", and neither is reading anything a student should be told
+ * about. Arguments the tool would refuse get the same answer, for the same
+ * reason.
+ */
+export function skillRequested(
+  call: { name: string; arguments: string },
+  situation: SkillSituation,
+): string | undefined {
+  if (call.name !== loadSkill.id) return undefined;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(call.arguments);
+  } catch {
+    return undefined;
+  }
+  const parsed = inputSchema.safeParse(raw);
+  if (!parsed.success) return undefined;
+
+  const { name } = parsed.data;
+  return availableSkills(situation).some((skill) => skill.name === name) ? name : undefined;
+}

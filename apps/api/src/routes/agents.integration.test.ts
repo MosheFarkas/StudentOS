@@ -432,6 +432,31 @@ describe('a turn still running', () => {
     }
   });
 
+  it('names the skills the turn has read so far', async () => {
+    // Reading one is over in an instant, so it cannot be the step the poll
+    // finds; it is the list beside the step that reaches the screen.
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    beginTurn(agent.id);
+    setActivity(agent.id, { kind: 'skill', name: 'browser' });
+    setActivity(agent.id, { kind: 'thinking' });
+    try {
+      const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+      expect(await res.json()).toMatchObject({ pending: true, skills: ['browser'] });
+    } finally {
+      endTurn(agent.id);
+    }
+  });
+
+  it('has read no skills on a quiet conversation', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+
+    const res = await app.request(`/api/agents/${agent.id}/messages`, as(alice.token));
+    expect(await res.json()).toMatchObject({ skills: [] });
+  });
+
   it('says nothing about the step on a quiet conversation', async () => {
     const alice = await createUser();
     const agent = await createAgent(alice.id);
