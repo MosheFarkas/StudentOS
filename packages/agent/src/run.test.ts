@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSystemPrompt, currentTimeSection, runAgentTurn } from './run.js';
 import { RESPONDING, VAULT_READING } from './prompts/documents.js';
 import { ToolRegistry } from './tools/registry.js';
+import { loadSkill } from './tools/skills.js';
 import type { ToolContext } from './tools/types.js';
 import type { AgentRunDeps } from './run.js';
 
@@ -353,6 +354,93 @@ describe('reporting activity', () => {
   it('runs the turn normally when nobody is listening', async () => {
     const { reply } = await runAgentTurn(depsCalling(['gmail_search']), input(undefined));
     expect(reply).toBe('done');
+  });
+});
+
+/**
+ * Reading a skill is its own kind of step.
+ *
+ * A student watching the line under their question is owed "reading the
+ * browser skill", not "running skill_load": the skill is the thing they can
+ * recognise. It is also what stays on the transcript once the answer lands,
+ * so the turn hands the names back beside the reply.
+ */
+describe('reporting a skill', () => {
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+  /** Asks for each named skill in one round, then replies. */
+  function depsLoading(names: string[]) {
+    const tools = new ToolRegistry();
+    tools.register(loadSkill as never);
+    let turn = 0;
+    return {
+      llm: {
+        async chat() {
+          turn += 1;
+          return turn === 1
+            ? {
+                content: '',
+                toolCalls: names.map((name, i) => ({
+                  id: `c${i}`,
+                  name: 'skill_load',
+                  arguments: JSON.stringify({ name }),
+                })),
+                usage,
+                finishReason: 'tool_calls' as const,
+              }
+            : { content: 'done', toolCalls: [], usage, finishReason: 'stop' as const };
+        },
+      },
+      memory: { recall: async () => ({ summaries: [], recent: [] }), record: async () => ({}) },
+      skills: { list: async () => [] },
+      tools,
+    } as unknown as AgentRunDeps;
+  }
+
+  const input = (onActivity: unknown) =>
+    ({ userId: 'u1', agentId: 'a1', purpose: 'test', message: 'go', onActivity }) as never;
+
+  it('names the skill before reading it, rather than the tool that reads it', async () => {
+    const seen: unknown[] = [];
+    await runAgentTurn(
+      depsLoading(['browser']),
+      input((a: unknown) => seen.push(a)),
+    );
+
+    expect(seen).toEqual([
+      { kind: 'thinking' },
+      { kind: 'skill', name: 'browser' },
+      { kind: 'thinking' },
+    ]);
+  });
+
+  it('hands back which skills it read, beside the reply', async () => {
+    const result = await runAgentTurn(depsLoading(['browser']), input(undefined));
+    expect(result.skillsRead).toEqual(['browser']);
+  });
+
+  it('names a skill once however many times the model asked for it', async () => {
+    const result = await runAgentTurn(depsLoading(['browser', 'browser']), input(undefined));
+    expect(result.skillsRead).toEqual(['browser']);
+  });
+
+  it('does not claim to have read a skill that does not exist', async () => {
+    // The tool answers with the list of real ones and the model tries again.
+    // The student must not be told the agent read something it never had.
+    const seen: unknown[] = [];
+    const result = await runAgentTurn(
+      depsLoading(['nonsense']),
+      input((a: unknown) => seen.push(a)),
+    );
+
+    expect(seen).toContainEqual({ kind: 'tool', name: 'skill_load' });
+    expect(result.skillsRead).toEqual([]);
+  });
+
+  it('does not claim to have read a skill this student cannot use', async () => {
+    // No vault here, so the vault skills answer "not available" and no body.
+    const result = await runAgentTurn(depsLoading(['vault-reading']), input(undefined));
+    expect(result.skillsRead).toEqual([]);
   });
 });
 

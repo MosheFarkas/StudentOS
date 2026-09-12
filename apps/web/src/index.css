@@ -1304,6 +1304,48 @@ a.button {
   margin: 0 0 0.75rem;
 }
 
+/*
+ * What the agent read before answering, one row a skill.
+ *
+ * Above the line while the turn runs and above the reply once it has landed.
+ * In the chrome face and the faint ink, never the serif: this is the product
+ * reporting a step, not the agent speaking. The name sits in a small chip so
+ * it reads as a thing the agent has rather than a word in a sentence.
+ */
+.skills-read {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin: 0 0 0.6rem;
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--ink-faint);
+  white-space: normal;
+}
+
+.skill-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.skill-read svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.skill-read code {
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--wash);
+  color: var(--ink-soft);
+}
+
 .dots {
   display: inline-flex;
   gap: 2px;

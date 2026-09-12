@@ -86,12 +86,14 @@ const THEME_PREFIXES: readonly (readonly [string, Theme])[] = [
  */
 export function activityKey(activity: AgentActivity | undefined): string {
   if (!activity) return 'none';
-  return activity.kind === 'tool' ? `tool:${activity.name}` : activity.kind;
+  return activity.kind === 'thinking' ? activity.kind : `${activity.kind}:${activity.name}`;
 }
 
 /** What kind of work this is, as far as the line on screen is concerned. */
 export function themeFor(activity: AgentActivity | undefined): Theme {
-  if (!activity || activity.kind !== 'tool') return 'reasoning';
+  if (!activity || activity.kind === 'thinking') return 'reasoning';
+  // A skill is a document the agent reads before acting, whatever it is about.
+  if (activity.kind === 'skill') return 'reading';
   if (WRITING_TOOLS.has(activity.name)) return 'writing';
   for (const [prefix, theme] of THEME_PREFIXES) {
     if (activity.name.startsWith(prefix)) return theme;

@@ -96,6 +96,8 @@ export const messageSchema = z.object({
   role: messageRoleSchema,
   content: z.string(),
   toolsUsed: z.array(z.string()),
+  /** Skills the agent read before saying this, by name. Empty for the student's. */
+  skillsRead: z.array(z.string()).default([]),
   createdAt: z.iso.datetime(),
   /** Files that went with it. Empty for everything the agent says. */
   attachments: z.array(messageAttachmentSchema).default([]),
@@ -153,15 +155,18 @@ export type SkillSummary = z.infer<typeof skillSummarySchema>;
  * What a running turn is doing at this instant.
  *
  * `thinking` -- waiting on the model. `tool` -- running the named tool.
+ * `skill` -- reading the named skill before doing what it covers.
  *
  * Reported live and never persisted: it describes a moment inside a turn, and
  * a moment that has passed is not worth a row. The conversation reads it to
  * name the work on screen rather than spinning a bare "Thinking" through a
- * minute of reading a student's mail.
+ * minute of reading a student's mail. (Which skills a turn read is the one
+ * thing that does outlive it -- see `skillsRead` on the message.)
  */
 export const agentActivitySchema = z.union([
   z.object({ kind: z.literal('thinking') }),
   z.object({ kind: z.literal('tool'), name: z.string() }),
+  z.object({ kind: z.literal('skill'), name: z.string() }),
 ]);
 export type AgentActivity = z.infer<typeof agentActivitySchema>;
 

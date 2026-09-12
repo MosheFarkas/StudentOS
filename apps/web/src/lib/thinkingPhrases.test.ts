@@ -53,6 +53,10 @@ describe('reading the theme off what the agent is doing', () => {
     expect(themeFor({ kind: 'tool', name })).toBe(theme);
   });
 
+  it('calls reading a skill reading', () => {
+    expect(themeFor({ kind: 'skill', name: 'browser' })).toBe('reading');
+  });
+
   it('falls back to reasoning for a tool it has never heard of', () => {
     // A tool added to the agent and not to this table must not blank the line.
     expect(themeFor({ kind: 'tool', name: 'quantum_homework_solver' })).toBe('reasoning');
@@ -185,6 +189,24 @@ describe('recognising the same step twice', () => {
     // One is a turn waiting on the model; the other is a server that does not
     // report steps at all. They deserve different words.
     expect(activityKey({ kind: 'thinking' })).not.toBe(activityKey(undefined));
+  });
+
+  it('reads two reports of the same skill as the same step', () => {
+    expect(activityKey({ kind: 'skill', name: 'browser' })).toBe(
+      activityKey({ kind: 'skill', name: 'browser' }),
+    );
+  });
+
+  it('separates one skill from another', () => {
+    expect(activityKey({ kind: 'skill', name: 'browser' })).not.toBe(
+      activityKey({ kind: 'skill', name: 'vault-reading' }),
+    );
+  });
+
+  it('separates reading a skill from running a tool of the same name', () => {
+    expect(activityKey({ kind: 'skill', name: 'browser' })).not.toBe(
+      activityKey({ kind: 'tool', name: 'browser' }),
+    );
   });
 
   it('cannot be spoofed by a tool named after another kind', () => {

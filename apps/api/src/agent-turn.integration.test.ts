@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm';
+import { agentMessages } from '@contexto/db';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runTurnForAgent } from './agent-turn.js';
 import { resetTurns, turnActivity, turnRunning } from './turns-in-flight.js';
@@ -22,7 +24,9 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
  * database is stubbed; the database is real, because both messages the turn
  * writes are rows and the harness already has one.
  */
-async function contextWith(chat: () => Promise<unknown>): Promise<AppContext> {
+async function contextWith(
+  chat: (request: { tools?: unknown }) => Promise<unknown>,
+): Promise<AppContext> {
   return {
     db: await testDb(),
     llm: { chat },
@@ -102,5 +106,76 @@ describe('reporting what a turn is doing', () => {
       runTurnForAgent(ctx, { userId: alice.id, agent, content: 'hello' }),
     ).rejects.toThrow();
     expect(turnActivity(agent.id)).toBeUndefined();
+  });
+});
+
+/**
+ * What a turn read stays with its reply.
+ *
+ * The live list in the registry is gone the moment the turn ends. The row is
+ * what the conversation shows above the answer from then on, so it has to
+ * hold the same names.
+ */
+describe('what a turn read', () => {
+  /**
+   * Reads the named skill, then replies.
+   *
+   * Decided by the request rather than by counting calls: a chat's first
+   * message is also being named, by the same model, and that call has no
+   * tools to offer. Answering it with a tool call would hand the skill to
+   * the title and a bare "done" to the turn.
+   */
+  function readingThenReplying(name: string) {
+    let read = false;
+    return async (request: { tools?: unknown }) => {
+      if (!request.tools || read) {
+        return { content: 'done', toolCalls: [], usage, finishReason: 'stop' as const };
+      }
+      read = true;
+      return {
+        content: '',
+        toolCalls: [{ id: 'c1', name: 'skill_load', arguments: JSON.stringify({ name }) }],
+        usage,
+        finishReason: 'tool_calls' as const,
+      };
+    };
+  }
+
+  it('keeps the skills it read on the reply', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+    const ctx = await contextWith(readingThenReplying('browser'));
+
+    const { assistantMessage } = await runTurnForAgent(ctx, {
+      userId: alice.id,
+      agent,
+      content: 'open my portal',
+    });
+
+    expect(assistantMessage.skillsRead).toEqual(['browser']);
+    const [row] = await ctx.db
+      .select()
+      .from(agentMessages)
+      .where(eq(agentMessages.id, assistantMessage.id));
+    expect(row?.skillsRead).toEqual(['browser']);
+  });
+
+  it('says a reply that read nothing read nothing', async () => {
+    const alice = await createUser();
+    const agent = await createAgent(alice.id);
+    const ctx = await contextWith(async () => ({
+      content: 'done',
+      toolCalls: [],
+      usage,
+      finishReason: 'stop' as const,
+    }));
+
+    const { assistantMessage } = await runTurnForAgent(ctx, {
+      userId: alice.id,
+      agent,
+      content: 'hello',
+    });
+
+    expect(assistantMessage.skillsRead).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@ import { chatsChanged } from '../lib/chats.js';
 import type { Attachment as AttachmentItem } from '../lib/attachments.js';
 import { AttachButton, AttachedFiles } from './AttachButton.js';
 import { LogoMark } from './LogoMark.js';
+import { SkillsRead } from './SkillsRead.js';
 import { useReportWorking } from '../lib/working.js';
 import { activityKey, pickPhrase } from '../lib/thinkingPhrases.js';
 
@@ -44,6 +45,15 @@ export function Chat({ agentId }: Props) {
    * names are not something to put in front of them.
    */
   const [activity, setActivity] = useState<AgentActivity | undefined>(undefined);
+  /*
+   * The skills the running turn has read so far.
+   *
+   * Its own list rather than a step: reading one is over before the next
+   * poll, and the rows it puts on screen stay until the reply arrives to
+   * carry them. Emptied the moment it does -- the reply shows the same names
+   * above itself, and a list that lingered would show them twice.
+   */
+  const [skills, setSkills] = useState<readonly string[]>([]);
   const session = useAgentSession(agentId);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewTarget | null>(null);
@@ -168,6 +178,7 @@ export function Chat({ agentId }: Props) {
       setActivity((prev) =>
         activityKey(prev) === activityKey(body.activity) ? prev : body.activity,
       );
+      setSkills((prev) => (prev.join('\n') === body.skills.join('\n') ? prev : body.skills));
 
       /*
        * Everything below is the server's view of a conversation this page is
@@ -289,6 +300,7 @@ export function Chat({ agentId }: Props) {
       role: 'user',
       content: said,
       toolsUsed: [],
+      skillsRead: [],
       attachments: localFiles,
       createdAt: new Date().toISOString(),
     };
@@ -331,8 +343,11 @@ export function Chat({ agentId }: Props) {
         data.userMessage,
         data.assistantMessage,
       ]);
+      // The reply carries what it read from here on.
+      setSkills([]);
     } catch (cause) {
       setMessages((prev) => prev.filter((m) => m.id !== pending.id));
+      setSkills([]);
       // Back into the box, so it can be sent again rather than retyped. The
       // attachments are still on the composer unless they uploaded cleanly.
       setDraft(said);
@@ -371,6 +386,7 @@ export function Chat({ agentId }: Props) {
                  */}
                 {message.role === 'assistant' ? (
                   <>
+                    <SkillsRead names={message.skillsRead} />
                     <MessageText text={message.content} onPreview={setPreview} />
                     {/*
                       The mark closes a reply the way a signature closes a
@@ -407,14 +423,17 @@ export function Chat({ agentId }: Props) {
                * says when there is nothing specific to say, and "signing in to
                * veracross" is about as specific as this gets.
                */
-              <div className="muted thinking">
-                <LogoMark size={20} working />
-                <span>
-                  {session.active && session.portalId
-                    ? `Signing in to ${session.portalId} and reading it…`
-                    : phrase}
-                </span>
-              </div>
+              <>
+                <SkillsRead names={skills} live />
+                <div className="muted thinking">
+                  <LogoMark size={20} working />
+                  <span>
+                    {session.active && session.portalId
+                      ? `Signing in to ${session.portalId} and reading it…`
+                      : phrase}
+                  </span>
+                </div>
+              </>
             )}
             <div ref={bottom} />
           </div>

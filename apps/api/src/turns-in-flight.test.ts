@@ -6,6 +6,7 @@ import {
   setActivity,
   turnActivity,
   turnRunning,
+  turnSkills,
 } from './turns-in-flight.js';
 
 const A = 'agent-a';
@@ -113,5 +114,61 @@ describe('what a turn is doing', () => {
     endTurn(A);
     beginTurn(A);
     expect(turnActivity(A)).toBeUndefined();
+  });
+});
+
+/**
+ * Which skills the running turn has read.
+ *
+ * The step above is a moment, and reading a skill is over in milliseconds --
+ * a poll every few seconds would never catch it. So the names are kept as a
+ * list beside the step, for the conversation to show above the line, and
+ * dropped with the turn like everything else here.
+ */
+describe('what a turn has read', () => {
+  it('has read nothing on a conversation with no turn', () => {
+    expect(turnSkills(A)).toEqual([]);
+  });
+
+  it('keeps every skill the turn reports, in order', () => {
+    beginTurn(A);
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    setActivity(A, { kind: 'thinking' });
+    setActivity(A, { kind: 'skill', name: 'vault-reading' });
+    expect(turnSkills(A)).toEqual(['browser', 'vault-reading']);
+  });
+
+  it('reports reading a skill as the current step too', () => {
+    beginTurn(A);
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    expect(turnActivity(A)).toEqual({ kind: 'skill', name: 'browser' });
+  });
+
+  it('names a skill once however often it is reported', () => {
+    beginTurn(A);
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    expect(turnSkills(A)).toEqual(['browser']);
+  });
+
+  it('keeps one conversation out of another', () => {
+    beginTurn(A);
+    beginTurn(B);
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    expect(turnSkills(B)).toEqual([]);
+  });
+
+  it('forgets them once the turn is over', () => {
+    // The reply carries them from here on; a list that outlived the turn
+    // would put the same rows on screen twice.
+    beginTurn(A);
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    endTurn(A);
+    expect(turnSkills(A)).toEqual([]);
+  });
+
+  it('ignores a skill for a conversation with nothing running', () => {
+    setActivity(A, { kind: 'skill', name: 'browser' });
+    expect(turnSkills(A)).toEqual([]);
   });
 });
